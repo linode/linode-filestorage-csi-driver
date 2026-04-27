@@ -1,0 +1,71 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "configMigration": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)Makefile$/",
+        "/(^|/)makefile$/",
+        "/(^|/)GNUMakefile$/",
+        "/\\.mk$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+?) depName=(?<depName>[^\\s]+?)(?: (?:packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s+[A-Za-z0-9_]+?_VERSION\\s*:*\\??=\\s*[\"']?(?<currentValue>.+?)[\"']?\\s"
+      ]
+    }
+  ],
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/(^|/)deploy\\/kubernetes\\/.*\\.ya?ml$/"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Keep the driver image tag release-managed inside its source repository.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "docker.io/linode/linode-filestorage-csi-driver",
+        "linode/linode-filestorage-csi-driver"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Group CSI sidecar image updates across Helm values and raw Kubernetes manifests.",
+      "matchDatasources": ["docker"],
+      "matchManagers": ["helm-values", "kubernetes"],
+      "matchPackageNames": ["registry.k8s.io/sig-storage/**"],
+      "groupName": "CSI sidecars"
+    },
+    {
+      "description": "Group GitHub Actions updates for workflow maintenance.",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group Kubernetes Go dependencies.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["k8s.io/**", "sigs.k8s.io/**"],
+      "groupName": "kubernetes"
+    },
+    {
+      "description": "Group golang.org/x dependencies.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["golang.org/x/**"],
+      "groupName": "golang.org/x"
+    },
+    {
+      "description": "Group google gRPC and protobuf dependencies.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["google.golang.org/**"],
+      "groupName": "google gRPC"
+    },
+    {
+      "description": "Group Linode SDK dependencies.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["github.com/linode/**"],
+      "groupName": "linode sdks"
+    }
+  ]
+}

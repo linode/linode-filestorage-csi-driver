@@ -1,0 +1,9 @@
+bin/
+dist/
+release/
+coverage.out
+
+
+# Local Development Environment sub dirs
+.vscode/
+.opencode/
