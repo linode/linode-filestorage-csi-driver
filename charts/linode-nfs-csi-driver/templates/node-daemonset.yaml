@@ -1,0 +1,104 @@
+{{- if .Values.node.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: csi-linode-nfs-node
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: csi-linode-nfs-node
+  template:
+    metadata:
+      labels:
+        app: csi-linode-nfs-node
+        role: csi-linode
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.node.serviceAccount.enabled }}
+      serviceAccountName: {{ .Values.node.serviceAccount.name }}
+      {{- end }}
+      hostNetwork: true
+      containers:
+        - name: plugin
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          env:
+            - name: DRIVER_ROLE
+              value: node
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # The node plugin socket stays under /csi in the container, while the
+            # kubelet registration path remains unique per driver under kubeletPath
+            # to avoid host-side contention with other CSI drivers.
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            {{- with .Values.image.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.image.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: {{ .Values.image.podsMountDir }}
+              mountPropagation: Bidirectional
+            {{- with .Values.image.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        - name: node-driver-registrar
+          image: "{{ .Values.node.registrar.repository }}:{{ .Values.node.registrar.tag }}"
+          imagePullPolicy: {{ .Values.node.registrar.pullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path={{ .Values.kubeletPath }}/plugins/{{ .Values.driver.name }}/csi.sock
+          {{- with .Values.node.registrar.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+            {{- with .Values.node.registrar.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        - name: liveness-probe
+          image: "{{ .Values.node.livenessProbe.repository }}:{{ .Values.node.livenessProbe.tag }}"
+          imagePullPolicy: {{ .Values.node.livenessProbe.pullPolicy }}
+          args:
+            - --csi-address=/csi/csi.sock
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.kubeletPath }}/plugins/{{ .Values.driver.name }}
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletPath }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: {{ .Values.image.podsMountDir }}
+            type: Directory
+        {{- with .Values.image.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
