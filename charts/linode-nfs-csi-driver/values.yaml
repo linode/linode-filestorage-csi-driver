@@ -1,0 +1,120 @@
+# apiToken is required when secretRef is not set.
+apiToken: ""
+
+# namespace defaults to kube-system but can be overridden for custom installs.
+namespace: kube-system
+
+# kubeletPath can be overridden for alternate Kubernetes distros.
+kubeletPath: /var/lib/kubelet
+
+# secretRef:
+#   name: linode-api-token
+#   apiTokenRef: token
+
+driver:
+  # CSI driver name advertised to Kubernetes.
+  name: linodefs.csi.linode.com
+
+image:
+  # Driver image repository.
+  repository: docker.io/linode/linode-filestorage-csi-driver
+  # Driver image tag; defaults to Chart.appVersion when empty.
+  tag: ""
+  # Pull policy for the driver image.
+  pullPolicy: IfNotPresent
+  # Host kubelet path mounted into the node plugin.
+  podsMountDir: /var/lib/kubelet
+  # Extra env vars added to both controller and node plugin containers.
+  env: []
+  # Extra volumes added to both controller and node pods.
+  volumes: []
+  # Extra volume mounts added to both controller and node plugin containers.
+  volumeMounts: []
+  # Resource requests and limits for the plugin container.
+  resources: {}
+
+sidecars:
+  provisioner:
+    # CSI provisioner sidecar image.
+    repository: registry.k8s.io/sig-storage/csi-provisioner
+    tag: v5.2.0
+    pullPolicy: IfNotPresent
+  resizer:
+    # CSI resizer sidecar image.
+    repository: registry.k8s.io/sig-storage/csi-resizer
+    tag: v1.13.0
+    pullPolicy: IfNotPresent
+  snapshotter:
+    # CSI snapshotter sidecar image.
+    repository: registry.k8s.io/sig-storage/csi-snapshotter
+    tag: v8.2.0
+    pullPolicy: IfNotPresent
+  livenessProbe:
+    # Liveness probe sidecar image.
+    repository: registry.k8s.io/sig-storage/livenessprobe
+    tag: v2.15.0
+    pullPolicy: IfNotPresent
+
+controller:
+  # Deploy the controller Deployment.
+  enabled: true
+  # Controller replica count.
+  replicaCount: 1
+  # Whether the controller pod uses host networking.
+  hostNetwork: false
+  # DNS policy for the controller pod.
+  dnsPolicy: Default
+  kubeconfig:
+    # Mount path for an optional kubeconfig secret.
+    mountDir: ""
+    # Secret name containing the kubeconfig file.
+    secretName: ""
+    # Secret key holding the kubeconfig file contents.
+    secretKey: ""
+  serviceAccount:
+    # Create and use a dedicated controller service account.
+    enabled: true
+    name: csi-linode-nfs-controller
+  rbac:
+    # Create controller RBAC resources.
+    enabled: true
+  # Optional node selector for the controller pod.
+  nodeSelector: {}
+  # Optional affinity for the controller pod.
+  affinity: {}
+  # Tolerations for the controller pod.
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - effect: NoExecute
+      operator: Exists
+
+node:
+  # Deploy the node DaemonSet.
+  enabled: true
+  serviceAccount:
+    # Create and use a dedicated node service account.
+    enabled: true
+    name: csi-linode-nfs-node
+  rbac:
+    # Create node RBAC resources.
+    enabled: true
+  registrar:
+    # Node driver registrar sidecar image.
+    repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
+    tag: v2.13.0
+    pullPolicy: IfNotPresent
+    # Extra env vars for the registrar container.
+    env: []
+    # Extra volume mounts for the registrar container.
+    volumeMounts: []
+  livenessProbe:
+    # Node liveness probe sidecar image.
+    repository: registry.k8s.io/sig-storage/livenessprobe
+    tag: v2.15.0
+    pullPolicy: IfNotPresent
+
+# Extra pod annotations applied to controller and node pods.
+podAnnotations: {}
+# Extra pod labels applied to controller and node pods.
+podLabels: {}

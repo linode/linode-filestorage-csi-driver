@@ -1,0 +1,50 @@
+name: Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            auth.docker.io:443
+            github.com:443
+            pkg.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            registry-1.docker.io:443
+            sum.golang.org:443
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.3.1
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: docker.io
+          username: ${{ secrets['DOCKERHUB_USERNAME'] }}
+          password: ${{ secrets['DOCKERHUB_TOKEN'] }}
+
+      - name: Publish image with ko
+        env:
+          KO_DOCKER_REPO: docker.io/linode/linode-filestorage-csi-driver
+          IMAGE_VERSION: ${{ github.ref_name }}
+        run: make ko-publish IMAGE_VERSION="${IMAGE_VERSION}"

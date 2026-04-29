@@ -1,0 +1,33 @@
+name: Helm
+
+on:
+  pull_request:
+    paths:
+      - charts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            get.helm.sh:443
+            github.com:443
+            pkg.actions.githubusercontent.com:443
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.3.1
+
+      - name: Set up Helm
+        uses: Azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
+
+      - name: Lint chart
+        run: helm lint charts/linode-nfs-csi-driver

@@ -1,0 +1,8 @@
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: linodefs.csi.linode.com
+spec:
+  attachRequired: false
+  podInfoOnMount: false
+  fsGroupPolicy: File

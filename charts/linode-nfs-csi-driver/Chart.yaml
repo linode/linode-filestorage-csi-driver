@@ -1,0 +1,6 @@
+apiVersion: v2
+name: linode-nfs-csi-driver
+description: Helm chart for the Linode managed NFS CSI driver
+type: application
+version: 0.0.1
+appVersion: 0.0.1
