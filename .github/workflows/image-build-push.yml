@@ -47,4 +47,4 @@ jobs:
         env:
           KO_DOCKER_REPO: docker.io/linode/linode-filestorage-csi-driver
           IMAGE_VERSION: ${{ github.ref_name }}
-        run: make ko-publish IMAGE_VERSION=${IMAGE_VERSION}
+        run: make ko-publish IMAGE_VERSION="${IMAGE_VERSION}"
