@@ -13,7 +13,6 @@ type NodeServer struct {
 }
 
 func NewNodeServer(ctx context.Context, driver *LinodeDriver) (*NodeServer, error) {
-	_ = ctx
 	klog.V(4).InfoS("creating node server")
 	if driver == nil {
 		return nil, errNilDriver
@@ -22,7 +21,6 @@ func NewNodeServer(ctx context.Context, driver *LinodeDriver) (*NodeServer, erro
 }
 
 func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
@@ -30,7 +28,6 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 }
 
 func (s *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetCapabilities")
 
 	_ = req
@@ -38,7 +35,6 @@ func (s *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCa
 }
 
 func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeStageVolume")
 
 	// Future implementation will mount server:/exportPath to the kubelet staging target.
@@ -47,7 +43,6 @@ func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolu
 }
 
 func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeUnstageVolume")
 
 	// Future implementation will unmount the staged NFS path and clean up node-local state.
@@ -56,7 +51,6 @@ func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstage
 }
 
 func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodePublishVolume")
 
 	// Future implementation will bind-mount the staged path into the pod target path.
@@ -65,7 +59,6 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 }
 
 func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeUnpublishVolume")
 
 	// Future implementation will unmount the published target path from the node.
@@ -74,7 +67,6 @@ func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpub
 }
 
 func (s *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetVolumeStats")
 
 	// Future implementation will report filesystem usage for the mounted NFS path.
@@ -83,7 +75,6 @@ func (s *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVol
 }
 
 func (s *NodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling node rpc", "method", "NodeExpandVolume")
 
 	// Future implementation is expected to stay controller-only for quota-backed NFS expansion.

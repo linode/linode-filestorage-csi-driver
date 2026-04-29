@@ -17,7 +17,6 @@ type IdentityServer struct {
 }
 
 func NewIdentityServer(ctx context.Context, driver *LinodeDriver) (*IdentityServer, error) {
-	_ = ctx
 	klog.V(4).InfoS("creating identity server")
 	if driver == nil {
 		return nil, fmt.Errorf("linode driver cannot be nil")
@@ -26,7 +25,6 @@ func NewIdentityServer(ctx context.Context, driver *LinodeDriver) (*IdentityServ
 }
 
 func (s *IdentityServer) GetPluginInfo(ctx context.Context, _ *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling identity rpc", "method", "GetPluginInfo")
 
 	if s.driver.name == "" {
@@ -40,14 +38,12 @@ func (s *IdentityServer) GetPluginInfo(ctx context.Context, _ *csi.GetPluginInfo
 }
 
 func (s *IdentityServer) GetPluginCapabilities(ctx context.Context, _ *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling identity rpc", "method", "GetPluginCapabilities")
 
 	return &csi.GetPluginCapabilitiesResponse{Capabilities: s.driver.pluginCaps}, nil
 }
 
 func (s *IdentityServer) Probe(ctx context.Context, _ *csi.ProbeRequest) (*csi.ProbeResponse, error) {
-	_ = ctx
 	klog.V(4).InfoS("handling identity rpc", "method", "Probe")
 
 	s.driver.readyMu.Lock()

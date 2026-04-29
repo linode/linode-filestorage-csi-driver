@@ -38,8 +38,6 @@ type LinodeDriver struct {
 }
 
 func GetLinodeDriver(ctx context.Context) *LinodeDriver {
-	_ = ctx
-
 	klog.V(2).InfoS("creating LinodeDriver")
 	return &LinodeDriver{
 		pluginCaps:     pluginCapabilities(),
@@ -56,8 +54,6 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	role Role,
 	nodeName string,
 ) error {
-	_ = ctx
-
 	if name == "" {
 		return fmt.Errorf("driver name missing")
 	}
@@ -97,8 +93,6 @@ func (d *LinodeDriver) SetupLinodeDriver(
 }
 
 func (d *LinodeDriver) Run(ctx context.Context, endpoint string) {
-	_ = ctx
-
 	d.readyMu.Lock()
 	d.ready = true
 	d.readyMu.Unlock()
