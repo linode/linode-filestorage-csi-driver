@@ -1,0 +1,38 @@
+name-template: 'v$NEXT_PATCH_VERSION'
+tag-template: 'v$NEXT_PATCH_VERSION'
+exclude-labels:
+  - ignore-for-release
+categories:
+  - title: Breaking Changes
+    labels:
+      - breaking-change
+  - title: Bug Fixes
+    labels:
+      - bugfix
+  - title: New Features
+    labels:
+      - new-feature
+  - title: Improvements
+    labels:
+      - improvement
+  - title: Testing Improvements
+    labels:
+      - testing
+  - title: Repo and CI Improvements
+    labels:
+      - repo-ci-improvement
+  - title: Documentation
+    labels:
+      - documentation
+  - title: Dependency Updates
+    labels:
+      - dependencies
+  - title: Other Changes
+    labels:
+      - '*'
+change-template: '- $TITLE by @$AUTHOR in #$NUMBER'
+no-changes-template: '- No changes'
+template: |
+  What's Changed
+
+  $CHANGES
