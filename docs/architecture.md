@@ -28,7 +28,27 @@ This repository is the initial scaffold for a Linode-managed NFS CSI driver.
   - identity, controller, and node servers
   - capability wiring
   - gRPC server startup, lightweight unary logging, and Unix socket handling
-  - lightweight metadata and helper files
+  - the shared metadata service used by the controller and node servers
+  - lightweight helper files
+
+## Metadata Service
+
+The driver now has a shared metadata service in `internal/driver` that is created during driver setup and stored on the shared driver state.
+
+The service currently provides:
+
+- current-node metadata for the node plugin
+- cluster region derived from Kubernetes node labels
+- per-node Linode ID and allowlist IP lookup by Kubernetes node name
+
+The first implementation intentionally uses two data sources:
+
+- Kubernetes node objects are the primary source for cluster-wide lookups because the controller needs to resolve arbitrary Kubernetes node names into Linode IDs and node IPs.
+- `go-metadata` is used only as a current-node fast path and fallback for the node plugin.
+
+For allowlisting, the metadata service currently prefers the Kubernetes `InternalIP` when resolving a node from the Kubernetes API.
+
+VPC identity is intentionally out of scope for this slice. `go-metadata` does not expose VPC identity today, and VPC-aware lookup through `linodego` requires separate instance-config and VPC API work.
 
 ## Image Build Shape
 

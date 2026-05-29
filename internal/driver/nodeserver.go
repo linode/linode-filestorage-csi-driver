@@ -4,6 +4,8 @@ import (
 	"context"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 )
 
@@ -24,7 +26,16 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
-	return &csi.NodeGetInfoResponse{NodeId: s.driver.metadata.NodeID}, nil
+	if s.driver.metadata == nil {
+		return nil, status.Error(codes.Internal, "metadata service is not configured")
+	}
+
+	node, err := s.driver.metadata.CurrentNode(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "resolve node metadata: %v", err)
+	}
+
+	return &csi.NodeGetInfoResponse{NodeId: node.KubernetesName}, nil
 }
 
 func (s *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {

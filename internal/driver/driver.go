@@ -33,7 +33,7 @@ type LinodeDriver struct {
 
 	readyMu  sync.Mutex
 	ready    bool
-	metadata Metadata
+	metadata MetadataService
 	client   *linodego.Client
 }
 
@@ -65,7 +65,11 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	d.name = name
 	d.vendorVersion = vendorVersion
 	klog.V(2).InfoS("configuring driver", "role", role, "name", name)
-	d.metadata = newMetadata(nodeName)
+	metadataService, err := newMetadataService(ctx, nodeName)
+	if err != nil {
+		return fmt.Errorf("new metadata service: %w", err)
+	}
+	d.metadata = metadataService
 	d.client = client
 
 	ids, err := NewIdentityServer(ctx, d)
