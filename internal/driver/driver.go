@@ -40,7 +40,6 @@ type LinodeDriver struct {
 func GetLinodeDriver(ctx context.Context) *LinodeDriver {
 	klog.V(2).InfoS("creating LinodeDriver")
 	return &LinodeDriver{
-		pluginCaps:     pluginCapabilities(),
 		controllerCaps: controllerServiceCapabilities(),
 		nodeCaps:       nodeServiceCapabilities(),
 	}
@@ -64,6 +63,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 
 	d.name = name
 	d.vendorVersion = vendorVersion
+	d.pluginCaps = pluginCapabilities(role)
 	klog.V(2).InfoS("configuring driver", "role", role, "name", name)
 	metadataService, err := newMetadataService(ctx, nodeName)
 	if err != nil {

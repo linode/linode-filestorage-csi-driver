@@ -42,6 +42,22 @@ func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolu
 	return nil, errNotImplemented
 }
 
+func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	klog.V(4).InfoS("handling controller rpc", "method", "ControllerPublishVolume")
+
+	// Future implementation will authorize the target node in the filesystem access policy.
+	_ = req
+	return nil, errNotImplemented
+}
+
+func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	klog.V(4).InfoS("handling controller rpc", "method", "ControllerUnpublishVolume")
+
+	// Future implementation will remove the target node from the filesystem access policy.
+	_ = req
+	return nil, errNotImplemented
+}
+
 func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ValidateVolumeCapabilities")
 
@@ -69,6 +85,22 @@ func (s *ControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacity
 	klog.V(4).InfoS("handling controller rpc", "method", "GetCapacity")
 
 	// Future implementation will surface backend capacity information once the API semantics are known.
+	_ = req
+	return nil, errNotImplemented
+}
+
+func (s *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
+	klog.V(4).InfoS("handling controller rpc", "method", "ListVolumes")
+
+	// Future implementation will enumerate filesystems visible to the driver.
+	_ = req
+	return nil, errNotImplemented
+}
+
+func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
+	klog.V(4).InfoS("handling controller rpc", "method", "ControllerGetVolume")
+
+	// Future implementation will return filesystem metadata for a single CSI volume.
 	_ = req
 	return nil, errNotImplemented
 }

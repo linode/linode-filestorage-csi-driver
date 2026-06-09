@@ -97,6 +97,32 @@ spec:
               readOnly: true
               {{- end }}
             {{- end }}
+        - name: csi-attacher
+          image: "{{ .Values.sidecars.attacher.repository }}:{{ .Values.sidecars.attacher.tag }}"
+          imagePullPolicy: {{ .Values.sidecars.attacher.pullPolicy }}
+          args:
+            - --v=2
+            - --csi-address=$(ADDRESS)
+            - --leader-election
+            - --timeout=30s
+            {{- with .Values.controller.kubeconfig }}
+              {{- if and .mountDir .secretName .secretKey }}
+            - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
+              {{- end }}
+            {{- end }}
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+            {{- with .Values.controller.kubeconfig }}
+              {{- if and .mountDir .secretName }}
+            - mountPath: {{ .mountDir }}
+              name: controller-kubeconfig
+              readOnly: true
+              {{- end }}
+            {{- end }}
         - name: csi-resizer
           image: "{{ .Values.sidecars.resizer.repository }}:{{ .Values.sidecars.resizer.tag }}"
           imagePullPolicy: {{ .Values.sidecars.resizer.pullPolicy }}
