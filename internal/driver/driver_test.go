@@ -3,8 +3,10 @@ package driver
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
+	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	corev1 "k8s.io/api/core/v1"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
@@ -70,6 +72,33 @@ func TestSetupLinodeDriverAssignsRoleServers(t *testing.T) {
 	if driver.ns != nil {
 		t.Fatal("expected node server to be nil for controller role")
 	}
+
+	wantPluginCaps := []*csi.PluginCapability{
+		{
+			Type: &csi.PluginCapability_Service_{
+				Service: &csi.PluginCapability_Service{Type: csi.PluginCapability_Service_CONTROLLER_SERVICE},
+			},
+		},
+	}
+	if !reflect.DeepEqual(driver.pluginCaps, wantPluginCaps) {
+		t.Fatalf("unexpected plugin caps: %#v", driver.pluginCaps)
+	}
+
+	wantControllerCaps := []csi.ControllerServiceCapability_RPC_Type{
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
+		csi.ControllerServiceCapability_RPC_GET_VOLUME,
+	}
+	if len(driver.controllerCaps) != len(wantControllerCaps) {
+		t.Fatalf("unexpected controller cap count: %d", len(driver.controllerCaps))
+	}
+	for idx, want := range wantControllerCaps {
+		if got := driver.controllerCaps[idx].GetRpc().GetType(); got != want {
+			t.Fatalf("controller cap %d = %v, want %v", idx, got, want)
+		}
+	}
 }
 
 func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
@@ -94,6 +123,9 @@ func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
 	}
 	if driver.ns == nil {
 		t.Fatal("expected node server")
+	}
+	if len(driver.pluginCaps) != 0 {
+		t.Fatalf("expected no plugin caps for node role, got %#v", driver.pluginCaps)
 	}
 }
 
