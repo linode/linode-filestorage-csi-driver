@@ -18,35 +18,16 @@ jobs:
         uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           disable-sudo: true
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            pkg.actions.githubusercontent.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
+          egress-policy: audit
 
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4.3.1
 
-      - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Set up Mise
+        uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
-          go-version-file: go.mod
+          install_args: go golangci-lint
 
-      - name: Download modules
-        run: go mod download
-
-      - name: Format
-        run: make fmt
-
-      - name: Vet
-        run: make vet
-
-      - name: Lint
-        run: make lint
-
-      - name: Test
-        run: make test
-
-      - name: Build
-        run: make build
+      - name: Run CI
+        run: mise run ci
+        

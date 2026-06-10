@@ -1,0 +1,55 @@
+[settings]
+minimum_release_age = "7d"  # only install versions released more than 7 days ago - https://mise.en.dev/security.html#minimum-release-age
+
+[tools]
+go = "1.26.2"
+kubectl = "1.35.5"
+helm = "3.19.5"
+golangci-lint = "2.11.4"
+ko = "0.18.1"
+kustomize = "5.8.1"
+
+[tasks.fmt]
+description = "Format Go sources"
+run = "make fmt"
+
+[tasks.tidy]
+description = "Tidy Go modules"
+run = "make tidy"
+
+[tasks.vet]
+description = "Run Go vet"
+run = "make vet"
+
+[tasks.lint]
+description = "Run lint checks"
+run = "make lint"
+
+[tasks.test]
+description = "Run tests"
+run = "make test"
+
+[tasks.build]
+description = "Build binary"
+run = "make build"
+
+[tasks.ko-build]
+description = "Build ko image"
+run = "make ko-build"
+
+[tasks.ko-publish]
+description = "Publish ko image"
+run = "make ko-publish"
+
+[tasks.helm-lint]
+description = "Lint Helm charts"
+run = "make helm-lint"
+
+[tasks.release]
+description = "Create release artifacts"
+run = "make release"
+
+[tasks.ci]
+description = "Run CI checks"
+run = "make ci"
+
