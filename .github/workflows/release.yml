@@ -21,12 +21,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - name: Set up Mise
+        uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
-          go-version-file: go.mod
+          install_args: go helm ko kustomize
       - name: Create Release Artifacts
-        run: make release
+        run: mise run release
         env:
           IMAGE_VERSION: ${{ github.ref_name }}
       - name: Upload Release Artifacts
@@ -52,10 +52,10 @@ jobs:
           IMAGE_VERSION: ${{ github.ref_name }}
           IMAGE_TAGS: ${{ github.ref_name }},latest
           KO_DOCKER_REPO: docker.io/linode/linode-filestorage-csi-driver
-        run: make ko-publish IMAGE_VERSION="${IMAGE_VERSION}" IMAGE_TAGS="${IMAGE_TAGS}" KO_DOCKER_REPO="${KO_DOCKER_REPO}"
+        run: mise run ko-publish
       - name: Publish image to GHCR
         env:
           IMAGE_VERSION: ${{ github.ref_name }}
           IMAGE_TAGS: ${{ github.ref_name }},latest
           KO_DOCKER_REPO: ghcr.io/${{ github.repository }}
-        run: make ko-publish IMAGE_VERSION="${IMAGE_VERSION}" IMAGE_TAGS="${IMAGE_TAGS}" KO_DOCKER_REPO="${KO_DOCKER_REPO}"
+        run: mise run ko-publish
