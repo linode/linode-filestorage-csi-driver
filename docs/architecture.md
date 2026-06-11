@@ -55,8 +55,8 @@ VPC identity is intentionally out of scope for this slice. `go-metadata` does no
 Container images are built with `ko`, not a Dockerfile.
 
 - `.ko.yaml` defines the default distroless base image and target platforms.
-- `make ko-build` builds the root Go package into the local container runtime.
-- `make ko-publish` publishes a multi-platform image to `KO_DOCKER_REPO`.
+- `mise run ko-build` builds the root Go package into the local container runtime.
+- `mise run ko-publish` publishes a multi-platform image to `KO_DOCKER_REPO`.
 
 This follows the same basic direction as the Linode Karpenter provider: keep image construction centered on Go build output and a small `.ko.yaml` instead of maintaining a separate Dockerfile path. 'ko' is a good fit and also a lot more efficient than traditional Dockerfiles for multi-platform builds, so this shape should be efficient and maintainable for our needs.
 
