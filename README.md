@@ -10,15 +10,23 @@ The current state is intentionally skeletal:
 
 See `docs/architecture.md` for the current package layout, deployment shape, and deferred work.
 
+## Local Setup
+
+Local development in this repo uses [mise](https://mise.jdx.dev/) to install and run the pinned toolchain from `mise.toml`.
+
+Install `mise` before working on the repo, then run `mise install` once from the repository root to provision the required tools.
+
 ## Development
 
-- `make fmt`
-- `make vet`
-- `make lint`
-- `make test`
-- `make build`
-- `make ko-build`
-- `make ko-publish KO_DOCKER_REPO=docker.io/<org>/linode-filestorage-csi-driver IMAGE_VERSION=<tag>`
+Install the repo toolchain once with `mise install`, then run tasks with `mise run`.
+
+- `mise run fmt`
+- `mise run vet`
+- `mise run lint`
+- `mise run test`
+- `mise run build`
+- `mise run ko-build`
+- `KO_DOCKER_REPO=docker.io/<org>/linode-filestorage-csi-driver IMAGE_VERSION=<tag> mise run ko-publish`
 
 ## Install Notes
 

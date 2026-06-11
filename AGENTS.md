@@ -1,0 +1,53 @@
+# AGENTS.md
+
+## Toolchain And Verification
+
+- `mise.toml` is the source of truth for local tool versions and common tasks. Run `mise install` once, then prefer `mise run fmt`, `mise run vet`, `mise run lint`, `mise run test`, `mise run build`, and `mise run ci` for routine work.
+- `go.mod` requires Go `1.26.2`. If you bypass `mise` and invoke `go` directly, use `GOTOOLCHAIN=auto` so the toolchain can self-upgrade if the system Go is older.
+- Match CI order before handoff: `fmt -> vet -> lint -> test -> build`.
+- Tool provisioning is handled through `mise install`.
+- For focused verification, prefer `mise exec -- go test ./internal/driver -run TestName` or another specific package.
+- If you change the Helm chart, run `mise run helm-lint`.
+- `mise run` tasks currently inherit the top-level tool set from `mise.toml`, so CI/Image egress can expand when the tool list changes. When adjusting workflow allowlists, inspect the latest Step Security network events instead of assuming `install_args` fully constrains runtime downloads.
+- GitHub Actions in this repo are pinned to immutable commit SHAs; preserve that pattern when updating workflows.
+
+## GitHub CLI Workflow
+
+- Prefer `gh` for GitHub work instead of the web UI when you need to inspect CI, triage issues or PRs, or leave comments.
+- For PR-level CI debugging, start with `gh pr checks` on the PR number, branch, or URL. Use `--watch` to wait on checks and `--required` when you only need the required statuses.
+- When you need the underlying workflow runs or specific jobs, use `gh run list --branch <branch>` or `gh run list --workflow <name>` to find the run, then `gh run view <run-id>` to inspect the jobs. Add `--job <job-id>` and `--log` or `--log-failed` to focus on one job.
+- Use `gh pr status` for a quick summary of the current branch's PR state, checks, and review requests.
+- Use `gh pr list` and `gh issue list` for triage. Filter with `--state`, `--label`, `--author`, `--assignee`, `--search`, or `--milestone` before reaching for the browser.
+- Use `gh issue view -c` when you need the issue thread, and `gh issue edit` or `gh pr edit` to update titles, bodies, labels, assignees, reviewers, milestones, and project membership. If you touch projects, remember `gh auth refresh -s project` may be required.
+- Use `gh pr comment` and `gh issue comment` for follow-up comments. Use `--body` or `--body-file`, and prefer `gh pr review` when the response is an approval, a review comment, or a request for changes.
+- When you need to update a comment instead of adding a new one, use `gh pr comment --edit-last` or `gh issue comment --edit-last`; if there is no prior comment, `--create-if-none` keeps the workflow simple.
+- Prefer explicit repository targeting with `-R` when the command is not running from the repo root or when you want to avoid ambiguity.
+
+## Repo Shape
+
+- Runtime entrypoint is `main.go`: it reads env vars directly, builds the Linode client, calls `internal/driver.SetupLinodeDriver`, then starts the gRPC server.
+- `internal/driver` owns CSI RPCs, capability wiring, metadata, and socket serving. `pkg/linode-client` only constructs a configured `linodego.Client` today.
+- Driver role is env-driven. `DRIVER_ROLE=controller` requires `LINODE_TOKEN`; `DRIVER_ROLE=node` uses `NODE_NAME` for `NodeGetInfo` and falls back to `linode-filestorage-node` if unset.
+- `LINODE_URL` overrides the API base URL; keep that path working when changing client setup because it is the current hook for mock or non-default backends.
+
+## Current Implementation Limits
+
+- This repo is still scaffold-level. Identity and capability/info RPCs return real data, but most controller and node lifecycle RPCs still return gRPC `Unimplemented`.
+- `VolumeContext` semantics are not finalized yet; do not assume NFS server or export-path keys already exist in the scaffold.
+- Advertised capabilities are intentionally narrow: plugin `CONTROLLER_SERVICE`, controller `CREATE_DELETE_VOLUME`, node `STAGE_UNSTAGE_VOLUME` and `GET_VOLUME_STATS`.
+- Controller manifests already include `csi-resizer` and `csi-snapshotter`, but the driver does not advertise expansion or snapshot capabilities yet.
+
+## Packaging And Deploy
+
+- Images are built with `ko`, not a Dockerfile. Use `mise run ko-build` for local images and `KO_DOCKER_REPO=<repo> IMAGE_VERSION=<tag> mise run ko-publish` for publishing.
+- `.ko.yaml` builds multi-arch images for `linux/amd64` and `linux/arm64` from `gcr.io/distroless/static:nonroot`.
+- Controller and node socket paths are intentionally different. Keep controller at `unix:///var/lib/csi/sockets/pluginproxy/csi.sock`; keep node at `unix:///csi/csi.sock` with kubelet registration at `/var/lib/kubelet/plugins/linodefs.csi.linode.com/csi.sock`.
+- Equivalent Kubernetes wiring exists in both `deploy/kubernetes/base` and `charts/linode-nfs-csi-driver/templates`; when changing sidecars, env vars, mounts, RBAC, or socket paths, check both.
+- Raw Kustomize manifests expect a pre-created `linode-api-token` Secret in `kube-system` with key `token`.
+- In the Helm chart, if `.Values.secretRef` is unset, `templates/secret.yaml` creates `linode-api-token` from `.Values.apiToken`, and the controller reads `LINODE_TOKEN` from key `token`.
+- The Helm controller chart has optional `.Values.controller.kubeconfig` secret wiring; if you touch controller containers or volumes, preserve the mount and `--kubeconfig` plumbing across the plugin and controller sidecars.
+- CI and Image workflows are back on Step Security `block` mode with allowlists derived from observed runs; if you change tool downloads or publish destinations, update those allowlists from fresh workflow logs. Release is still on `audit` until a representative tagged run is captured.
+
+## Current Development Direction
+
+- `docs/mock-provider.md` is the current plan for backend work: implement CSI behavior first against a small mock HTTP API plus a lightweight NFS server, then swap the backend client later.
