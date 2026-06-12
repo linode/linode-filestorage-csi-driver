@@ -104,8 +104,28 @@ func (d *LinodeDriver) Run(ctx context.Context, endpoint string) {
 	d.ready = true
 	d.readyMu.Unlock()
 
+	ids, cs, ns := d.rpcServers()
 	server := NewNonBlockingGRPCServer()
 	klog.V(2).InfoS("starting grpc server", "endpoint", endpoint)
-	server.Start(endpoint, d.ids, d.cs, d.ns)
+	server.Start(endpoint, ids, cs, ns)
 	server.Wait()
+}
+
+func (d *LinodeDriver) rpcServers() (csi.IdentityServer, csi.ControllerServer, csi.NodeServer) {
+	var ids csi.IdentityServer
+	if d.ids != nil {
+		ids = d.ids
+	}
+
+	var cs csi.ControllerServer
+	if d.cs != nil {
+		cs = d.cs
+	}
+
+	var ns csi.NodeServer
+	if d.ns != nil {
+		ns = d.ns
+	}
+
+	return ids, cs, ns
 }
