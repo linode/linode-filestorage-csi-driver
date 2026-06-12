@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev-cluster-setup
   workflow_dispatch:
 
 permissions:
