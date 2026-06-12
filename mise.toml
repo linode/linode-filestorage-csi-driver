@@ -57,3 +57,6 @@ run = "make release"
 description = "Run CI checks"
 run = "make ci"
 
+[tasks.helm-install]
+description = "Install Helm charts"
+run = "make helm-install"

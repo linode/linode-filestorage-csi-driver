@@ -3,6 +3,7 @@ IMAGE_TAGS ?= $(IMAGE_VERSION)
 KO_DOCKER_REPO ?= docker.io/linode/linode-filestorage-csi-driver
 RELEASE_IMAGE_REPO ?= docker.io/linode/linode-filestorage-csi-driver
 RELEASE_DIR ?= release
+LINODE_TOKEN ?= $(LINODE_TOKEN) # Required for helm-install target, but not used in other targets, so we don't want to error out if it's not set
 
 .PHONY: fmt
 fmt:
@@ -59,3 +60,9 @@ release:
 
 .PHONY: ci
 ci: fmt vet lint gen-mock test build
+
+.PHONY: helm-install
+helm-install:
+	helm upgrade --install --namespace kube-system --create-namespace linode-nfs-csi-driver charts/linode-nfs-csi-driver \
+		--set controller.image.repository=$(KO_DOCKER_REPO) \
+		--set apiToken=${LINODE_TOKEN}
