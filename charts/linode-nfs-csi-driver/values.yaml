@@ -37,7 +37,7 @@ sidecars:
   provisioner:
     # CSI provisioner sidecar image.
     repository: registry.k8s.io/sig-storage/csi-provisioner
-    tag: v5.2.0
+    tag: v6.2.0
     pullPolicy: IfNotPresent
   attacher:
     # CSI attacher sidecar image.
@@ -47,7 +47,7 @@ sidecars:
   resizer:
     # CSI resizer sidecar image.
     repository: registry.k8s.io/sig-storage/csi-resizer
-    tag: v1.13.0
+    tag: v2.1.0
     pullPolicy: IfNotPresent
   snapshotter:
     # CSI snapshotter sidecar image.
@@ -97,6 +97,12 @@ controller:
 node:
   # Deploy the node DaemonSet.
   enabled: true
+  # Security context for the node plugin container. The default image runs as
+  # non-root, but the kubelet hostPath socket requires root to create csi.sock.
+  pluginSecurityContext:
+    privileged: true
+    runAsUser: 0
+    runAsGroup: 0
   serviceAccount:
     # Create and use a dedicated node service account.
     enabled: true
@@ -107,7 +113,7 @@ node:
   registrar:
     # Node driver registrar sidecar image.
     repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
-    tag: v2.13.0
+    tag: v2.16.0
     pullPolicy: IfNotPresent
     # Extra env vars for the registrar container.
     env: []

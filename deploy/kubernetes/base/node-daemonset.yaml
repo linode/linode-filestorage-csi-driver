@@ -19,6 +19,8 @@ spec:
           image: docker.io/linode/linode-filestorage-csi-driver:dev
           securityContext:
             privileged: true
+            runAsUser: 0
+            runAsGroup: 0
           env:
             - name: DRIVER_ROLE
               value: node

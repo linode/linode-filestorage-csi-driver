@@ -29,8 +29,10 @@ spec:
         - name: plugin
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.node.pluginSecurityContext }}
           securityContext:
-            privileged: true
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: DRIVER_ROLE
               value: node
