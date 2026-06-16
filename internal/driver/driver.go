@@ -6,8 +6,9 @@ import (
 	"sync"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/linode/linodego"
 	"k8s.io/klog/v2"
+
+	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 )
 
 const Name = "linodefs.csi.linode.com"
@@ -34,7 +35,7 @@ type LinodeDriver struct {
 	readyMu  sync.Mutex
 	ready    bool
 	metadata MetadataService
-	client   *linodego.Client
+	client   linodeclient.LinodeClient
 }
 
 func GetLinodeDriver(ctx context.Context) *LinodeDriver {
@@ -47,7 +48,7 @@ func GetLinodeDriver(ctx context.Context) *LinodeDriver {
 
 func (d *LinodeDriver) SetupLinodeDriver(
 	ctx context.Context,
-	client *linodego.Client,
+	client linodeclient.LinodeClient,
 	name string,
 	vendorVersion string,
 	role Role,

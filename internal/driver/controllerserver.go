@@ -5,17 +5,18 @@ import (
 	"fmt"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/linode/linodego"
 	"k8s.io/klog/v2"
+
+	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 )
 
 type ControllerServer struct {
 	driver *LinodeDriver
-	client *linodego.Client
+	client linodeclient.LinodeClient
 	csi.UnimplementedControllerServer
 }
 
-func NewControllerServer(ctx context.Context, driver *LinodeDriver, client *linodego.Client) (*ControllerServer, error) {
+func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linodeclient.LinodeClient) (*ControllerServer, error) {
 	klog.V(4).InfoS("creating controller server")
 	if driver == nil {
 		return nil, errNilDriver

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 	"k8s.io/klog/v2"
 
