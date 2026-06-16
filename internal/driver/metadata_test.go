@@ -7,171 +7,192 @@ import (
 	"testing"
 
 	metadataapi "github.com/linode/go-metadata"
+	"github.com/linode/linodego/v2"
+	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/linode/linode-filestorage-csi-driver/mocks"
 )
 
-type stubInstanceMetadataClient struct {
-	getInstanceFn func(ctx context.Context) (*metadataapi.InstanceData, error)
-	getNetworkFn  func(ctx context.Context) (*metadataapi.NetworkData, error)
-}
-
-func (s *stubInstanceMetadataClient) GetInstance(ctx context.Context) (*metadataapi.InstanceData, error) {
-	if s.getInstanceFn == nil {
-		return nil, errors.New("unexpected GetInstance call")
-	}
-	return s.getInstanceFn(ctx)
-}
-
-func (s *stubInstanceMetadataClient) GetNetwork(ctx context.Context) (*metadataapi.NetworkData, error) {
-	if s.getNetworkFn == nil {
-		return nil, errors.New("unexpected GetNetwork call")
-	}
-	return s.getNetworkFn(ctx)
-}
-
-func TestMetadataServiceCurrentNodeUsesInstanceMetadata(t *testing.T) {
-	service := &metadataService{
-		nodeName: "worker-a",
-		instanceClient: &stubInstanceMetadataClient{
-			getInstanceFn: func(context.Context) (*metadataapi.InstanceData, error) {
-				return &metadataapi.InstanceData{ID: 101, Region: "us-east"}, nil
-			},
-			getNetworkFn: func(context.Context) (*metadataapi.NetworkData, error) {
-				return &metadataapi.NetworkData{
+func TestMetadataServiceCurrentNode(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*mocks.MockInstanceMetadataClient, *mocks.MockKubeNodeClient)
+		want  NodeMetadata
+	}{
+		{
+			name: "uses instance metadata",
+			setup: func(instanceClient *mocks.MockInstanceMetadataClient, kubeClient *mocks.MockKubeNodeClient) {
+				instanceClient.EXPECT().GetInstance(gomock.Any()).Return(&metadataapi.InstanceData{ID: 101, Region: "us-east"}, nil)
+				instanceClient.EXPECT().GetNetwork(gomock.Any()).Return(&metadataapi.NetworkData{
 					IPv4: metadataapi.IPv4Data{Private: []netip.Prefix{netip.MustParsePrefix("10.0.0.12/24")}},
-				}, nil
+				}, nil)
 			},
+			want: NodeMetadata{KubernetesName: "worker-a", LinodeID: 101, Region: "us-east", AllowlistIP: "10.0.0.12"},
 		},
-		kubeClient: &stubKubeNodeClient{},
-	}
-
-	node, err := service.CurrentNode(context.Background())
-	if err != nil {
-		t.Fatalf("CurrentNode() error = %v", err)
-	}
-
-	if node.KubernetesName != "worker-a" {
-		t.Fatalf("unexpected KubernetesName %q", node.KubernetesName)
-	}
-	if node.LinodeID != 101 {
-		t.Fatalf("unexpected LinodeID %d", node.LinodeID)
-	}
-	if node.Region != "us-east" {
-		t.Fatalf("unexpected Region %q", node.Region)
-	}
-	if node.AllowlistIP != "10.0.0.12" {
-		t.Fatalf("unexpected AllowlistIP %q", node.AllowlistIP)
-	}
-}
-
-func TestMetadataServiceCurrentNodeFallsBackToKubernetes(t *testing.T) {
-	service := &metadataService{
-		nodeName: "worker-a",
-		instanceClient: &stubInstanceMetadataClient{
-			getInstanceFn: func(context.Context) (*metadataapi.InstanceData, error) {
-				return nil, errors.New("metadata unavailable")
+		{
+			name: "falls back to kubernetes",
+			setup: func(instanceClient *mocks.MockInstanceMetadataClient, kubeClient *mocks.MockKubeNodeClient) {
+				instanceClient.EXPECT().GetInstance(gomock.Any()).Return(nil, errors.New("metadata unavailable"))
+				kubeClient.EXPECT().GetNode(gomock.Any(), "worker-a").Return(newTestNode("worker-a", "us-central", "10.0.0.20", "linode://202"), nil)
 			},
-			getNetworkFn: func(context.Context) (*metadataapi.NetworkData, error) {
-				return nil, errors.New("unexpected GetNetwork call")
-			},
-		},
-		kubeClient: &stubKubeNodeClient{
-			getNodeFn: func(ctx context.Context, name string) (*corev1.Node, error) {
-				return newTestNode(name, "us-central", "10.0.0.20", "linode://202"), nil
-			},
+			want: NodeMetadata{KubernetesName: "worker-a", LinodeID: 202, Region: "us-central", AllowlistIP: "10.0.0.20"},
 		},
 	}
 
-	node, err := service.CurrentNode(context.Background())
-	if err != nil {
-		t.Fatalf("CurrentNode() error = %v", err)
-	}
-	if node.LinodeID != 202 {
-		t.Fatalf("unexpected LinodeID %d", node.LinodeID)
-	}
-	if node.AllowlistIP != "10.0.0.20" {
-		t.Fatalf("unexpected AllowlistIP %q", node.AllowlistIP)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			instanceClient := mocks.NewMockInstanceMetadataClient(ctrl)
+			kubeClient := mocks.NewMockKubeNodeClient(ctrl)
+			if tt.setup != nil {
+				tt.setup(instanceClient, kubeClient)
+			}
+			service := &metadataService{nodeName: "worker-a", instanceClient: instanceClient, kubeClient: kubeClient}
+
+			node, err := service.CurrentNode(context.Background())
+			if err != nil {
+				t.Fatalf("CurrentNode() error = %v", err)
+			}
+			if node != tt.want {
+				t.Fatalf("CurrentNode() = %#v, want %#v", node, tt.want)
+			}
+		})
 	}
 }
 
 func TestMetadataServiceNodeByName(t *testing.T) {
-	service := &metadataService{
-		kubeClient: &stubKubeNodeClient{
-			getNodeFn: func(ctx context.Context, name string) (*corev1.Node, error) {
-				return newTestNode(name, "eu-west", "10.1.2.3", "linode://303"), nil
+	tests := []struct {
+		name     string
+		nodeName string
+		setup    func(*mocks.MockKubeNodeClient)
+		want     NodeMetadata
+	}{
+		{
+			name:     "reads kubernetes node",
+			nodeName: "worker-b",
+			setup: func(kubeClient *mocks.MockKubeNodeClient) {
+				kubeClient.EXPECT().GetNode(gomock.Any(), "worker-b").Return(newTestNode("worker-b", "eu-west", "10.1.2.3", "linode://303"), nil)
 			},
+			want: NodeMetadata{KubernetesName: "worker-b", LinodeID: 303, Region: "eu-west", AllowlistIP: "10.1.2.3"},
 		},
 	}
 
-	node, err := service.NodeByName(context.Background(), "worker-b")
-	if err != nil {
-		t.Fatalf("NodeByName() error = %v", err)
-	}
-	if node.KubernetesName != "worker-b" {
-		t.Fatalf("unexpected KubernetesName %q", node.KubernetesName)
-	}
-	if node.Region != "eu-west" {
-		t.Fatalf("unexpected Region %q", node.Region)
-	}
-	if node.AllowlistIP != "10.1.2.3" {
-		t.Fatalf("unexpected AllowlistIP %q", node.AllowlistIP)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			kubeClient := mocks.NewMockKubeNodeClient(ctrl)
+			if tt.setup != nil {
+				tt.setup(kubeClient)
+			}
+			service := &metadataService{kubeClient: kubeClient}
+
+			node, err := service.NodeByName(context.Background(), tt.nodeName)
+			if err != nil {
+				t.Fatalf("NodeByName() error = %v", err)
+			}
+			if node != tt.want {
+				t.Fatalf("NodeByName() = %#v, want %#v", node, tt.want)
+			}
+		})
 	}
 }
 
-func TestMetadataServiceClusterRegion(t *testing.T) {
-	service := &metadataService{
-		kubeClient: &stubKubeNodeClient{
-			listNodesFn: func(ctx context.Context) (*corev1.NodeList, error) {
-				return &corev1.NodeList{Items: []corev1.Node{
+func TestMetadataServiceCluster(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*mocks.MockKubeNodeClient, *mocks.MockLinodeClient)
+		want    ClusterMetadata
+		wantErr bool
+	}{
+		{
+			name: "region and VPC",
+			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
+				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
 					*newTestNode("worker-b", "us-east", "10.0.0.11", "linode://12"),
-				}}, nil
+				}}, nil)
+				linodeClient.EXPECT().ListInterfaces(gomock.Any(), 11, gomock.Nil()).Return([]linodego.LinodeInterface{
+					{VPC: &linodego.VPCInterface{VPCID: 123456}},
+				}, nil)
 			},
+			want: ClusterMetadata{Region: "us-east", VPCID: "123456"},
 		},
-	}
-
-	cluster, err := service.Cluster(context.Background())
-	if err != nil {
-		t.Fatalf("Cluster() error = %v", err)
-	}
-	if cluster.Region != "us-east" {
-		t.Fatalf("unexpected cluster region %q", cluster.Region)
-	}
-}
-
-func TestMetadataServiceClusterRegionRejectsMixedRegions(t *testing.T) {
-	service := &metadataService{
-		kubeClient: &stubKubeNodeClient{
-			listNodesFn: func(ctx context.Context) (*corev1.NodeList, error) {
-				return &corev1.NodeList{Items: []corev1.Node{
+		{
+			name: "rejects mixed regions",
+			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
+				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
 					*newTestNode("worker-b", "eu-west", "10.0.0.11", "linode://12"),
-				}}, nil
+				}}, nil)
 			},
+			wantErr: true,
+		},
+		{
+			name: "rejects node without VPC",
+			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
+				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
+					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
+				}}, nil)
+				linodeClient.EXPECT().ListInterfaces(gomock.Any(), 11, gomock.Nil()).Return([]linodego.LinodeInterface{{Public: &linodego.PublicInterface{}}}, nil)
+			},
+			wantErr: true,
 		},
 	}
 
-	_, err := service.Cluster(context.Background())
-	if err == nil {
-		t.Fatal("expected Cluster() error for mixed regions")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			kubeClient := mocks.NewMockKubeNodeClient(ctrl)
+			linodeClient := mocks.NewMockLinodeClient(ctrl)
+			if tt.setup != nil {
+				tt.setup(kubeClient, linodeClient)
+			}
+			service := &metadataService{kubeClient: kubeClient, linodeClient: linodeClient}
+
+			cluster, err := service.Cluster(context.Background())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Cluster() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if cluster != tt.want {
+				t.Fatalf("Cluster() = %#v, want %#v", cluster, tt.want)
+			}
+		})
 	}
 }
 
-func TestAllowlistIPFromNodePrefersInternalIP(t *testing.T) {
-	node := &corev1.Node{
-		Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
-			{Type: corev1.NodeExternalIP, Address: "198.51.100.1"},
-			{Type: corev1.NodeInternalIP, Address: "10.0.0.42"},
-		}},
+func TestAllowlistIPFromNode(t *testing.T) {
+	tests := []struct {
+		name string
+		node *corev1.Node
+		want string
+	}{
+		{
+			name: "prefers internal IP",
+			node: &corev1.Node{
+				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+					{Type: corev1.NodeExternalIP, Address: "198.51.100.1"},
+					{Type: corev1.NodeInternalIP, Address: "10.0.0.42"},
+				}},
+			},
+			want: "10.0.0.42",
+		},
 	}
 
-	ip, err := allowlistIPFromNode(node)
-	if err != nil {
-		t.Fatalf("allowlistIPFromNode() error = %v", err)
-	}
-	if ip != "10.0.0.42" {
-		t.Fatalf("unexpected AllowlistIP %q", ip)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ip, err := allowlistIPFromNode(tt.node)
+			if err != nil {
+				t.Fatalf("allowlistIPFromNode() error = %v", err)
+			}
+			if ip != tt.want {
+				t.Fatalf("allowlistIPFromNode() = %q, want %q", ip, tt.want)
+			}
+		})
 	}
 }
 

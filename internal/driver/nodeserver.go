@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"strconv"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
@@ -26,7 +27,7 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
-	if s.driver.metadata == nil {
+	if !s.driver.metadata.configured() {
 		return nil, status.Error(codes.Internal, "metadata service is not configured")
 	}
 
@@ -35,7 +36,7 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 		return nil, status.Errorf(codes.Internal, "resolve node metadata: %v", err)
 	}
 
-	return &csi.NodeGetInfoResponse{NodeId: node.KubernetesName}, nil
+	return &csi.NodeGetInfoResponse{NodeId: strconv.Itoa(node.LinodeID)}, nil
 }
 
 func (s *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
