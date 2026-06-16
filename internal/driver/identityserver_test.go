@@ -43,27 +43,44 @@ func TestNewIdentityServer(t *testing.T) {
 }
 
 func TestIdentityServerGetPluginInfo(t *testing.T) {
-	ids := &IdentityServer{driver: &LinodeDriver{name: Name, vendorVersion: "dev"}}
-
-	resp, err := ids.GetPluginInfo(context.Background(), &csi.GetPluginInfoRequest{})
-	if err != nil {
-		t.Fatalf("GetPluginInfo() error = %v", err)
+	tests := []struct {
+		name              string
+		driver            *LinodeDriver
+		wantName          string
+		wantVendorVersion string
+		wantCode          codes.Code
+	}{
+		{
+			name:              "returns plugin info",
+			driver:            &LinodeDriver{name: Name, vendorVersion: "dev"},
+			wantName:          Name,
+			wantVendorVersion: "dev",
+		},
+		{
+			name:     "requires name",
+			driver:   &LinodeDriver{vendorVersion: "dev"},
+			wantCode: codes.Unavailable,
+		},
 	}
 
-	if resp.GetName() != Name {
-		t.Fatalf("GetPluginInfo() name = %q, want %q", resp.GetName(), Name)
-	}
-	if resp.GetVendorVersion() != "dev" {
-		t.Fatalf("GetPluginInfo() vendorVersion = %q, want %q", resp.GetVendorVersion(), "dev")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ids := &IdentityServer{driver: tt.driver}
 
-func TestIdentityServerGetPluginInfoRequiresName(t *testing.T) {
-	ids := &IdentityServer{driver: &LinodeDriver{vendorVersion: "dev"}}
-
-	_, err := ids.GetPluginInfo(context.Background(), &csi.GetPluginInfoRequest{})
-	if status.Code(err) != codes.Unavailable {
-		t.Fatalf("GetPluginInfo() code = %v, want %v", status.Code(err), codes.Unavailable)
+			resp, err := ids.GetPluginInfo(context.Background(), &csi.GetPluginInfoRequest{})
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("GetPluginInfo() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if resp.GetName() != tt.wantName {
+				t.Fatalf("GetPluginInfo() name = %q, want %q", resp.GetName(), tt.wantName)
+			}
+			if resp.GetVendorVersion() != tt.wantVendorVersion {
+				t.Fatalf("GetPluginInfo() vendorVersion = %q, want %q", resp.GetVendorVersion(), tt.wantVendorVersion)
+			}
+		})
 	}
 }
 
