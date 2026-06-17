@@ -29,6 +29,10 @@ run = "make lint"
 description = "Run tests"
 run = "make test"
 
+[tasks.gen-mock]
+description = "Regenerate Go mocks"
+run = "make gen-mock"
+
 [tasks.build]
 description = "Build binary"
 run = "make build"
