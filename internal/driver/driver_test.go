@@ -6,7 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/linode/linodego/v2"
 	corev1 "k8s.io/api/core/v1"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
@@ -49,15 +50,26 @@ func withStubMetadataFactories(t *testing.T) {
 	}
 }
 
+func defaultClientHelper(t *testing.T) *linodego.Client {
+	t.Helper()
+
+	config := &linodeclient.Config{
+		LinodeToken: "token",
+		BaseURL:     "https://api.linode.com",
+	}
+	client, err := linodeclient.NewLinodeClient(config)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	return client
+}
+
 func TestSetupLinodeDriverAssignsRoleServers(t *testing.T) {
 	ctx := context.Background()
 	withStubMetadataFactories(t)
 
 	driver := GetLinodeDriver(ctx)
-	client, err := linodeclient.NewLinodeClient("token", "ua", "https://api.linode.com")
-	if err != nil {
-		t.Fatalf("create client: %v", err)
-	}
+	client := defaultClientHelper(t)
 
 	if err := driver.SetupLinodeDriver(ctx, client, Name, "dev", RoleController, ""); err != nil {
 		t.Fatalf("setup driver: %v", err)
@@ -106,10 +118,7 @@ func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
 	withStubMetadataFactories(t)
 
 	driver := GetLinodeDriver(ctx)
-	client, err := linodeclient.NewLinodeClient("", "ua", "https://api.linode.com")
-	if err != nil {
-		t.Fatalf("create client: %v", err)
-	}
+	client := defaultClientHelper(t)
 
 	if err := driver.SetupLinodeDriver(ctx, client, Name, "dev", RoleNode, "node-a"); err != nil {
 		t.Fatalf("setup driver: %v", err)
@@ -134,12 +143,9 @@ func TestSetupLinodeDriverRejectsInvalidRole(t *testing.T) {
 	withStubMetadataFactories(t)
 
 	driver := GetLinodeDriver(ctx)
-	client, err := linodeclient.NewLinodeClient("token", "ua", "https://api.linode.com")
-	if err != nil {
-		t.Fatalf("create client: %v", err)
-	}
+	client := defaultClientHelper(t)
 
-	err = driver.SetupLinodeDriver(ctx, client, Name, "dev", Role("all"), "")
+	err := driver.SetupLinodeDriver(ctx, client, Name, "dev", Role("all"), "")
 	if !errors.Is(err, errInvalidRole) {
 		t.Fatalf("expected errInvalidRole, got %v", err)
 	}
