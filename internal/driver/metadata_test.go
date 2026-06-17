@@ -166,12 +166,12 @@ func TestMetadataServiceCluster(t *testing.T) {
 }
 func TestMetadataServiceConfigured(t *testing.T) {
 	tests := []struct {
-		name            string
-		role            Role
-		withInstance    bool
-		withKubernetes  bool
-		withLinode      bool
-		want            bool
+		name           string
+		role           Role
+		withInstance   bool
+		withKubernetes bool
+		withLinode     bool
+		want           bool
 	}{
 		{
 			name:         "node role accepts instance metadata client",
