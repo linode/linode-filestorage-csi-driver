@@ -3,23 +3,29 @@ package driver
 import (
 	"context"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
+
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 type NodeServer struct {
-	driver *LinodeDriver
+	driver  *LinodeDriver
+	mounter *mountmanager.SafeFormatAndMount
 	csi.UnimplementedNodeServer
 }
 
-func NewNodeServer(ctx context.Context, driver *LinodeDriver) (*NodeServer, error) {
+func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
 	if driver == nil {
 		return nil, errNilDriver
 	}
-	return &NodeServer{driver: driver}, nil
+	if mounter == nil {
+		return nil, errNilMounter
+	}
+	return &NodeServer{driver: driver, mounter: mounter}, nil
 }
 
 func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {

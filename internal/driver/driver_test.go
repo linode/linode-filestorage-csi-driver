@@ -8,9 +8,13 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
+	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/mount"
 
+	"github.com/linode/linode-filestorage-csi-driver/mocks"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 type stubKubeNodeClient struct {
@@ -70,8 +74,16 @@ func TestSetupLinodeDriverAssignsRoleServers(t *testing.T) {
 
 	driver := GetLinodeDriver(ctx)
 	client := defaultClientHelper(t)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mounter := &mountmanager.SafeFormatAndMount{
+		SafeFormatAndMount: &mount.SafeFormatAndMount{
+			Interface: mocks.NewMockMounter(mockCtrl),
+			Exec:      mocks.NewMockExecutor(mockCtrl),
+		},
+	}
 
-	if err := driver.SetupLinodeDriver(ctx, client, Name, "dev", RoleController, ""); err != nil {
+	if err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", RoleController, ""); err != nil {
 		t.Fatalf("setup driver: %v", err)
 	}
 
@@ -119,8 +131,16 @@ func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
 
 	driver := GetLinodeDriver(ctx)
 	client := defaultClientHelper(t)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mounter := &mountmanager.SafeFormatAndMount{
+		SafeFormatAndMount: &mount.SafeFormatAndMount{
+			Interface: mocks.NewMockMounter(mockCtrl),
+			Exec:      mocks.NewMockExecutor(mockCtrl),
+		},
+	}
 
-	if err := driver.SetupLinodeDriver(ctx, client, Name, "dev", RoleNode, "node-a"); err != nil {
+	if err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", RoleNode, "node-a"); err != nil {
 		t.Fatalf("setup driver: %v", err)
 	}
 
@@ -144,8 +164,16 @@ func TestSetupLinodeDriverRejectsInvalidRole(t *testing.T) {
 
 	driver := GetLinodeDriver(ctx)
 	client := defaultClientHelper(t)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mounter := &mountmanager.SafeFormatAndMount{
+		SafeFormatAndMount: &mount.SafeFormatAndMount{
+			Interface: mocks.NewMockMounter(mockCtrl),
+			Exec:      mocks.NewMockExecutor(mockCtrl),
+		},
+	}
 
-	err := driver.SetupLinodeDriver(ctx, client, Name, "dev", Role("all"), "")
+	err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", Role("all"), "")
 	if !errors.Is(err, errInvalidRole) {
 		t.Fatalf("expected errInvalidRole, got %v", err)
 	}

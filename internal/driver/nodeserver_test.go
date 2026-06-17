@@ -4,7 +4,11 @@ import (
 	"context"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
+)
+
+const (
+	testWorkerNode = "worker-a"
 )
 
 type staticMetadataService struct {
@@ -29,13 +33,13 @@ func (s staticMetadataService) Cluster(ctx context.Context) (ClusterMetadata, er
 }
 
 func TestNodeGetInfoUsesMetadataService(t *testing.T) {
-	server := &NodeServer{driver: &LinodeDriver{metadata: staticMetadataService{currentNode: NodeMetadata{KubernetesName: "worker-a"}}}}
+	server := &NodeServer{driver: &LinodeDriver{metadata: staticMetadataService{currentNode: NodeMetadata{KubernetesName: testWorkerNode}}}}
 
 	response, err := server.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
 	if err != nil {
 		t.Fatalf("NodeGetInfo() error = %v", err)
 	}
-	if response.GetNodeId() != "worker-a" {
+	if response.GetNodeId() != testWorkerNode {
 		t.Fatalf("unexpected NodeId %q", response.GetNodeId())
 	}
 }
