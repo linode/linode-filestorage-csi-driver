@@ -2,16 +2,20 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"net/netip"
+	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	metadataapi "github.com/linode/go-metadata"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 func TestNodeGetInfo(t *testing.T) {
@@ -109,10 +113,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 			_, err := server.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{})
 			return err
 		}},
-		{name: "NodeUnpublishVolume", call: func(server *NodeServer) error {
-			_, err := server.NodeUnpublishVolume(context.Background(), &csi.NodeUnpublishVolumeRequest{})
-			return err
-		}},
 		{name: "NodeGetVolumeStats", call: func(server *NodeServer) error {
 			_, err := server.NodeGetVolumeStats(context.Background(), &csi.NodeGetVolumeStatsRequest{})
 			return err
@@ -138,5 +138,54 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 func testPrivateNetwork(prefix string) *metadataapi.NetworkData {
 	return &metadataapi.NetworkData{
 		IPv4: metadataapi.IPv4Data{Private: []netip.Prefix{netip.MustParsePrefix(prefix)}},
+	}
+}
+
+func TestNodeUnpublishVolume(t *testing.T) {
+	tests := []struct {
+		name               string
+		req                *csi.NodeUnpublishVolumeRequest
+		resp               *csi.NodeUnpublishVolumeResponse
+		expectMounterCalls func(m *mocks.MockMounter)
+		expectedError      error
+	}{
+		{
+			name: "unpublishhappypath",
+			req: &csi.NodeUnpublishVolumeRequest{
+				VolumeId:   "vol-123",
+				TargetPath: "/mnt/target",
+			},
+			resp:               &csi.NodeUnpublishVolumeResponse{},
+			expectMounterCalls: func(m *mocks.MockMounter) {},
+			expectedError:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+			if tt.expectMounterCalls != nil {
+				tt.expectMounterCalls(mockMounter)
+			}
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+			}
+			returnedResp, err := ns.NodeUnpublishVolume(context.Background(), tt.req)
+			if err != nil && !errors.Is(err, tt.expectedError) {
+				t.Errorf("NodeUnpublishVolume error = %v, wantErr %v", err, tt.expectedError)
+			}
+			if !reflect.DeepEqual(returnedResp, tt.resp) {
+				t.Errorf("NodeServer.NodeUnpublishVolume() = %v, want %v", returnedResp, tt.resp)
+			}
+		})
 	}
 }
