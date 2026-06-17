@@ -187,7 +187,7 @@ func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]No
 
 func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
 	if s.linodeClient == nil {
-		return ClusterMetadata{}, errors.New("linode metadata client is nil")
+		return ClusterMetadata{}, errLinodeClientNotFound
 	}
 
 	nodes, err := s.kubeClient.ListNodes(ctx)

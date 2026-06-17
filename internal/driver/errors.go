@@ -24,4 +24,5 @@ var (
 	errNotImplemented       = status.Error(codes.Unimplemented, "operation not implemented")
 	errInvalidRole          = errors.New("invalid driver role")
 	errClusterVPCNotFound   = errors.New("cluster VPC not found")
+	errLinodeClientNotFound = errors.New("linode client not found or is nil")
 )
