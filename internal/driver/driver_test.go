@@ -7,30 +7,49 @@ import (
 	"testing"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 )
 
-func withStubKubeNodeClientFactory(t *testing.T) {
+func withStubMetadataFactories(t *testing.T) {
 	t.Helper()
 
-	originalKubeNodeClient := newKubeNodeClient
+	originalKubeFactory := newKubeNodeClient
+	originalMetadataFactory := newInstanceMetadataClient
 	ctrl := gomock.NewController(t)
 	t.Cleanup(func() {
-		newKubeNodeClient = originalKubeNodeClient
+		newKubeNodeClient = originalKubeFactory
+		newInstanceMetadataClient = originalMetadataFactory
 	})
 
 	newKubeNodeClient = func(context.Context) (KubeNodeClient, error) {
 		return mocks.NewMockKubeNodeClient(ctrl), nil
 	}
+	newInstanceMetadataClient = func(context.Context) (InstanceMetadataClient, error) {
+		return nil, errors.New("metadata unavailable")
+	}
+}
+
+func defaultClientHelper(t *testing.T) *linodego.Client {
+	t.Helper()
+
+	config := &linodeclient.Config{
+		LinodeToken: "token",
+		BaseURL:     "https://api.linode.com",
+	}
+	client, err := linodeclient.NewLinodeClient(config)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	return client
 }
 
 func TestSetupLinodeDriver(t *testing.T) {
 	tests := []struct {
 		name     string
-		token    string
 		role     Role
 		nodeName string
 		wantErr  error
@@ -38,7 +57,6 @@ func TestSetupLinodeDriver(t *testing.T) {
 	}{
 		{
 			name:   "assigns controller servers",
-			token:  "token",
 			role:   RoleController,
 			assert: assertControllerDriverSetup,
 		},
@@ -50,7 +68,6 @@ func TestSetupLinodeDriver(t *testing.T) {
 		},
 		{
 			name:    "rejects invalid role",
-			token:   "token",
 			role:    Role("all"),
 			wantErr: errInvalidRole,
 		},
@@ -59,15 +76,12 @@ func TestSetupLinodeDriver(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			withStubKubeNodeClientFactory(t)
+			withStubMetadataFactories(t)
 
 			driver := GetLinodeDriver(ctx)
-			client, err := linodeclient.NewLinodeClient(tt.token, "ua", "https://api.linode.com")
-			if err != nil {
-				t.Fatalf("create client: %v", err)
-			}
+			client := defaultClientHelper(t)
 
-			err = driver.SetupLinodeDriver(ctx, client, Name, "dev", tt.role, tt.nodeName)
+			err := driver.SetupLinodeDriver(ctx, client, Name, "dev", tt.role, tt.nodeName)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}

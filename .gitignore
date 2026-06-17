@@ -7,3 +7,4 @@ coverage.out
 # Local Development Environment sub dirs
 .vscode/
 .opencode/
+.idea/
