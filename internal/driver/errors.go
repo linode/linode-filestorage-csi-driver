@@ -26,3 +26,9 @@ var (
 	errClusterVPCNotFound   = errors.New("cluster VPC not found")
 	errLinodeClientNotFound = errors.New("linode client not found or is nil")
 )
+
+// errInternal is a convenience function to return a gRPC error with an
+// INTERNAL status code.
+func errInternal(format string, args ...any) error {
+	return status.Errorf(codes.Internal, format, args...)
+}
