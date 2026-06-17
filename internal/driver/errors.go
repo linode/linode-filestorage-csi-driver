@@ -23,4 +23,5 @@ var (
 	errNoStagingTargetPath  = status.Error(codes.InvalidArgument, "staging target path is not set")
 	errNotImplemented       = status.Error(codes.Unimplemented, "operation not implemented")
 	errInvalidRole          = errors.New("invalid driver role")
+	errClusterVPCNotFound   = errors.New("cluster VPC not found")
 )

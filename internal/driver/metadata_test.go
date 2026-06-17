@@ -164,6 +164,81 @@ func TestMetadataServiceCluster(t *testing.T) {
 		})
 	}
 }
+func TestMetadataServiceConfigured(t *testing.T) {
+	tests := []struct {
+		name            string
+		role            Role
+		withInstance    bool
+		withKubernetes  bool
+		withLinode      bool
+		want            bool
+	}{
+		{
+			name:         "node role accepts instance metadata client",
+			role:         RoleNode,
+			withInstance: true,
+			want:         true,
+		},
+		{
+			name:           "node role accepts kube client fallback",
+			role:           RoleNode,
+			withKubernetes: true,
+			want:           true,
+		},
+		{
+			name: "node role rejects missing clients",
+			role: RoleNode,
+			want: false,
+		},
+		{
+			name:           "controller role requires kube and linode clients",
+			role:           RoleController,
+			withKubernetes: true,
+			withLinode:     true,
+			want:           true,
+		},
+		{
+			name:           "controller role rejects kube client without linode client",
+			role:           RoleController,
+			withKubernetes: true,
+			want:           false,
+		},
+		{
+			name:         "controller role ignores instance metadata client alone",
+			role:         RoleController,
+			withInstance: true,
+			want:         false,
+		},
+		{
+			name:           "invalid role is not configured",
+			role:           Role("invalid"),
+			withInstance:   true,
+			withKubernetes: true,
+			withLinode:     true,
+			want:           false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			service := metadataService{}
+			if tt.withInstance {
+				service.instanceClient = mocks.NewMockInstanceMetadataClient(ctrl)
+			}
+			if tt.withKubernetes {
+				service.kubeClient = mocks.NewMockKubeNodeClient(ctrl)
+			}
+			if tt.withLinode {
+				service.linodeClient = mocks.NewMockLinodeClient(ctrl)
+			}
+
+			if got := service.configured(tt.role); got != tt.want {
+				t.Fatalf("configured(%q) = %v, want %v", tt.role, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestAllowlistIPFromNode(t *testing.T) {
 	tests := []struct {

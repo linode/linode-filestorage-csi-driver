@@ -27,7 +27,6 @@ var (
 	errMetadataRegionNotFound   = errors.New("node region label not found")
 	errMetadataAllowlistIP      = errors.New("node allowlist IP not found")
 	errMetadataClusterNodes     = errors.New("cluster has no nodes")
-	errMetadataClusterVPC       = errors.New("cluster VPC not found")
 )
 
 // NodeMetadata contains the node facts the CSI controller and node servers use
@@ -130,8 +129,15 @@ func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error)
 	return s.NodeByName(ctx, s.nodeName)
 }
 
-func (s *metadataService) configured() bool {
-	return s.instanceClient != nil || s.kubeClient != nil || s.linodeClient != nil
+func (s *metadataService) configured(role Role) bool {
+	switch role {
+	case RoleController:
+		return s.kubeClient != nil && s.linodeClient != nil
+	case RoleNode:
+		return s.instanceClient != nil || s.kubeClient != nil
+	default:
+		return false
+	}
 }
 
 func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
@@ -246,7 +252,7 @@ func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (string, 
 		}
 	}
 	if vpcID == "" {
-		return "", errMetadataClusterVPC
+		return "", errClusterVPCNotFound
 	}
 
 	return vpcID, nil
