@@ -11,6 +11,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	testNodeName = "worker-a"
+	testRegion   = "us-east"
+)
+
 type stubInstanceMetadataClient struct {
 	getInstanceFn func(ctx context.Context) (*metadataapi.InstanceData, error)
 	getNetworkFn  func(ctx context.Context) (*metadataapi.NetworkData, error)
@@ -32,10 +37,10 @@ func (s *stubInstanceMetadataClient) GetNetwork(ctx context.Context) (*metadataa
 
 func TestMetadataServiceCurrentNodeUsesInstanceMetadata(t *testing.T) {
 	service := &metadataService{
-		nodeName: "worker-a",
+		nodeName: testNodeName,
 		instanceClient: &stubInstanceMetadataClient{
 			getInstanceFn: func(context.Context) (*metadataapi.InstanceData, error) {
-				return &metadataapi.InstanceData{ID: 101, Region: "us-east"}, nil
+				return &metadataapi.InstanceData{ID: 101, Region: testRegion}, nil
 			},
 			getNetworkFn: func(context.Context) (*metadataapi.NetworkData, error) {
 				return &metadataapi.NetworkData{
@@ -51,13 +56,13 @@ func TestMetadataServiceCurrentNodeUsesInstanceMetadata(t *testing.T) {
 		t.Fatalf("CurrentNode() error = %v", err)
 	}
 
-	if node.KubernetesName != "worker-a" {
+	if node.KubernetesName != testNodeName {
 		t.Fatalf("unexpected KubernetesName %q", node.KubernetesName)
 	}
 	if node.LinodeID != 101 {
 		t.Fatalf("unexpected LinodeID %d", node.LinodeID)
 	}
-	if node.Region != "us-east" {
+	if node.Region != testRegion {
 		t.Fatalf("unexpected Region %q", node.Region)
 	}
 	if node.AllowlistIP != "10.0.0.12" {
@@ -67,7 +72,7 @@ func TestMetadataServiceCurrentNodeUsesInstanceMetadata(t *testing.T) {
 
 func TestMetadataServiceCurrentNodeFallsBackToKubernetes(t *testing.T) {
 	service := &metadataService{
-		nodeName: "worker-a",
+		nodeName: testNodeName,
 		instanceClient: &stubInstanceMetadataClient{
 			getInstanceFn: func(context.Context) (*metadataapi.InstanceData, error) {
 				return nil, errors.New("metadata unavailable")
@@ -124,8 +129,8 @@ func TestMetadataServiceClusterRegion(t *testing.T) {
 		kubeClient: &stubKubeNodeClient{
 			listNodesFn: func(ctx context.Context) (*corev1.NodeList, error) {
 				return &corev1.NodeList{Items: []corev1.Node{
-					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
-					*newTestNode("worker-b", "us-east", "10.0.0.11", "linode://12"),
+					*newTestNode(testNodeName, testRegion, "10.0.0.10", "linode://11"),
+					*newTestNode("worker-b", testRegion, "10.0.0.11", "linode://12"),
 				}}, nil
 			},
 		},
@@ -135,7 +140,7 @@ func TestMetadataServiceClusterRegion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Cluster() error = %v", err)
 	}
-	if cluster.Region != "us-east" {
+	if cluster.Region != testRegion {
 		t.Fatalf("unexpected cluster region %q", cluster.Region)
 	}
 }
@@ -145,7 +150,7 @@ func TestMetadataServiceClusterRegionRejectsMixedRegions(t *testing.T) {
 		kubeClient: &stubKubeNodeClient{
 			listNodesFn: func(ctx context.Context) (*corev1.NodeList, error) {
 				return &corev1.NodeList{Items: []corev1.Node{
-					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
+					*newTestNode(testNodeName, testRegion, "10.0.0.10", "linode://11"),
 					*newTestNode("worker-b", "eu-west", "10.0.0.11", "linode://12"),
 				}}, nil
 			},

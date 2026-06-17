@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"k8s.io/klog/v2"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 const Name = "linodefs.csi.linode.com"
@@ -49,6 +50,7 @@ func GetLinodeDriver(ctx context.Context) *LinodeDriver {
 func (d *LinodeDriver) SetupLinodeDriver(
 	ctx context.Context,
 	client linodeclient.LinodeClient,
+	mounter *mountmanager.SafeFormatAndMount,
 	name string,
 	vendorVersion string,
 	role Role,
@@ -87,7 +89,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 		}
 		d.cs = cs
 	case RoleNode:
-		ns, err := NewNodeServer(ctx, d)
+		ns, err := NewNodeServer(ctx, d, mounter)
 		if err != nil {
 			return fmt.Errorf("new node server: %w", err)
 		}

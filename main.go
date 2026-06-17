@@ -14,6 +14,7 @@ import (
 
 	"github.com/linode/linode-filestorage-csi-driver/internal/driver"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 const (
@@ -89,6 +90,7 @@ func handle(ctx context.Context) error {
 
 	linodeDriver := driver.GetLinodeDriver(ctx)
 	client, err := linodeclient.NewLinodeClient(&cfg)
+	mounter := mountmanager.NewSafeMounter()
 	if err != nil {
 		return fmt.Errorf("create linode client: %w", err)
 	}
@@ -96,6 +98,7 @@ func handle(ctx context.Context) error {
 	if err := linodeDriver.SetupLinodeDriver(
 		ctx,
 		client,
+		mounter,
 		driver.Name,
 		vendorVersion,
 		driver.Role(cfg.DriverRole),

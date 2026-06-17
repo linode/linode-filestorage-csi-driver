@@ -5,9 +5,13 @@ import (
 	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	testVendorVersion = "dev"
 )
 
 func TestNewIdentityServer(t *testing.T) {
@@ -53,13 +57,13 @@ func TestIdentityServerGetPluginInfo(t *testing.T) {
 	if resp.GetName() != Name {
 		t.Fatalf("GetPluginInfo() name = %q, want %q", resp.GetName(), Name)
 	}
-	if resp.GetVendorVersion() != "dev" {
-		t.Fatalf("GetPluginInfo() vendorVersion = %q, want %q", resp.GetVendorVersion(), "dev")
+	if resp.GetVendorVersion() != testVendorVersion {
+		t.Fatalf("GetPluginInfo() vendorVersion = %q, want %q", resp.GetVendorVersion(), testVendorVersion)
 	}
 }
 
 func TestIdentityServerGetPluginInfoRequiresName(t *testing.T) {
-	ids := &IdentityServer{driver: &LinodeDriver{vendorVersion: "dev"}}
+	ids := &IdentityServer{driver: &LinodeDriver{vendorVersion: testVendorVersion}}
 
 	_, err := ids.GetPluginInfo(context.Background(), &csi.GetPluginInfoRequest{})
 	if status.Code(err) != codes.Unavailable {

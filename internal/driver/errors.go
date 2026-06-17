@@ -13,6 +13,7 @@ import (
 //nolint:unused // This scaffold intentionally defines the full error set before all handlers use it.
 var (
 	errNilDriver            = status.Error(codes.Internal, "nil driver")
+	errNilMounter           = status.Error(codes.Internal, "nil mounter")
 	errNoVolumeName         = status.Error(codes.InvalidArgument, "volume name is required")
 	errNoVolumeCapabilities = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability   = status.Error(codes.InvalidArgument, "no volume capability set")
