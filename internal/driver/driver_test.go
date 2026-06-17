@@ -9,9 +9,11 @@ import (
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
+	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 func withStubMetadataFactories(t *testing.T) {
@@ -47,6 +49,20 @@ func defaultClientHelper(t *testing.T) *linodego.Client {
 	return client
 }
 
+func defaultMounterHelper(t *testing.T) *mountmanager.SafeFormatAndMount {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	return &mountmanager.SafeFormatAndMount{
+		SafeFormatAndMount: &mount.SafeFormatAndMount{
+			Interface: mocks.NewMockMounter(ctrl),
+			Exec:      mocks.NewMockExecutor(ctrl),
+		},
+	}
+}
+
 func TestSetupLinodeDriver(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -80,8 +96,9 @@ func TestSetupLinodeDriver(t *testing.T) {
 
 			driver := GetLinodeDriver(ctx)
 			client := defaultClientHelper(t)
+			mounter := defaultMounterHelper(t)
 
-			err := driver.SetupLinodeDriver(ctx, client, Name, "dev", tt.role, tt.nodeName)
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}

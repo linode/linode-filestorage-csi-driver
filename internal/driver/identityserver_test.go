@@ -5,9 +5,13 @@ import (
 	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	testVendorVersion = "dev"
 )
 
 func TestNewIdentityServer(t *testing.T) {
@@ -52,13 +56,13 @@ func TestIdentityServerGetPluginInfo(t *testing.T) {
 	}{
 		{
 			name:              "returns plugin info",
-			driver:            &LinodeDriver{name: Name, vendorVersion: "dev"},
+			driver:            &LinodeDriver{name: Name, vendorVersion: testVendorVersion},
 			wantName:          Name,
-			wantVendorVersion: "dev",
+			wantVendorVersion: testVendorVersion,
 		},
 		{
 			name:     "requires name",
-			driver:   &LinodeDriver{vendorVersion: "dev"},
+			driver:   &LinodeDriver{vendorVersion: testVendorVersion},
 			wantCode: codes.Unavailable,
 		},
 	}
