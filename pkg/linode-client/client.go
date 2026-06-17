@@ -60,7 +60,7 @@ func NewLinodeClient(config *Config, opts ...Option) (*linodego.Client, error) {
 
 	// Use system cert pool if root CA cert was not provided explicitly for this client.
 	// Works around linodego not using system certs if LINODE_CA is provided,
-	// which affects all clients spawned via linodego.NewClient
+	// which affects all clients spawned via linodego.NewClient.
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if config.RootCertificatePath == "" {
 		systemCertPool, err := x509.SystemCertPool()

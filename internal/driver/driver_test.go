@@ -6,10 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
+	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
@@ -17,39 +16,21 @@ import (
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
-type stubKubeNodeClient struct {
-	getNodeFn   func(ctx context.Context, name string) (*corev1.Node, error)
-	listNodesFn func(ctx context.Context) (*corev1.NodeList, error)
-}
-
-func (s *stubKubeNodeClient) GetNode(ctx context.Context, name string) (*corev1.Node, error) {
-	if s.getNodeFn != nil {
-		return s.getNodeFn(ctx, name)
-	}
-	return nil, errors.New("unexpected GetNode call")
-}
-
-func (s *stubKubeNodeClient) ListNodes(ctx context.Context) (*corev1.NodeList, error) {
-	if s.listNodesFn != nil {
-		return s.listNodesFn(ctx)
-	}
-	return &corev1.NodeList{}, nil
-}
-
 func withStubMetadataFactories(t *testing.T) {
 	t.Helper()
 
 	originalKubeFactory := newKubeNodeClient
 	originalMetadataFactory := newInstanceMetadataClient
+	ctrl := gomock.NewController(t)
 	t.Cleanup(func() {
 		newKubeNodeClient = originalKubeFactory
 		newInstanceMetadataClient = originalMetadataFactory
 	})
 
-	newKubeNodeClient = func(context.Context) (kubeNodeClient, error) {
-		return &stubKubeNodeClient{}, nil
+	newKubeNodeClient = func(context.Context) (KubeNodeClient, error) {
+		return mocks.NewMockKubeNodeClient(ctrl), nil
 	}
-	newInstanceMetadataClient = func(context.Context) (instanceMetadataClient, error) {
+	newInstanceMetadataClient = func(context.Context) (InstanceMetadataClient, error) {
 		return nil, errors.New("metadata unavailable")
 	}
 }
@@ -68,24 +49,71 @@ func defaultClientHelper(t *testing.T) *linodego.Client {
 	return client
 }
 
-func TestSetupLinodeDriverAssignsRoleServers(t *testing.T) {
-	ctx := context.Background()
-	withStubMetadataFactories(t)
+func defaultMounterHelper(t *testing.T) *mountmanager.SafeFormatAndMount {
+	t.Helper()
 
-	driver := GetLinodeDriver(ctx)
-	client := defaultClientHelper(t)
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	mounter := &mountmanager.SafeFormatAndMount{
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	return &mountmanager.SafeFormatAndMount{
 		SafeFormatAndMount: &mount.SafeFormatAndMount{
-			Interface: mocks.NewMockMounter(mockCtrl),
-			Exec:      mocks.NewMockExecutor(mockCtrl),
+			Interface: mocks.NewMockMounter(ctrl),
+			Exec:      mocks.NewMockExecutor(ctrl),
+		},
+	}
+}
+
+func TestSetupLinodeDriver(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     Role
+		nodeName string
+		wantErr  error
+		assert   func(t *testing.T, driver *LinodeDriver)
+	}{
+		{
+			name:   "assigns controller servers",
+			role:   RoleController,
+			assert: assertControllerDriverSetup,
+		},
+		{
+			name:     "assigns node server",
+			role:     RoleNode,
+			nodeName: "node-a",
+			assert:   assertNodeDriverSetup,
+		},
+		{
+			name:    "rejects invalid role",
+			role:    Role("all"),
+			wantErr: errInvalidRole,
 		},
 	}
 
-	if err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", RoleController, ""); err != nil {
-		t.Fatalf("setup driver: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			withStubMetadataFactories(t)
+
+			driver := GetLinodeDriver(ctx)
+			client := defaultClientHelper(t)
+			mounter := defaultMounterHelper(t)
+
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if tt.assert != nil {
+				tt.assert(t, driver)
+			}
+		})
 	}
+}
+
+func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
+	t.Helper()
 
 	if driver.ids == nil {
 		t.Fatal("expected identity server")
@@ -125,24 +153,8 @@ func TestSetupLinodeDriverAssignsRoleServers(t *testing.T) {
 	}
 }
 
-func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
-	ctx := context.Background()
-	withStubMetadataFactories(t)
-
-	driver := GetLinodeDriver(ctx)
-	client := defaultClientHelper(t)
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	mounter := &mountmanager.SafeFormatAndMount{
-		SafeFormatAndMount: &mount.SafeFormatAndMount{
-			Interface: mocks.NewMockMounter(mockCtrl),
-			Exec:      mocks.NewMockExecutor(mockCtrl),
-		},
-	}
-
-	if err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", RoleNode, "node-a"); err != nil {
-		t.Fatalf("setup driver: %v", err)
-	}
+func assertNodeDriverSetup(t *testing.T, driver *LinodeDriver) {
+	t.Helper()
 
 	if driver.ids == nil {
 		t.Fatal("expected identity server")
@@ -155,26 +167,5 @@ func TestSetupLinodeDriverAssignsNodeServer(t *testing.T) {
 	}
 	if len(driver.pluginCaps) != 0 {
 		t.Fatalf("expected no plugin caps for node role, got %#v", driver.pluginCaps)
-	}
-}
-
-func TestSetupLinodeDriverRejectsInvalidRole(t *testing.T) {
-	ctx := context.Background()
-	withStubMetadataFactories(t)
-
-	driver := GetLinodeDriver(ctx)
-	client := defaultClientHelper(t)
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	mounter := &mountmanager.SafeFormatAndMount{
-		SafeFormatAndMount: &mount.SafeFormatAndMount{
-			Interface: mocks.NewMockMounter(mockCtrl),
-			Exec:      mocks.NewMockExecutor(mockCtrl),
-		},
-	}
-
-	err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", Role("all"), "")
-	if !errors.Is(err, errInvalidRole) {
-		t.Fatalf("expected errInvalidRole, got %v", err)
 	}
 }

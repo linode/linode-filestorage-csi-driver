@@ -13,6 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+
+	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 )
 
 const (
@@ -40,27 +42,19 @@ type NodeMetadata struct {
 // state.
 type ClusterMetadata struct {
 	Region string
+	VPCID  string
 }
 
-// MetadataService provides a shared source of node and cluster metadata to both
-// the controller and node servers.
-type MetadataService interface {
-	CurrentNode(ctx context.Context) (NodeMetadata, error)
-	NodeByName(ctx context.Context, name string) (NodeMetadata, error)
-	NodesByName(ctx context.Context, names []string) ([]NodeMetadata, error)
-	Cluster(ctx context.Context) (ClusterMetadata, error)
-}
-
-type instanceMetadataClient interface {
+type InstanceMetadataClient interface {
 	GetInstance(ctx context.Context) (*metadataapi.InstanceData, error)
 	GetNetwork(ctx context.Context) (*metadataapi.NetworkData, error)
 }
 
-var newInstanceMetadataClient = func(ctx context.Context) (instanceMetadataClient, error) {
+var newInstanceMetadataClient = func(ctx context.Context) (InstanceMetadataClient, error) {
 	return metadataapi.NewClient(ctx)
 }
 
-type kubeNodeClient interface {
+type KubeNodeClient interface {
 	GetNode(ctx context.Context, name string) (*corev1.Node, error)
 	ListNodes(ctx context.Context) (*corev1.NodeList, error)
 }
@@ -77,7 +71,7 @@ func (k *metadataKubeClient) ListNodes(ctx context.Context) (*corev1.NodeList, e
 	return k.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 }
 
-var newKubeNodeClient = func(ctx context.Context) (kubeNodeClient, error) {
+var newKubeNodeClient = func(ctx context.Context) (KubeNodeClient, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("in-cluster config: %w", err)
@@ -93,14 +87,15 @@ var newKubeNodeClient = func(ctx context.Context) (kubeNodeClient, error) {
 
 type metadataService struct {
 	nodeName       string
-	instanceClient instanceMetadataClient
-	kubeClient     kubeNodeClient
+	instanceClient InstanceMetadataClient
+	kubeClient     KubeNodeClient
+	linodeClient   linodeclient.LinodeClient
 }
 
-func newMetadataService(ctx context.Context, nodeName string) (MetadataService, error) {
+func newMetadataService(ctx context.Context, nodeName string, linodeClient linodeclient.LinodeClient) (metadataService, error) {
 	kubeClient, err := newKubeNodeClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create kubernetes metadata client: %w", err)
+		return metadataService{}, fmt.Errorf("create kubernetes metadata client: %w", err)
 	}
 
 	instanceClient, err := newInstanceMetadataClient(ctx)
@@ -109,10 +104,11 @@ func newMetadataService(ctx context.Context, nodeName string) (MetadataService, 
 		instanceClient = nil
 	}
 
-	return &metadataService{
+	return metadataService{
 		nodeName:       nodeName,
 		instanceClient: instanceClient,
 		kubeClient:     kubeClient,
+		linodeClient:   linodeClient,
 	}, nil
 }
 
@@ -131,6 +127,17 @@ func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error)
 	}
 
 	return s.NodeByName(ctx, s.nodeName)
+}
+
+func (s *metadataService) configured(role Role) bool {
+	switch role {
+	case RoleController:
+		return s.kubeClient != nil && s.linodeClient != nil
+	case RoleNode:
+		return s.instanceClient != nil || s.kubeClient != nil
+	default:
+		return false
+	}
 }
 
 func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
@@ -179,6 +186,10 @@ func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]No
 }
 
 func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
+	if s.linodeClient == nil {
+		return ClusterMetadata{}, errLinodeClientNotFound
+	}
+
 	nodes, err := s.kubeClient.ListNodes(ctx)
 	if err != nil {
 		return ClusterMetadata{}, fmt.Errorf("list kubernetes nodes: %w", err)
@@ -204,7 +215,47 @@ func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) 
 		}
 	}
 
-	return ClusterMetadata{Region: region}, nil
+	node := &nodes.Items[0]
+	linodeID, err := linodeIDFromProviderID(node.Spec.ProviderID)
+	if err != nil {
+		return ClusterMetadata{}, fmt.Errorf("node %q: %w", node.Name, err)
+	}
+
+	vpcID, err := s.nodeVPCID(ctx, linodeID)
+	if err != nil {
+		return ClusterMetadata{}, fmt.Errorf("node %q: %w", node.Name, err)
+	}
+
+	return ClusterMetadata{Region: region, VPCID: vpcID}, nil
+}
+
+func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (string, error) {
+	interfaces, err := s.linodeClient.ListInterfaces(ctx, linodeID, nil)
+	if err != nil {
+		return "", fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
+	}
+
+	vpcID := ""
+	for i := range interfaces {
+		iface := &interfaces[i]
+		if iface.VPC == nil || iface.VPC.VPCID == 0 {
+			continue
+		}
+
+		current := strconv.Itoa(iface.VPC.VPCID)
+		if vpcID == "" {
+			vpcID = current
+			continue
+		}
+		if current != vpcID {
+			return "", fmt.Errorf("linode %d has multiple VPCs: %q and %q", linodeID, vpcID, current)
+		}
+	}
+	if vpcID == "" {
+		return "", errClusterVPCNotFound
+	}
+
+	return vpcID, nil
 }
 
 func (s *metadataService) currentNodeFromMetadata(ctx context.Context) (NodeMetadata, error) {
