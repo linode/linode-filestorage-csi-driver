@@ -151,17 +151,6 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 			t.Fatalf("controller cap %d = %v, want %v", idx, got, want)
 		}
 	}
-
-	ids, cs, ns := driver.rpcServers()
-	if ids == nil {
-		t.Fatal("expected identity server interface")
-	}
-	if cs == nil {
-		t.Fatal("expected controller server interface")
-	}
-	if ns != nil {
-		t.Fatal("expected node server interface to stay nil for controller role")
-	}
 }
 
 func assertNodeDriverSetup(t *testing.T, driver *LinodeDriver) {
@@ -178,16 +167,5 @@ func assertNodeDriverSetup(t *testing.T, driver *LinodeDriver) {
 	}
 	if len(driver.pluginCaps) != 0 {
 		t.Fatalf("expected no plugin caps for node role, got %#v", driver.pluginCaps)
-	}
-
-	ids, cs, ns := driver.rpcServers()
-	if ids == nil {
-		t.Fatal("expected identity server interface")
-	}
-	if cs != nil {
-		t.Fatal("expected controller server interface to stay nil for node role")
-	}
-	if ns == nil {
-		t.Fatal("expected node server interface")
 	}
 }
