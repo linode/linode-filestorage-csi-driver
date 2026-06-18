@@ -27,7 +27,6 @@ var (
 	errMetadataRegionNotFound   = errors.New("node region label not found")
 	errMetadataAllowlistIP      = errors.New("node allowlist IP not found")
 	errMetadataClusterNodes     = errors.New("cluster has no nodes")
-	errMetadataClusterVPC       = errors.New("cluster VPC not found")
 )
 
 // NodeMetadata contains the node facts the CSI controller and node servers use
