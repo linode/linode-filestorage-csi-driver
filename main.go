@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/linode/linodego/v2"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -13,34 +14,41 @@ import (
 
 	"github.com/linode/linode-filestorage-csi-driver/internal/driver"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
+)
+
+const (
+	defaultClientTimeout = time.Second * 10
 )
 
 var vendorVersion string
 
-type configuration struct {
-	// csiEndpoint is the plugin socket the process listens on.
-	//
-	// Local development can use the default value, but Kubernetes manifests should
-	// override this per role. The controller and node plugins should not reuse the
-	// same host-mounted socket path when multiple CSI drivers are deployed on a
-	// node, otherwise socket and registration paths can contend with each other.
-	csiEndpoint string
-	linodeToken string
-	driverRole  string
-	linodeURL   string
-	nodeName    string
-}
+func loadConfig() linodeclient.Config {
+	timeout, err := time.ParseDuration(envOrDefault("TIMEOUT", "10s"))
+	if err != nil {
+		klog.Warningf("invalid TIMEOUT value, using default: %v", defaultClientTimeout)
+		timeout = defaultClientTimeout
+	}
 
-func loadConfig() configuration {
-	return configuration{
-		csiEndpoint: envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
-		linodeToken: os.Getenv("LINODE_TOKEN"),
-		driverRole:  envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
-		linodeURL:   envOrDefault("LINODE_URL", fmt.Sprintf("%s://%s", linodego.APIProto, linodego.APIHost)),
-		nodeName:    os.Getenv("NODE_NAME"),
+	// version is overridden by build time flags
+	if vendorVersion == "" {
+		vendorVersion = "dev"
+	}
+
+	return linodeclient.Config{
+		LinodeToken:         os.Getenv("LINODE_TOKEN"),
+		BaseURL:             envOrDefault("LINODE_URL", fmt.Sprintf("%s://%s", linodego.APIProto, linodego.APIHost)),
+		UserAgent:           fmt.Sprintf("LinodeFileStorageCSI/%s", vendorVersion),
+		RootCertificatePath: os.Getenv("LINODE_CA"),
+		Timeout:             timeout,
+
+		DriverRole:  envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
+		CSIEndpoint: envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
+		NodeName:    os.Getenv("NODE_NAME"),
 	}
 }
 
+// unfortunately there's no built-in function to default env vars, so we have to write our own
 func envOrDefault(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -75,18 +83,14 @@ func maxProcs() {
 }
 
 func handle(ctx context.Context) error {
-	if vendorVersion == "" {
-		vendorVersion = "dev"
-	}
-
 	cfg := loadConfig()
-	if cfg.driverRole == string(driver.RoleController) && cfg.linodeToken == "" {
+	if cfg.DriverRole == string(driver.RoleController) && cfg.LinodeToken == "" {
 		return errors.New("linode token required for controller role")
 	}
 
 	linodeDriver := driver.GetLinodeDriver(ctx)
-	uaPrefix := fmt.Sprintf("LinodeFileStorageCSI/%s", vendorVersion)
-	client, err := linodeclient.NewLinodeClient(cfg.linodeToken, uaPrefix, cfg.linodeURL)
+	client, err := linodeclient.NewLinodeClient(&cfg)
+	mounter := mountmanager.NewSafeMounter()
 	if err != nil {
 		return fmt.Errorf("create linode client: %w", err)
 	}
@@ -94,15 +98,16 @@ func handle(ctx context.Context) error {
 	if err := linodeDriver.SetupLinodeDriver(
 		ctx,
 		client,
+		mounter,
 		driver.Name,
 		vendorVersion,
-		driver.Role(cfg.driverRole),
-		cfg.nodeName,
+		driver.Role(cfg.DriverRole),
+		cfg.NodeName,
 	); err != nil {
 		return fmt.Errorf("setup driver: %w", err)
 	}
 
-	klog.V(2).InfoS("starting driver", "role", cfg.driverRole, "endpoint", cfg.csiEndpoint)
-	linodeDriver.Run(ctx, cfg.csiEndpoint)
+	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint)
+	linodeDriver.Run(ctx, cfg.CSIEndpoint)
 	return nil
 }

@@ -18,15 +18,16 @@ vet: fmt
 
 .PHONY: lint
 lint:
-	golangci-lint run ./...
+	golangci-lint run --fix ./...
 
 .PHONY: test
 test:
 	go test ./...
 
-.PHONY: generate-mock
-generate-mock:
+.PHONY: gen-mock
+gen-mock:
 	go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/linode-client/client.go -destination=mocks/mock_linodeclient.go -package=mocks
+	go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/mount-manager/safe_mounter.go -destination=mocks/mock_safe-mounter.go -package=mocks
 
 .PHONY: build
 build:
@@ -57,4 +58,4 @@ release:
 		| sed "s|$(RELEASE_IMAGE_REPO):dev|$(RELEASE_IMAGE_REPO):$(IMAGE_VERSION)|g" > "$(RELEASE_DIR)/linode-filestorage-csi-driver-$(IMAGE_VERSION).yaml"
 
 .PHONY: ci
-ci: fmt vet lint generate-mock test build
+ci: fmt vet lint gen-mock test build

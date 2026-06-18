@@ -130,8 +130,15 @@ func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error)
 	return s.NodeByName(ctx, s.nodeName)
 }
 
-func (s *metadataService) configured() bool {
-	return s.instanceClient != nil || s.kubeClient != nil || s.linodeClient != nil
+func (s *metadataService) configured(role Role) bool {
+	switch role {
+	case RoleController:
+		return s.kubeClient != nil && s.linodeClient != nil
+	case RoleNode:
+		return s.instanceClient != nil || s.kubeClient != nil
+	default:
+		return false
+	}
 }
 
 func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
@@ -181,7 +188,7 @@ func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]No
 
 func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
 	if s.linodeClient == nil {
-		return ClusterMetadata{}, errors.New("linode metadata client is nil")
+		return ClusterMetadata{}, errLinodeClientNotFound
 	}
 
 	nodes, err := s.kubeClient.ListNodes(ctx)
@@ -246,7 +253,7 @@ func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (string, 
 		}
 	}
 	if vpcID == "" {
-		return "", errMetadataClusterVPC
+		return "", errClusterVPCNotFound
 	}
 
 	return vpcID, nil

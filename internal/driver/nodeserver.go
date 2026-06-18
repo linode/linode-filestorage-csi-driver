@@ -3,31 +3,41 @@ package driver
 import (
 	"context"
 	"strconv"
+	"sync"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/mount"
+
+	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 type NodeServer struct {
-	driver *LinodeDriver
+	driver  *LinodeDriver
+	mounter *mountmanager.SafeFormatAndMount
+	mux     sync.Mutex
+
 	csi.UnimplementedNodeServer
 }
 
-func NewNodeServer(ctx context.Context, driver *LinodeDriver) (*NodeServer, error) {
+func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
 	if driver == nil {
 		return nil, errNilDriver
 	}
-	return &NodeServer{driver: driver}, nil
+	if mounter == nil {
+		return nil, errNilMounter
+	}
+	return &NodeServer{driver: driver, mounter: mounter}, nil
 }
 
 func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
-	if !s.driver.metadata.configured() {
+	if !s.driver.metadata.configured(RoleNode) {
 		return nil, status.Error(codes.Internal, "metadata service is not configured")
 	}
 
@@ -73,9 +83,27 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodeUnpublishVolume")
 
-	// Future implementation will unmount the published target path from the node.
-	_ = req
-	return nil, errNotImplemented
+	targetPath := req.GetTargetPath()
+	volumeID := req.GetVolumeId()
+	klog.V(2).InfoS("Processing request", "volumeID", volumeID, "targetPath", targetPath)
+
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	klog.V(4).InfoS("Validating request", "volumeID", volumeID, "targetPath", targetPath)
+
+	if err := validateNodeUnpublishVolumeRequest(req); err != nil {
+		return nil, err
+	}
+
+	// Unmount the target path and delete the remaining directory
+	klog.V(4).InfoS("Unmounting and deleting target path", "volumeID", volumeID, "targetPath", targetPath)
+	if err := mount.CleanupMountPoint(targetPath, s.mounter.Interface, true /* bind mount */); err != nil {
+		return nil, errInternal("NodeUnpublishVolume could not unmount %s: %v", targetPath, err)
+	}
+
+	klog.V(2).InfoS("Successfully completed", "volumeID", volumeID, "targetPath", targetPath)
+	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
 func (s *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {

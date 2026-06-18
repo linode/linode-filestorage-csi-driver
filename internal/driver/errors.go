@@ -13,6 +13,7 @@ import (
 //nolint:unused // This scaffold intentionally defines the full error set before all handlers use it.
 var (
 	errNilDriver            = status.Error(codes.Internal, "nil driver")
+	errNilMounter           = status.Error(codes.Internal, "nil mounter")
 	errNoVolumeName         = status.Error(codes.InvalidArgument, "volume name is required")
 	errNoVolumeCapabilities = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability   = status.Error(codes.InvalidArgument, "no volume capability set")
@@ -22,4 +23,12 @@ var (
 	errNoStagingTargetPath  = status.Error(codes.InvalidArgument, "staging target path is not set")
 	errNotImplemented       = status.Error(codes.Unimplemented, "operation not implemented")
 	errInvalidRole          = errors.New("invalid driver role")
+	errClusterVPCNotFound   = errors.New("cluster VPC not found")
+	errLinodeClientNotFound = errors.New("linode client not found or is nil")
 )
+
+// errInternal is a convenience function to return a gRPC error with an
+// INTERNAL status code.
+func errInternal(format string, args ...any) error {
+	return status.Errorf(codes.Internal, format, args...)
+}
