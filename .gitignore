@@ -14,3 +14,4 @@ coverage.out
 .env.local
 .env.*.local
 .envrc
+*-kubeconfig

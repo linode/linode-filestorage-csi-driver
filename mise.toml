@@ -8,26 +8,29 @@ helm = "3.19.5"
 golangci-lint = "2.11.4"
 ko = "0.18.1"
 kustomize = "5.8.1"
+just = "1.52.0"
+uv = "latest"
+"pipx:linode-cli" = "5.68.0"
 
 [tasks.fmt]
 description = "Format Go sources"
-run = "make fmt"
+run = "just fmt"
 
 [tasks.tidy]
 description = "Tidy Go modules"
-run = "make tidy"
+run = "just tidy"
 
 [tasks.vet]
 description = "Run Go vet"
-run = "make vet"
+run = "just vet"
 
 [tasks.lint]
 description = "Run lint checks"
-run = "make lint"
+run = "just lint"
 
 [tasks.test]
 description = "Run tests"
-run = "make test"
+run = "just test"
 
 [tasks.gen-mock]
 description = "Regenerate Go mocks"
@@ -35,28 +38,28 @@ run = "make gen-mock"
 
 [tasks.build]
 description = "Build binary"
-run = "make build"
+run = "just build"
 
 [tasks.ko-build]
 description = "Build ko image"
-run = "make ko-build"
+run = "just ko-build"
 
 [tasks.ko-publish]
 description = "Publish ko image"
-run = "make ko-publish"
+run = "just ko-publish"
 
 [tasks.helm-lint]
 description = "Lint Helm charts"
-run = "make helm-lint"
+run = "just helm-lint"
 
 [tasks.release]
 description = "Create release artifacts"
-run = "make release"
+run = "just release"
 
 [tasks.ci]
 description = "Run CI checks"
-run = "make ci"
+run = "just ci"
 
 [tasks.helm-install]
 description = "Install Helm charts"
-run = "make helm-install"
+run = "just helm-install"
