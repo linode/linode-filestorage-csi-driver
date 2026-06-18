@@ -15,14 +15,12 @@ const (
 	storageClassParamSpaceID    = "space-id"
 	storageClassParamSpaceLabel = "space-label"
 	storageClassParamRootSquash = "filesystem-root-squash"
-	storageClassParamTags       = Name + "/filesystemTags"
+	storageClassParamTags       = "tags"
 
-	volumeContextSpaceID       = "space-id"
-	volumeContextFilesystemID  = "filesystem-id"
-	volumeContextMountTarget   = "mount-target"
-	volumeContextRegion        = "region"
-	volumeContextOwnedByDriver = Name + "/owned-by-driver"
-	volumeContextOwnedValue    = "true"
+	volumeContextSpaceID      = "space-id"
+	volumeContextFilesystemID = "filesystem-id"
+	volumeContextMountTarget  = "mount-target"
+	volumeContextRegion       = "region"
 )
 
 type createVolumeParameters struct {
@@ -47,7 +45,7 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 	}
 
 	if parsed.spaceID == "" && parsed.spaceLabel == "" {
-		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass must set either space-id or space-label for an existing NFS Storage Space")
+		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass must set either space-id or space-label for a pre-created NFS Storage Space")
 	}
 	if parsed.spaceID != "" && parsed.spaceLabel != "" {
 		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass parameters space-id and space-label are mutually exclusive")
@@ -141,24 +139,21 @@ func volumeCapabilitySupported(capability *csi.VolumeCapability) (supported bool
 	}
 }
 
-func volumeContext(filesystem *linodego.NFSFilesystem, ownedByDriver bool) map[string]string {
+func volumeContext(filesystem *linodego.NFSFilesystem) map[string]string {
 	context := map[string]string{
 		volumeContextSpaceID:      filesystem.SpaceID,
 		volumeContextFilesystemID: filesystem.ID,
 		volumeContextMountTarget:  filesystem.MountTarget,
 		volumeContextRegion:       filesystem.Region,
 	}
-	if ownedByDriver {
-		context[volumeContextOwnedByDriver] = volumeContextOwnedValue
-	}
 	return context
 }
 
-func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, ownedByDriver bool) *csi.Volume {
+func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64) *csi.Volume {
 	return &csi.Volume{
 		VolumeId:      volumeID(filesystem.SpaceID, filesystem.ID),
 		CapacityBytes: capacityBytes,
-		VolumeContext: volumeContext(filesystem, ownedByDriver),
+		VolumeContext: volumeContext(filesystem),
 	}
 }
 

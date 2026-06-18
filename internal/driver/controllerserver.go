@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -47,7 +48,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	}
 	cluster, err := s.driver.metadata.Cluster(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, "resolve cluster region: %v", err)
+		if errors.Is(err, errClusterVPCNotFound) {
+			return nil, status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
+		}
+		return nil, status.Errorf(codes.FailedPrecondition, "resolve cluster metadata: %v", err)
 	}
 	params.region = cluster.Region
 
@@ -65,7 +69,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
 			return nil, err
 		}
-		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, true)}, nil
+		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes)}, nil
 	}
 
 	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID); err != nil {
@@ -88,7 +92,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		}
 	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, true)}, nil
+	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes)}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -142,6 +146,8 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
+	// The controller only adds the requested node ID and preserves all other access-policy
+	// fields so it does not overwrite user-managed settings or other authorized nodes.
 	updatedIDs := appendUniqueInt(policy.LinodeIDs, linodeID)
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, updatedIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
@@ -159,6 +165,8 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 	if req.GetNodeId() == "" {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
+	// The controller only removes the requested node ID and preserves the rest of the
+	// filesystem access policy so it does not disturb unrelated authorization state.
 	handle, err := parseVolumeHandle(req.GetVolumeId())
 	if err != nil {
 		return nil, err
@@ -215,7 +223,7 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 
 	return &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
-			VolumeContext:      volumeContext(filesystem, false),
+			VolumeContext:      volumeContext(filesystem),
 			VolumeCapabilities: req.GetVolumeCapabilities(),
 		},
 	}, nil
@@ -269,7 +277,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	}
 
 	return &csi.ControllerGetVolumeResponse{
-		Volume: csiVolume(filesystem, 0, false),
+		Volume: csiVolume(filesystem, 0),
 		Status: &csi.ControllerGetVolumeResponse_VolumeStatus{},
 	}, nil
 }
@@ -344,7 +352,7 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 
 func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID string) error {
 	if vpcID == "" {
-		return status.Error(codes.FailedPrecondition, "cluster VPC not found")
+		return status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
 	}
 
 	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)

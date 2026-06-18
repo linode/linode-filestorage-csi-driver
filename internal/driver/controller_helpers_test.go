@@ -21,7 +21,7 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 		wantCode codes.Code
 	}{
 		{
-			name: "space id",
+			name: "space id with tags",
 			params: map[string]string{
 				storageClassParamSpaceID:    " nfss-123abc ",
 				storageClassParamTags:       "tag-a, tag-b,, ",
@@ -195,20 +195,17 @@ func TestVolumeContext(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		ownedByDriver bool
-		want          map[string]string
+		name string
+		want map[string]string
 	}{
 		{
 			name: "owned",
 			want: map[string]string{
-				volumeContextSpaceID:       "nfss-123abc",
-				volumeContextFilesystemID:  "fs-12345678",
-				volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
-				volumeContextRegion:        "us-east",
-				volumeContextOwnedByDriver: volumeContextOwnedValue,
+				volumeContextSpaceID:      "nfss-123abc",
+				volumeContextFilesystemID: "fs-12345678",
+				volumeContextMountTarget:  "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				volumeContextRegion:       "us-east",
 			},
-			ownedByDriver: true,
 		},
 		{
 			name: "unowned",
@@ -223,7 +220,7 @@ func TestVolumeContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := volumeContext(filesystem, tt.ownedByDriver); !reflect.DeepEqual(got, tt.want) {
+			if got := volumeContext(filesystem); !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("volumeContext() = %#v, want %#v", got, tt.want)
 			}
 		})
@@ -238,14 +235,14 @@ func TestCSIVolume(t *testing.T) {
 		MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
 	}
 
-	volume := csiVolume(filesystem, 1024, true)
+	volume := csiVolume(filesystem, 1024)
 	if volume.GetVolumeId() != "nfss-123abc/fs-12345678" {
 		t.Fatalf("csiVolume() volume id = %q", volume.GetVolumeId())
 	}
 	if volume.GetCapacityBytes() != 1024 {
 		t.Fatalf("csiVolume() capacity = %d", volume.GetCapacityBytes())
 	}
-	if volume.GetVolumeContext()[volumeContextOwnedByDriver] != volumeContextOwnedValue {
+	if len(volume.GetVolumeContext()) != 4 {
 		t.Fatalf("csiVolume() context = %#v", volume.GetVolumeContext())
 	}
 }
