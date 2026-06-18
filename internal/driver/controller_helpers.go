@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -140,13 +141,13 @@ func volumeCapabilitySupported(capability *csi.VolumeCapability) (supported bool
 }
 
 func volumeContext(filesystem *linodego.NFSFilesystem) map[string]string {
-	context := map[string]string{
+	values := map[string]string{
 		volumeContextSpaceID:      filesystem.SpaceID,
 		volumeContextFilesystemID: filesystem.ID,
 		volumeContextMountTarget:  filesystem.MountTarget,
 		volumeContextRegion:       filesystem.Region,
 	}
-	return context
+	return values
 }
 
 func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64) *csi.Volume {
@@ -191,33 +192,6 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 	return linodego.NewListOptions(0, string(filterBytes)), nil
 }
 
-func containsInt(values []int, value int) bool {
-	for _, existing := range values {
-		if existing == value {
-			return true
-		}
-	}
-	return false
-}
-
-func appendUniqueInt(values []int, value int) []int {
-	if containsInt(values, value) {
-		return values
-	}
-	result := append([]int(nil), values...)
-	return append(result, value)
-}
-
-func removeInt(values []int, value int) []int {
-	result := make([]int, 0, len(values))
-	for _, existing := range values {
-		if existing != value {
-			result = append(result, existing)
-		}
-	}
-	return result
-}
-
 func appendUniqueString(values []string, value string) []string {
 	for _, existing := range values {
 		if existing == value {
@@ -244,17 +218,6 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
-func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled bool, linodeIDs []int) linodego.NFSFilesystemAccessPolicyUpdateOptions {
-	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
-		Label:         policy.Label,
-		Enabled:       boolPtr(enabled),
-		LinodeIDs:     linodeIDs,
-		RootSquash:    policy.RootSquash,
-		Protocols:     policy.Protocols,
-		PosixOverride: policy.PosixOverride,
-	}
-}
-
 func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy, rootSquash linodego.NFSRootSquashMode) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:         policy.Label,
@@ -264,4 +227,119 @@ func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy
 		Protocols:     policy.Protocols,
 		PosixOverride: policy.PosixOverride,
 	}
+}
+
+func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolumeParameters) (*linodego.NFSSpace, error) {
+	if params.spaceID != "" {
+		space, err := s.client.GetNFSSpace(ctx, params.spaceID)
+		if err != nil {
+			return nil, linodeError(err, "get NFS space")
+		}
+		return space, nil
+	}
+
+	options, err := listOptionsForExactFields(map[string]string{"label": params.spaceLabel})
+	if err != nil {
+		return nil, err
+	}
+	spaces, err := s.client.ListNFSSpaces(ctx, options)
+	if err != nil {
+		return nil, linodeError(err, "list NFS spaces")
+	}
+	switch len(spaces) {
+	case 0:
+		return nil, status.Errorf(codes.NotFound, "NFS space with label %q was not found", params.spaceLabel)
+	case 1:
+		return &spaces[0], nil
+	default:
+		return nil, status.Errorf(codes.FailedPrecondition, "multiple NFS spaces match label %q", params.spaceLabel)
+	}
+}
+
+func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID, label, region string) (*linodego.NFSFilesystem, bool, error) {
+	options, err := listOptionsForExactFields(map[string]string{"label": label, "region": region})
+	if err != nil {
+		return nil, false, err
+	}
+	filesystems, err := s.client.ListNFSFilesystems(ctx, spaceID, options)
+	if err != nil {
+		return nil, false, linodeError(err, "list NFS filesystems")
+	}
+	switch len(filesystems) {
+	case 0:
+		return nil, false, nil
+	case 1:
+		filesystem := &filesystems[0]
+		if filesystem.Label != label || filesystem.Region != region || filesystem.SpaceID != spaceID || filesystem.MountTarget == "" {
+			return nil, false, status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible parameters", label)
+		}
+		return filesystem, true, nil
+	default:
+		return nil, false, status.Errorf(codes.FailedPrecondition, "multiple NFS filesystems match label %q in space %q", label, spaceID)
+	}
+}
+
+func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
+	if !equalStringSlices(filesystem.Tags, params.tags) {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
+	}
+	if !params.rootSquashSet {
+		return nil
+	}
+
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, filesystem.SpaceID, filesystem.ID)
+	if err != nil {
+		return linodeError(err, "get NFS filesystem access policy")
+	}
+	if policy.RootSquash != params.rootSquash {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible root squash policy", filesystem.Label)
+	}
+	return nil
+}
+
+func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID string) error {
+	if vpcID == "" {
+		return status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
+	}
+
+	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)
+	if err != nil {
+		return linodeError(err, "get NFS space access policy")
+	}
+	if containsString(policy.VPCIDs, vpcID) {
+		return nil
+	}
+	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
+		Label:        policy.Label,
+		Enabled:      boolPtr(policy.Enabled),
+		VPCIDs:       appendUniqueString(policy.VPCIDs, vpcID),
+		AllowedCIDRs: policy.AllowedCIDRs,
+		MTLSMode:     policy.MTLSMode,
+	}); err != nil {
+		return linodeError(err, "update NFS space access policy")
+	}
+	return nil
+}
+
+func (s *ControllerServer) setInitialRootSquash(ctx context.Context, spaceID, filesystemID string, rootSquash linodego.NFSRootSquashMode) error {
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID)
+	if err != nil {
+		return linodeError(err, "get NFS filesystem access policy")
+	}
+	if policy.RootSquash == rootSquash {
+		return nil
+	}
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicyRootSquashUpdate(policy, rootSquash)); err != nil {
+		return linodeError(err, "update NFS filesystem root squash")
+	}
+	return nil
+}
+
+func containsString(values []string, value string) bool {
+	for _, existing := range values {
+		if existing == value {
+			return true
+		}
+	}
+	return false
 }

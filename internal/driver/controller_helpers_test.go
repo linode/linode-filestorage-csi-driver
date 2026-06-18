@@ -293,34 +293,6 @@ func TestListOptionsForExactFields(t *testing.T) {
 	}
 }
 
-func TestIntSliceHelpers(t *testing.T) {
-	tests := []struct {
-		name     string
-		values   []int
-		value    int
-		contains bool
-		append   []int
-		remove   []int
-	}{
-		{name: "present", values: []int{101, 202}, value: 202, contains: true, append: []int{101, 202}, remove: []int{101}},
-		{name: "absent", values: []int{101, 202}, value: 303, append: []int{101, 202, 303}, remove: []int{101, 202}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := containsInt(tt.values, tt.value); got != tt.contains {
-				t.Fatalf("containsInt() = %v, want %v", got, tt.contains)
-			}
-			if got := appendUniqueInt(tt.values, tt.value); !reflect.DeepEqual(got, tt.append) {
-				t.Fatalf("appendUniqueInt() = %#v, want %#v", got, tt.append)
-			}
-			if got := removeInt(tt.values, tt.value); !reflect.DeepEqual(got, tt.remove) {
-				t.Fatalf("removeInt() = %#v, want %#v", got, tt.remove)
-			}
-		})
-	}
-}
-
 func TestStringSliceHelpers(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -361,7 +333,7 @@ func TestBoolPtr(t *testing.T) {
 	}
 }
 
-func TestFilesystemPolicyUpdate(t *testing.T) {
+func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
 	policy := &linodego.NFSFilesystemAccessPolicy{
 		Label:      "policy-a",
 		Enabled:    false,
@@ -370,40 +342,15 @@ func TestFilesystemPolicyUpdate(t *testing.T) {
 		Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 	}
 
-	tests := []struct {
-		name string
-		got  linodego.NFSFilesystemAccessPolicyUpdateOptions
-		want linodego.NFSFilesystemAccessPolicyUpdateOptions
-	}{
-		{
-			name: "enabled and linode ids",
-			got:  filesystemPolicyUpdate(policy, true, []int{101, 202}),
-			want: linodego.NFSFilesystemAccessPolicyUpdateOptions{
-				Label:      "policy-a",
-				Enabled:    boolPtr(true),
-				LinodeIDs:  []int{101, 202},
-				RootSquash: linodego.NFSRootSquashModeNone,
-				Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
-			},
-		},
-		{
-			name: "root squash",
-			got:  filesystemPolicyRootSquashUpdate(policy, linodego.NFSRootSquashModeRootSquash),
-			want: linodego.NFSFilesystemAccessPolicyUpdateOptions{
-				Label:      "policy-a",
-				Enabled:    boolPtr(false),
-				LinodeIDs:  []int{101},
-				RootSquash: linodego.NFSRootSquashModeRootSquash,
-				Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
-			},
-		},
+	got := filesystemPolicyRootSquashUpdate(policy, linodego.NFSRootSquashModeRootSquash)
+	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
+		Label:      "policy-a",
+		Enabled:    boolPtr(false),
+		LinodeIDs:  []int{101},
+		RootSquash: linodego.NFSRootSquashModeRootSquash,
+		Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !reflect.DeepEqual(tt.got, tt.want) {
-				t.Fatalf("policy update = %#v, want %#v", tt.got, tt.want)
-			}
-		})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("filesystemPolicyRootSquashUpdate() = %#v, want %#v", got, want)
 	}
 }
