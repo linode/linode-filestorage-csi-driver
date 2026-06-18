@@ -80,7 +80,7 @@ Advertised capabilities are intentionally conservative:
   - `STAGE_UNSTAGE_VOLUME`
   - `GET_VOLUME_STATS`
 
-Expansion, snapshot, and clone RPCs remain deferred. The controller capability helpers keep short commented placeholders for those post-v1 additions, but the driver does not yet advertise them. The controller manifests include `csi-resizer` and `csi-snapshotter` for planned follow-on work, while `csi-attacher` is active because controller publish and unpublish are part of the initial node authorization flow.
+Expansion, snapshot, and clone RPCs remain deferred. The controller capability helpers keep short commented placeholders for those post-v1 additions, but the driver does not yet advertise them. The controller manifests keep `csi-resizer` and `csi-snapshotter` disabled by default until those capabilities exist, while `csi-attacher` is active because controller publish and unpublish are part of the initial node authorization flow.
 
 ## Socket And Sidecar Wiring
 
@@ -89,7 +89,8 @@ The default CSI endpoint is `unix:///csi/csi.sock`.
 Deployment manifests and the Helm chart share that socket path across:
 
 - the main plugin container
-- `csi-provisioner`, `csi-attacher`, `csi-resizer`, `csi-snapshotter`, and `livenessprobe` on the controller side
+- `csi-provisioner`, `csi-attacher`, and `livenessprobe` on the controller side by default
+- optional `csi-resizer` and `csi-snapshotter` on the controller side once the driver advertises those capabilities
 - `node-driver-registrar` and `livenessprobe` on the node side
 
 The `CSIDriver` object is configured with:

@@ -123,6 +123,7 @@ spec:
               readOnly: true
               {{- end }}
             {{- end }}
+        {{- if .Values.sidecars.resizer.enabled }}
         - name: csi-resizer
           image: "{{ .Values.sidecars.resizer.repository }}:{{ .Values.sidecars.resizer.tag }}"
           imagePullPolicy: {{ .Values.sidecars.resizer.pullPolicy }}
@@ -144,6 +145,8 @@ spec:
               readOnly: true
               {{- end }}
             {{- end }}
+        {{- end }}
+        {{- if .Values.sidecars.snapshotter.enabled }}
         - name: csi-snapshotter
           image: "{{ .Values.sidecars.snapshotter.repository }}:{{ .Values.sidecars.snapshotter.tag }}"
           imagePullPolicy: {{ .Values.sidecars.snapshotter.pullPolicy }}
@@ -165,6 +168,7 @@ spec:
               readOnly: true
               {{- end }}
             {{- end }}
+        {{- end }}
         - name: liveness-probe
           image: "{{ .Values.sidecars.livenessProbe.repository }}:{{ .Values.sidecars.livenessProbe.tag }}"
           imagePullPolicy: {{ .Values.sidecars.livenessProbe.pullPolicy }}
