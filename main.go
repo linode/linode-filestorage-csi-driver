@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -112,7 +111,7 @@ func dependenciesForRole(cfg *linodeclient.Config) (driver.Role, linodeclient.Li
 	switch role {
 	case driver.RoleController:
 		if cfg.LinodeToken == "" {
-			return "", nil, nil, errors.New("linode token required for controller role")
+			return "", nil, nil, driver.ErrTokenRequired
 		}
 
 		client, err := linodeclient.NewLinodeClient(cfg)

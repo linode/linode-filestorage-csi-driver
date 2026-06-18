@@ -25,6 +25,7 @@ var (
 	errInvalidRole          = errors.New("invalid driver role")
 	errClusterVPCNotFound   = errors.New("cluster VPC not found")
 	errLinodeClientNotFound = errors.New("linode client not found or is nil")
+	ErrTokenRequired        = errors.New("linode token required for controller role")
 )
 
 // errInternal is a convenience function to return a gRPC error with an
