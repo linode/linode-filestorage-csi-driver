@@ -70,8 +70,12 @@ release:
     kustomize build deploy/kubernetes/base \
         | sed "s|{{ RELEASE_IMAGE_REPO }}:dev|{{ RELEASE_IMAGE_REPO }}:{{ IMAGE_VERSION }}|g" > "{{ RELEASE_DIR }}/linode-filestorage-csi-driver-{{ IMAGE_VERSION }}.yaml"
 
+gen-mock:
+    go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/linode-client/client.go -destination=mocks/mock_linodeclient.go -package=mocks
+    go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/mount-manager/safe_mounter.go -destination=mocks/mock_safe-mounter.go -package=mocks
+
 # Run all CI steps
-ci: fmt vet lint test build
+ci: fmt vet lint gen-mock test build
 
 # Install the Helm chart
 helm-install:
