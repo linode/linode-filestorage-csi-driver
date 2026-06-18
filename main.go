@@ -84,15 +84,10 @@ func maxProcs() {
 
 func handle(ctx context.Context) error {
 	cfg := loadConfig()
-	if cfg.DriverRole == string(driver.RoleController) && cfg.LinodeToken == "" {
-		return errors.New("linode token required for controller role")
-	}
-
 	linodeDriver := driver.GetLinodeDriver(ctx)
-	client, err := linodeclient.NewLinodeClient(&cfg)
-	mounter := mountmanager.NewSafeMounter()
+	role, client, mounter, err := dependenciesForRole(&cfg)
 	if err != nil {
-		return fmt.Errorf("create linode client: %w", err)
+		return err
 	}
 
 	if err := linodeDriver.SetupLinodeDriver(
@@ -101,7 +96,7 @@ func handle(ctx context.Context) error {
 		mounter,
 		driver.Name,
 		vendorVersion,
-		driver.Role(cfg.DriverRole),
+		role,
 		cfg.NodeName,
 	); err != nil {
 		return fmt.Errorf("setup driver: %w", err)
@@ -110,4 +105,25 @@ func handle(ctx context.Context) error {
 	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint)
 	linodeDriver.Run(ctx, cfg.CSIEndpoint)
 	return nil
+}
+
+func dependenciesForRole(cfg *linodeclient.Config) (driver.Role, linodeclient.LinodeClient, *mountmanager.SafeFormatAndMount, error) {
+	role := driver.Role(cfg.DriverRole)
+	switch role {
+	case driver.RoleController:
+		if cfg.LinodeToken == "" {
+			return "", nil, nil, errors.New("linode token required for controller role")
+		}
+
+		client, err := linodeclient.NewLinodeClient(cfg)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("create linode client: %w", err)
+		}
+
+		return role, client, nil, nil
+	case driver.RoleNode:
+		return role, nil, mountmanager.NewSafeMounter(), nil
+	default:
+		return "", nil, nil, fmt.Errorf("invalid driver role %q", cfg.DriverRole)
+	}
 }
