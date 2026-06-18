@@ -34,7 +34,7 @@ run = "just test"
 
 [tasks.gen-mock]
 description = "Regenerate Go mocks"
-run = "make gen-mock"
+run = "just gen-mock"
 
 [tasks.build]
 description = "Build binary"
