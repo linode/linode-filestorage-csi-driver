@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/ptr"
 )
 
 func TestParseCreateVolumeParameters(t *testing.T) {
@@ -309,25 +311,25 @@ func TestStringSliceHelpers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := containsString(tt.left, tt.value); got != tt.contains {
-				t.Fatalf("containsString() = %v, want %v", got, tt.contains)
+			if got := slices.Contains(tt.left, tt.value); got != tt.contains {
+				t.Fatalf("slices.Contains() = %v, want %v", got, tt.contains)
 			}
 			if got := appendUniqueString(tt.left, tt.value); !reflect.DeepEqual(got, tt.append) {
 				t.Fatalf("appendUniqueString() = %#v, want %#v", got, tt.append)
 			}
-			if got := equalStringSlices(tt.left, tt.right); got != tt.slicesAre {
-				t.Fatalf("equalStringSlices() = %v, want %v", got, tt.slicesAre)
+			if got := slices.Equal(tt.left, tt.right); got != tt.slicesAre {
+				t.Fatalf("slices.Equal() = %v, want %v", got, tt.slicesAre)
 			}
 		})
 	}
 }
 
-func TestBoolPtr(t *testing.T) {
+func TestPtrToBool(t *testing.T) {
 	for _, value := range []bool{false, true} {
 		t.Run(http.StatusText(http.StatusOK), func(t *testing.T) {
-			got := boolPtr(value)
+			got := ptr.To(value)
 			if got == nil || *got != value {
-				t.Fatalf("boolPtr() = %v, want %v", got, value)
+				t.Fatalf("ptr.To() = %v, want %v", got, value)
 			}
 		})
 	}
@@ -345,7 +347,7 @@ func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
 	got := filesystemPolicyRootSquashUpdate(policy, linodego.NFSRootSquashModeRootSquash)
 	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:      "policy-a",
-		Enabled:    boolPtr(false),
+		Enabled:    ptr.To(false),
 		LinodeIDs:  []int{101},
 		RootSquash: linodego.NFSRootSquashModeRootSquash,
 		Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},

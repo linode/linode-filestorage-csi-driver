@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 )
@@ -82,7 +83,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
 					}, nil)
 				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678", Enabled: false, RootSquash: linodego.NFSRootSquashModeNone}, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Enabled: boolPtr(false), RootSquash: linodego.NFSRootSquashModeRootSquash})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678"}, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Enabled: ptr.To(false), RootSquash: linodego.NFSRootSquashModeRootSquash})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678"}, nil)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
@@ -258,7 +259,7 @@ func expectSpaceVPCAssociation(env controllerTestEnv, spaceID, label, vpcID stri
 	}, nil)
 	env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), spaceID, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:   label,
-		Enabled: boolPtr(true),
+		Enabled: ptr.To(true),
 		VPCIDs:  []string{vpcID},
 	})).Return(&linodego.NFSSpaceAccessPolicy{VPCIDs: []string{vpcID}}, nil)
 }

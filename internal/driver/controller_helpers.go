@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -193,35 +195,17 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 }
 
 func appendUniqueString(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+	if slices.Contains(values, value) {
+		return values
 	}
 	result := append([]string(nil), values...)
 	return append(result, value)
 }
 
-func equalStringSlices(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for idx := range left {
-		if left[idx] != right[idx] {
-			return false
-		}
-	}
-	return true
-}
-
-func boolPtr(value bool) *bool {
-	return &value
-}
-
 func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy, rootSquash linodego.NFSRootSquashMode) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:         policy.Label,
-		Enabled:       boolPtr(policy.Enabled),
+		Enabled:       ptr.To(policy.Enabled),
 		LinodeIDs:     policy.LinodeIDs,
 		RootSquash:    rootSquash,
 		Protocols:     policy.Protocols,
@@ -280,7 +264,7 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID, 
 }
 
 func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
-	if !equalStringSlices(filesystem.Tags, params.tags) {
+	if !slices.Equal(filesystem.Tags, params.tags) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
 	}
 	if !params.rootSquashSet {
@@ -306,12 +290,12 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID st
 	if err != nil {
 		return linodeError(err, "get NFS space access policy")
 	}
-	if containsString(policy.VPCIDs, vpcID) {
+	if slices.Contains(policy.VPCIDs, vpcID) {
 		return nil
 	}
 	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:        policy.Label,
-		Enabled:      boolPtr(policy.Enabled),
+		Enabled:      ptr.To(policy.Enabled),
 		VPCIDs:       appendUniqueString(policy.VPCIDs, vpcID),
 		AllowedCIDRs: policy.AllowedCIDRs,
 		MTLSMode:     policy.MTLSMode,
@@ -333,13 +317,4 @@ func (s *ControllerServer) setInitialRootSquash(ctx context.Context, spaceID, fi
 		return linodeError(err, "update NFS filesystem root squash")
 	}
 	return nil
-}
-
-func containsString(values []string, value string) bool {
-	for _, existing := range values {
-		if existing == value {
-			return true
-		}
-	}
-	return false
 }
