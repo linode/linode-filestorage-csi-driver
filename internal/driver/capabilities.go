@@ -30,10 +30,6 @@ func pluginCapabilities(role Role) []*csi.PluginCapability {
 func controllerServiceCapabilities() []*csi.ControllerServiceCapability {
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
-		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
-		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 	}
 
 	// Future post-v1 capabilities once core filesystem lifecycle is complete.

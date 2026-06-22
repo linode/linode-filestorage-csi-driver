@@ -2,9 +2,12 @@ package driver
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/linode/linodego/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
@@ -22,7 +25,7 @@ func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linod
 		return nil, errNilDriver
 	}
 	if client == nil {
-		return nil, fmt.Errorf("linode client cannot be nil")
+		return nil, errLinodeClientNotFound
 	}
 	return &ControllerServer{driver: driver, client: client}, nil
 }
@@ -30,17 +33,85 @@ func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linod
 func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateVolume")
 
-	// Future implementation will validate StorageClass parameters and create a managed NFS share.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetName() == "" {
+		return nil, errNoVolumeName
+	}
+	if err := validateCreateVolumeCapabilities(req.GetVolumeCapabilities()); err != nil {
+		return nil, err
+	}
+
+	params, err := parseCreateVolumeParameters(req.GetParameters())
+	if err != nil {
+		return nil, err
+	}
+	cluster, err := s.driver.metadata.Cluster(ctx)
+	if err != nil {
+		if errors.Is(err, errClusterVPCNotFound) {
+			return nil, status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
+		}
+		return nil, status.Errorf(codes.FailedPrecondition, "resolve cluster metadata: %v", err)
+	}
+	params.region = cluster.Region
+
+	space, err := s.resolveSpace(ctx, &params)
+	if err != nil {
+		return nil, err
+	}
+
+	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
+	existing, found, err := s.findExistingFilesystem(ctx, space.ID, req.GetName(), params.region)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
+			return nil, err
+		}
+		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes)}, nil
+	}
+
+	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID); err != nil {
+		return nil, err
+	}
+
+	filesystem, err := s.client.CreateNFSFilesystem(ctx, space.ID, linodego.NFSFilesystemCreateOptions{
+		Label:            req.GetName(),
+		Region:           params.region,
+		ProtocolVersions: []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+		Tags:             params.tags,
+	})
+	if err != nil {
+		return nil, linodeError(err, "create NFS filesystem")
+	}
+
+	if params.rootSquashSet {
+		if err := s.setInitialRootSquash(ctx, filesystem.SpaceID, filesystem.ID, params.rootSquash); err != nil {
+			return nil, err
+		}
+	}
+
+	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes)}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "DeleteVolume")
 
-	// Future implementation will map the CSI volume ID back to a Linode-managed share and remove it.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+	handle, err := parseVolumeHandle(req.GetVolumeId())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.client.DeleteNFSFilesystem(ctx, handle.spaceID, handle.filesystemID); err != nil {
+		if linodego.IsNotFound(err) {
+			return &csi.DeleteVolumeResponse{}, nil
+		}
+		return nil, linodeError(err, "delete NFS filesystem")
+	}
+
+	return &csi.DeleteVolumeResponse{}, nil
 }
 
 func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
@@ -70,7 +141,6 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 func (s *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerGetCapabilities")
 
-	_ = req
 	return &csi.ControllerGetCapabilitiesResponse{Capabilities: s.driver.controllerCaps}, nil
 }
 
