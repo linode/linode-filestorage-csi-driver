@@ -2,17 +2,16 @@ package driver
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/pkg/filesystem"
 )
 
 const (
-	rwPermission                   = os.FileMode(0o755)
-	ownerGroupReadWritePermissions = os.FileMode(0o660)
+	rwPermission = os.FileMode(0o755)
 )
 
 // validateNodePublishVolumeRequest validates the node publish volume request.
@@ -53,17 +52,17 @@ func validateNodeUnpublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) err
 	return nil
 }
 
-// ensureMountPoint checks if the staging target path is a mount point or not.
+// ensureMountPoint checks if the target path is a mount point or not.
 // If not, it creates a directory at the target path.
-func (ns *NodeServer) ensureMountPoint(path string, nfs filesystem.FileSystem) (bool, error) {
+func (ns *NodeServer) ensureMountPoint(path string, fs filesystem.FileSystem) (bool, error) {
 	klog.V(4).InfoS("Entering ensureMountPoint", "path", path)
 
-	// Check if the staging target path is a mount point.
+	// Check if the target path is a mount point.
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(path)
 	if err != nil {
-		// Checking IsNotExist returns true. If true, it mean we need to create directory at the target path.
-		if nfs.IsNotExist(err) {
-			if err = nfs.MkdirAll(path, rwPermission); err != nil {
+		// Checking IsNotExist returns true. If true, it means we need to create directory at the target path.
+		if fs.IsNotExist(err) {
+			if err = fs.MkdirAll(path, rwPermission); err != nil {
 				return true, errInternal("Failed to create directory (%q): %v", path, err)
 			}
 		} else {
@@ -76,57 +75,32 @@ func (ns *NodeServer) ensureMountPoint(path string, nfs filesystem.FileSystem) (
 	return notMnt, nil
 }
 
-// nodePublishVolumeNFS handles the NodePublishVolume call for NFS volumes.
-//
-// It takes a CSI NodePublishVolumeRequest, a list of mount options, and a file system interface.
-// The CSI NodePublishVolumeRequest contains the volume ID, target path, and publish context.
-// The publish context is expected to contain the device path of the volume to be published.
-// The function creates the target directory, creates a file to bind mount the block device to,
-// and mounts the volume using the provided mount options.
-// It returns a CSI NodePublishVolumeResponse and an error if the operation fails.
-func (s *NodeServer) nodePublishVolumeNFS(req *csi.NodePublishVolumeRequest, mountOptions []string, fs filesystem.FileSystem) (*csi.NodePublishVolumeResponse, error) {
-	klog.V(4).InfoS("Entering nodePublishVolumeNFS", "volumeID", req.GetVolumeId(), "targetPath", req.GetTargetPath(), "mountOptions", mountOptions)
-
+func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	stagingTargetPath := req.GetStagingTargetPath()
 	targetPath := req.GetTargetPath()
-	targetPathDir := filepath.Dir(targetPath)
+	volumeID := req.GetVolumeId()
 
-	// Get the device path from the request
-	devicePath := req.GetPublishContext()["devicePath"]
-	if devicePath == "" {
-		return nil, errInternal("devicePath cannot be found")
+	// Set mount options
+	options := []string{bindMountOption}
+	if capMount := req.GetVolumeCapability().GetMount(); capMount != nil {
+		options = append(options, capMount.GetMountFlags()...)
+	}
+	if req.GetReadonly() {
+		options = append(options, "ro")
+		klog.V(4).InfoS("Volume will be mounted as read-only", "volumeID", volumeID)
 	}
 
-	// Create directory at the directory level of given path
-	klog.V(4).InfoS("Making targetPathDir", "targetPathDir", targetPathDir)
-	if err := fs.MkdirAll(targetPathDir, rwPermission); err != nil {
-		klog.Error(err, "mkdir failed", "targetPathDir", targetPathDir)
-		return nil, errInternal("Failed to create directory %q: %v", targetPathDir, err)
-	}
-
-	// Make file to bind mount block device to file
-	klog.V(4).InfoS("Making target block bind mount device file", "targetPath", targetPath)
-	file, err := fs.OpenFile(targetPath, os.O_CREATE, ownerGroupReadWritePermissions)
-	if err != nil {
-		if removeErr := fs.Remove(targetPath); removeErr != nil {
-			return nil, errInternal("Failed remove mount target %q: %v", targetPath, err)
+	// Mount stagingTargetPath to targetPath
+	klog.V(4).InfoS("Mounting volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath, "targetPath", targetPath, "options", options)
+	// Do we need to consider any sensitive mount options?
+	if err := ns.mounter.Mount(stagingTargetPath, targetPath, "nfs", options); err != nil {
+		klog.Errorf("Mount %q failed for volumeID %s, cleaning up", targetPath, volumeID)
+		if unmntErr := mount.CleanupMountPoint(stagingTargetPath, ns.mounter, false /* extensiveMountPointCheck */); unmntErr != nil {
+			klog.Errorf("Unmount %q failed on volumeID %s: %v", targetPath, volumeID, unmntErr.Error())
 		}
-		return nil, errInternal("Failed to create file %s: %v", targetPath, err)
+		return nil, errInternal("NodePublishVolume could not mount %s at %s: %v", stagingTargetPath, targetPath, err)
 	}
-	defer func() {
-		err = file.Close()
-	}()
 
-	// Mount the volume
-	klog.V(4).InfoS("Mounting volume", "devicePath", devicePath, "targetPath", targetPath, "mountOptions", mountOptions)
-	if err := s.mounter.Mount(devicePath, targetPath, "nfs", mountOptions); err != nil {
-		klog.Error(err, "Failed to mount volume", "devicePath", devicePath, "targetPath", targetPath)
-		if removeErr := fs.Remove(targetPath); removeErr != nil {
-			return nil, errInternal("Failed to mount %q at %q: %v. Additionally, failed to remove mount target: %v", devicePath, targetPath, err, removeErr)
-		}
-		return nil, errInternal("Failed to mount %q at %q: %v", devicePath, targetPath, err)
-	}
-	klog.V(4).InfoS("Successfully published NFS volume", "devicePath", devicePath, "targetPath", targetPath)
-
-	klog.V(4).Info("Exiting nodePublishVolumeNFS")
+	klog.V(4).InfoS("Successfully published", "volumeID", volumeID)
 	return &csi.NodePublishVolumeResponse{}, nil
 }

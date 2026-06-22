@@ -92,28 +92,10 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 		return nil, err
 	}
 
-	// Set mount options
-	options := []string{bindMountOption}
-	options = append(options, req.GetVolumeCapability().GetMount().GetMountFlags()...)
-	// TODO: add compatibility checks
-	if req.GetReadonly() {
-		options = append(options, "ro")
-		klog.V(4).InfoS("Volume will be mounted as read-only", "volumeID", volumeID)
-	}
-
-	nfs := filesystem.NewFileSystem()
-	// publish NFS volume
-	if req.GetVolumeCapability().GetMount() != nil {
-		klog.V(4).Info("Publishing volume as NFS volume", "volumeID", volumeID)
-		response, err := s.nodePublishVolumeNFS(req, options, nfs)
-		return response, err
-	}
-
-	targetPath := req.GetTargetPath()
-
 	// Check if target path is a valid mount point
+	targetPath := req.GetTargetPath()
 	klog.V(4).InfoS("Ensuring target path is a valid mount point", "volumeID", volumeID, "targetPath", targetPath)
-	notMnt, err := s.ensureMountPoint(targetPath, nfs)
+	notMnt, err := s.ensureMountPoint(targetPath, filesystem.NewFileSystem())
 	if err != nil {
 		return nil, err
 	}
@@ -122,16 +104,7 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	stagingTargetPath := req.GetStagingTargetPath()
-
-	// Mount stagingTargetPath to targetPath
-	klog.V(4).InfoS("Mounting volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath, "targetPath", targetPath, "options", options)
-	if err := s.mounter.Mount(stagingTargetPath, targetPath, "nfs", options); err != nil {
-		return nil, errInternal("NodePublishVolume could not mount %s at %s: %v", stagingTargetPath, targetPath, err)
-	}
-
-	klog.V(4).InfoS("Successfully completed", "volumeID", volumeID)
-	return &csi.NodePublishVolumeResponse{}, nil
+	return s.nodePublishVolume(req)
 }
 
 func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {

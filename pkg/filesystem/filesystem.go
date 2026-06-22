@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-type FileInterface interface {
+type File interface {
 	Read([]byte) (int, error)
 	Write([]byte) (int, error)
 	Close() error
@@ -18,8 +18,8 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 	Stat(name string) (fs.FileInfo, error)
 	Remove(path string) error
-	OpenFile(name string, flag int, perm os.FileMode) (FileInterface, error)
-	Open(name string) (FileInterface, error)
+	OpenFile(name string, flag int, perm os.FileMode) (File, error)
+	Open(name string) (File, error)
 	Glob(pattern string) ([]string, error)
 	EvalSymlinks(path string) (string, error)
 }
@@ -56,11 +56,11 @@ func (OSFileSystem) Remove(path string) error {
 }
 
 //nolint:gosec // intentional variable to open file
-func (OSFileSystem) Open(name string) (FileInterface, error) {
+func (OSFileSystem) Open(name string) (File, error) {
 	return os.Open(name)
 }
 
 //nolint:gosec // intentional variable to open file
-func (OSFileSystem) OpenFile(name string, flag int, perm os.FileMode) (FileInterface, error) {
+func (OSFileSystem) OpenFile(name string, flag int, perm os.FileMode) (File, error) {
 	return os.OpenFile(name, flag, perm)
 }

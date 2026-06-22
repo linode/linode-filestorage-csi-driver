@@ -146,21 +146,86 @@ func TestNodePublishVolume(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name: "publishhappypath",
+			name: "Existing read only mount point",
 			req: &csi.NodePublishVolumeRequest{
-				VolumeId:          "vol-123",
-				TargetPath:        "/mnt/target",
-				StagingTargetPath: "/mnt/staging",
-				PublishContext: map[string]string{
-					"devicePath": "/dev/sda",
+				VolumeId: "vol-123",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
 				},
-				VolumeCapability: &csi.VolumeCapability{},
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				},
+				Readonly: true,
 			},
 			resp: &csi.NodePublishVolumeResponse{},
 			expectMounterCalls: func(m *mocks.MockMounter) {
-				m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(false, nil)
+				m.EXPECT().IsLikelyNotMountPoint("/tmp/target").Return(false, nil)
 			},
 			expectedError: nil,
+		},
+		{
+			name: "No volume ID",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoVolumeID,
+		},
+		{
+			name: "No staging target path",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoStagingTargetPath,
+		},
+		{
+			name: "No target path",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoTargetPath,
+		},
+		{
+			name: "No volume capability",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+			},
+			expectedError: errNoVolumeCapability,
 		},
 	}
 
@@ -202,7 +267,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name: "unpublishhappypath",
+			name: "Path does not exist",
 			req: &csi.NodeUnpublishVolumeRequest{
 				VolumeId:   "vol-123",
 				TargetPath: "/mnt/target",
@@ -210,6 +275,22 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			resp:               &csi.NodeUnpublishVolumeResponse{},
 			expectMounterCalls: func(m *mocks.MockMounter) {},
 			expectedError:      nil,
+		},
+		{
+			name: "No volume ID",
+			req: &csi.NodeUnpublishVolumeRequest{
+				VolumeId:   "",
+				TargetPath: "/tmp/target",
+			},
+			expectedError: errNoVolumeID,
+		},
+		{
+			name: "No target path",
+			req: &csi.NodeUnpublishVolumeRequest{
+				VolumeId:   "vol-123",
+				TargetPath: "",
+			},
+			expectedError: errNoTargetPath,
 		},
 	}
 
