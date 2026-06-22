@@ -194,14 +194,6 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 	return linodego.NewListOptions(0, string(filterBytes)), nil
 }
 
-func appendUniqueString(values []string, value string) []string {
-	if slices.Contains(values, value) {
-		return values
-	}
-	result := append([]string(nil), values...)
-	return append(result, value)
-}
-
 func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy, rootSquash linodego.NFSRootSquashMode) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:         policy.Label,
@@ -293,10 +285,11 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID st
 	if slices.Contains(policy.VPCIDs, vpcID) {
 		return nil
 	}
+	updatedVPCIDs := append(slices.Clone(policy.VPCIDs), vpcID)
 	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:        policy.Label,
 		Enabled:      ptr.To(policy.Enabled),
-		VPCIDs:       appendUniqueString(policy.VPCIDs, vpcID),
+		VPCIDs:       updatedVPCIDs,
 		AllowedCIDRs: policy.AllowedCIDRs,
 		MTLSMode:     policy.MTLSMode,
 	}); err != nil {

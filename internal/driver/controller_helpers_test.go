@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"slices"
 	"testing"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
@@ -292,35 +291,6 @@ func TestListOptionsForExactFields(t *testing.T) {
 	want := map[string]string{"label": "pvc-abc", "region": "us-east"}
 	if !reflect.DeepEqual(filter, want) {
 		t.Fatalf("listOptionsForExactFields() filter = %#v, want %#v", filter, want)
-	}
-}
-
-func TestStringSliceHelpers(t *testing.T) {
-	tests := []struct {
-		name      string
-		left      []string
-		right     []string
-		value     string
-		contains  bool
-		append    []string
-		slicesAre bool
-	}{
-		{name: "present equal", left: []string{"vpc-a", "vpc-b"}, right: []string{"vpc-a", "vpc-b"}, value: "vpc-b", contains: true, append: []string{"vpc-a", "vpc-b"}, slicesAre: true},
-		{name: "absent unequal", left: []string{"vpc-a", "vpc-b"}, right: []string{"vpc-b", "vpc-a"}, value: "vpc-c", append: []string{"vpc-a", "vpc-b", "vpc-c"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := slices.Contains(tt.left, tt.value); got != tt.contains {
-				t.Fatalf("slices.Contains() = %v, want %v", got, tt.contains)
-			}
-			if got := appendUniqueString(tt.left, tt.value); !reflect.DeepEqual(got, tt.append) {
-				t.Fatalf("appendUniqueString() = %#v, want %#v", got, tt.append)
-			}
-			if got := slices.Equal(tt.left, tt.right); got != tt.slicesAre {
-				t.Fatalf("slices.Equal() = %v, want %v", got, tt.slicesAre)
-			}
-		})
 	}
 }
 
