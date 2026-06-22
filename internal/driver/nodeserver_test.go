@@ -109,10 +109,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 			_, err := server.NodeUnstageVolume(context.Background(), &csi.NodeUnstageVolumeRequest{})
 			return err
 		}},
-		{name: "NodePublishVolume", call: func(server *NodeServer) error {
-			_, err := server.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{})
-			return err
-		}},
 		{name: "NodeGetVolumeStats", call: func(server *NodeServer) error {
 			_, err := server.NodeGetVolumeStats(context.Background(), &csi.NodeGetVolumeStatsRequest{})
 			return err
@@ -138,6 +134,62 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 func testPrivateNetwork(prefix string) *metadataapi.NetworkData {
 	return &metadataapi.NetworkData{
 		IPv4: metadataapi.IPv4Data{Private: []netip.Prefix{netip.MustParsePrefix(prefix)}},
+	}
+}
+
+func TestNodePublishVolume(t *testing.T) {
+	tests := []struct {
+		name               string
+		req                *csi.NodePublishVolumeRequest
+		resp               *csi.NodePublishVolumeResponse
+		expectMounterCalls func(m *mocks.MockMounter)
+		expectedError      error
+	}{
+		{
+			name: "publishhappypath",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/mnt/target",
+				StagingTargetPath: "/mnt/staging",
+				PublishContext: map[string]string{
+					"devicePath": "/dev/sda",
+				},
+				VolumeCapability: &csi.VolumeCapability{},
+			},
+			resp: &csi.NodePublishVolumeResponse{},
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(false, nil)
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+			if tt.expectMounterCalls != nil {
+				tt.expectMounterCalls(mockMounter)
+			}
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+			}
+			returnedResp, err := ns.NodePublishVolume(context.Background(), tt.req)
+			if err != nil && !errors.Is(err, tt.expectedError) {
+				t.Errorf("NodePublishVolume error = %v, wantErr %v", err, tt.expectedError)
+			}
+			if !reflect.DeepEqual(returnedResp, tt.resp) {
+				t.Errorf("NodeServer.NodePublishVolume() = %v, want %v", returnedResp, tt.resp)
+			}
+		})
 	}
 }
 
