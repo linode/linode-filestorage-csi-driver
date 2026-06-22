@@ -194,6 +194,17 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 	return linodego.NewListOptions(0, string(filterBytes)), nil
 }
 
+func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled bool, linodeIDs []int) linodego.NFSFilesystemAccessPolicyUpdateOptions {
+	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
+		Label:         policy.Label,
+		Enabled:       ptr.To(enabled),
+		LinodeIDs:     linodeIDs,
+		RootSquash:    policy.RootSquash,
+		Protocols:     policy.Protocols,
+		PosixOverride: policy.PosixOverride,
+	}
+}
+
 func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy, rootSquash linodego.NFSRootSquashMode) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	return linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:         policy.Label,
