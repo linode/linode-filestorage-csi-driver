@@ -116,6 +116,7 @@ func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Conte
 	}
 	return handle, linodeID, policy, nil
 }
+
 func volumeID(spaceID, filesystemID string) string {
 	return fmt.Sprintf("%s/%s", spaceID, filesystemID)
 }

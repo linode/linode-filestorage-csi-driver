@@ -173,6 +173,7 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 		}
 		return nil, linodeError(err, "get NFS filesystem access policy")
 	}
+
 	if !slices.Contains(policy.LinodeIDs, linodeID) {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
