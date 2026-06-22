@@ -9,6 +9,7 @@ import (
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
@@ -139,6 +140,74 @@ func TestParseVolumeHandleAndNodeID(t *testing.T) {
 			}
 			if linodeID != tt.wantID {
 				t.Fatalf("parseVolumeHandleAndNodeID() linodeID = %d, want %d", linodeID, tt.wantID)
+			}
+		})
+	}
+}
+
+func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
+	tests := []struct {
+		name          string
+		volumeID      string
+		nodeID        string
+		setup         func(controllerTestEnv) *linodego.NFSFilesystemAccessPolicy
+		wantHandle    volumeHandle
+		wantID        int
+		wantCode      codes.Code
+		wantNotFound  bool
+		wantSamePolicy bool
+	}{
+		{
+			name:       "success",
+			volumeID:   testVolumeID,
+			nodeID:     "202",
+			wantHandle: volumeHandle{spaceID: "nfss-123abc", filesystemID: "fs-12345678"},
+			wantID:     202,
+			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
+				policy := &linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678", Enabled: true, LinodeIDs: []int{202}}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				return policy
+			},
+			wantSamePolicy: true,
+		},
+		{
+			name:         "not found is preserved",
+			volumeID:     testVolumeID,
+			nodeID:       "202",
+			wantNotFound: true,
+			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(nil, linodeAPIError(http.StatusNotFound))
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			wantPolicy := tt.setup(env)
+
+			handle, linodeID, gotPolicy, err := env.server.getFilesystemPolicyForVolumeAndNode(t.Context(), tt.volumeID, tt.nodeID)
+			if tt.wantNotFound {
+				if !linodego.IsNotFound(err) {
+					t.Fatalf("getFilesystemPolicyForVolumeAndNode() error = %v, want not found", err)
+				}
+				return
+			}
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("getFilesystemPolicyForVolumeAndNode() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if handle != tt.wantHandle {
+				t.Fatalf("getFilesystemPolicyForVolumeAndNode() handle = %#v, want %#v", handle, tt.wantHandle)
+			}
+			if linodeID != tt.wantID {
+				t.Fatalf("getFilesystemPolicyForVolumeAndNode() linodeID = %d, want %d", linodeID, tt.wantID)
+			}
+			if tt.wantSamePolicy && gotPolicy != wantPolicy {
+				t.Fatalf("getFilesystemPolicyForVolumeAndNode() policy = %#v, want %#v", gotPolicy, wantPolicy)
 			}
 		})
 	}

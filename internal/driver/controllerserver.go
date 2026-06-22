@@ -128,13 +128,11 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return nil, status.Error(codes.InvalidArgument, message)
 	}
 
-	handle, linodeID, err := parseVolumeHandleAndNodeID(req.GetVolumeId(), req.GetNodeId())
+	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
-		return nil, err
-	}
-
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
-	if err != nil {
+		if status.Code(err) == codes.InvalidArgument {
+			return nil, err
+		}
 		return nil, linodeError(err, "get NFS filesystem access policy")
 	}
 	if policy.Enabled && slices.Contains(policy.LinodeIDs, linodeID) {
@@ -159,18 +157,17 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	handle, linodeID, err := parseVolumeHandleAndNodeID(req.GetVolumeId(), req.GetNodeId())
-	if err != nil {
-		return nil, err
-	}
-
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
+	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
 		if linodego.IsNotFound(err) {
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
 		}
+		if status.Code(err) == codes.InvalidArgument {
+			return nil, err
+		}
 		return nil, linodeError(err, "get NFS filesystem access policy")
 	}
+
 	if !slices.Contains(policy.LinodeIDs, linodeID) {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}

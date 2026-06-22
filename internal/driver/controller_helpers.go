@@ -105,6 +105,18 @@ func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, err
 	return handle, linodeID, nil
 }
 
+func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Context, volumeID, nodeID string) (volumeHandle, int, *linodego.NFSFilesystemAccessPolicy, error) {
+	handle, linodeID, err := parseVolumeHandleAndNodeID(volumeID, nodeID)
+	if err != nil {
+		return volumeHandle{}, 0, nil, err
+	}
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
+	if err != nil {
+		return volumeHandle{}, 0, nil, err
+	}
+	return handle, linodeID, policy, nil
+}
+
 func volumeID(spaceID, filesystemID string) string {
 	return fmt.Sprintf("%s/%s", spaceID, filesystemID)
 }
