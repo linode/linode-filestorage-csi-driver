@@ -111,6 +111,39 @@ func TestParseVolumeHandle(t *testing.T) {
 	}
 }
 
+func TestParseVolumeHandleAndNodeID(t *testing.T) {
+	tests := []struct {
+		name     string
+		volumeID string
+		nodeID   string
+		want     volumeHandle
+		wantID   int
+		wantCode codes.Code
+	}{
+		{name: "valid", volumeID: "nfss-123abc/fs-12345678", nodeID: "202", want: volumeHandle{spaceID: "nfss-123abc", filesystemID: "fs-12345678"}, wantID: 202},
+		{name: "invalid volume id", volumeID: "nfss-123abc", nodeID: "202", wantCode: codes.InvalidArgument},
+		{name: "invalid node id", volumeID: "nfss-123abc/fs-12345678", nodeID: "worker-a", wantCode: codes.InvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handle, linodeID, err := parseVolumeHandleAndNodeID(tt.volumeID, tt.nodeID)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("parseVolumeHandleAndNodeID() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if handle != tt.want {
+				t.Fatalf("parseVolumeHandleAndNodeID() handle = %#v, want %#v", handle, tt.want)
+			}
+			if linodeID != tt.wantID {
+				t.Fatalf("parseVolumeHandleAndNodeID() linodeID = %d, want %d", linodeID, tt.wantID)
+			}
+		})
+	}
+}
+
 func TestVolumeID(t *testing.T) {
 	if got := volumeID("nfss-123abc", "fs-12345678"); got != "nfss-123abc/fs-12345678" {
 		t.Fatalf("volumeID() = %q", got)

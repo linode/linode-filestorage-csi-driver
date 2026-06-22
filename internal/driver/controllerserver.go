@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strconv"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -129,13 +128,9 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return nil, status.Error(codes.InvalidArgument, message)
 	}
 
-	handle, err := parseVolumeHandle(req.GetVolumeId())
+	handle, linodeID, err := parseVolumeHandleAndNodeID(req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
 		return nil, err
-	}
-	linodeID, err := strconv.Atoi(req.GetNodeId())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "node id %q must be a Linode ID", req.GetNodeId())
 	}
 
 	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
@@ -164,7 +159,7 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	handle, err := parseVolumeHandle(req.GetVolumeId())
+	handle, linodeID, err := parseVolumeHandleAndNodeID(req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
 		return nil, err
 	}
@@ -175,11 +170,6 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
 		}
 		return nil, linodeError(err, "get NFS filesystem access policy")
-	}
-
-	linodeID, err := strconv.Atoi(req.GetNodeId())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "node id %q must be a Linode ID", req.GetNodeId())
 	}
 	if !slices.Contains(policy.LinodeIDs, linodeID) {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil

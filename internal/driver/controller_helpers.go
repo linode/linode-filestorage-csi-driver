@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
@@ -90,6 +91,18 @@ func parseVolumeHandle(volumeID string) (volumeHandle, error) {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q must have format {space_id}/{filesystem_id}", volumeID)
 	}
 	return volumeHandle{spaceID: parts[0], filesystemID: parts[1]}, nil
+}
+
+func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, error) {
+	handle, err := parseVolumeHandle(volumeID)
+	if err != nil {
+		return volumeHandle{}, 0, err
+	}
+	linodeID, err := strconv.Atoi(nodeID)
+	if err != nil {
+		return volumeHandle{}, 0, status.Errorf(codes.InvalidArgument, "node id %q must be a Linode ID", nodeID)
+	}
+	return handle, linodeID, nil
 }
 
 func volumeID(spaceID, filesystemID string) string {
