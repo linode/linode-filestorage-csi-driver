@@ -40,7 +40,7 @@ lint:
 
 # Run unit tests
 test:
-    go test ./...
+    go test ./... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 # Build the binary
 build:
