@@ -355,6 +355,32 @@ func TestControllerPublishVolume(t *testing.T) {
 			},
 		},
 		{
+			name: "enables policy without duplicating existing node",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "202",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				policy := &linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Label:        "policy-a",
+					Enabled:      false,
+					LinodeIDs:    []int{101, 202},
+					RootSquash:   linodego.NFSRootSquashModeNone,
+					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
+					Label:      "policy-a",
+					Enabled:    ptr.To(true),
+					LinodeIDs:  []int{101, 202},
+					RootSquash: linodego.NFSRootSquashModeNone,
+					Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				})).Return(policy, nil)
+			},
+		},
+		{
 			name: "preserves existing policy fields",
 			request: &csi.ControllerPublishVolumeRequest{
 				VolumeId:         testVolumeID,

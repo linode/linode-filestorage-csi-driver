@@ -135,7 +135,13 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		}
 		return nil, linodeError(err, "get NFS filesystem access policy")
 	}
-	if policy.Enabled && slices.Contains(policy.LinodeIDs, linodeID) {
+	if slices.Contains(policy.LinodeIDs, linodeID) {
+		if policy.Enabled {
+			return &csi.ControllerPublishVolumeResponse{}, nil
+		}
+		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, slices.Clone(policy.LinodeIDs))); err != nil {
+			return nil, linodeError(err, "update NFS filesystem access policy")
+		}
 		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
