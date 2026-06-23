@@ -276,7 +276,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 
 	return &csi.ControllerGetVolumeResponse{
 		Volume: csiVolume(filesystem, 0),
-		Status: &csi.ControllerGetVolumeResponse_VolumeStatus{PublishedNodeIds: publishedNodeIDs(policy.LinodeIDs)},
+		Status: csiControllerVolumeStatus(policy),
 	}, nil
 }
 

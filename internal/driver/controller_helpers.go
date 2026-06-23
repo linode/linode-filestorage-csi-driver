@@ -185,6 +185,14 @@ func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64) *csi.Vol
 	}
 }
 
+func csiControllerVolumeStatus(policy *linodego.NFSFilesystemAccessPolicy) *csi.ControllerGetVolumeResponse_VolumeStatus {
+	if !policy.Enabled {
+		return &csi.ControllerGetVolumeResponse_VolumeStatus{}
+	}
+
+	return &csi.ControllerGetVolumeResponse_VolumeStatus{PublishedNodeIds: publishedNodeIDs(policy.LinodeIDs)}
+}
+
 func publishedNodeIDs(linodeIDs []int) []string {
 	if len(linodeIDs) == 0 {
 		return nil

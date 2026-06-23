@@ -608,6 +608,7 @@ func TestControllerGetVolume(t *testing.T) {
 				}, nil)
 				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{
 					FilesystemID: "fs-12345678",
+					Enabled:      true,
 					LinodeIDs:    []int{202, 303},
 				}, nil)
 			},
@@ -621,6 +622,32 @@ func TestControllerGetVolume(t *testing.T) {
 				}
 				if !reflect.DeepEqual(response.GetStatus().GetPublishedNodeIds(), []string{"202", "303"}) {
 					t.Fatalf("unexpected published node ids %#v", response.GetStatus().GetPublishedNodeIds())
+				}
+			},
+		},
+		{
+			name:    "omits published nodes when policy disabled",
+			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystem{
+					ID:          "fs-12345678",
+					SpaceID:     "nfss-123abc",
+					Region:      "us-east",
+					MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				}, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Enabled:      false,
+					LinodeIDs:    []int{202, 303},
+				}, nil)
+			},
+			assert: func(t *testing.T, response *csi.ControllerGetVolumeResponse) {
+				t.Helper()
+				if response.GetStatus() == nil {
+					t.Fatal("expected volume status")
+				}
+				if len(response.GetStatus().GetPublishedNodeIds()) != 0 {
+					t.Fatalf("expected no published node ids, got %#v", response.GetStatus().GetPublishedNodeIds())
 				}
 			},
 		},
@@ -658,13 +685,11 @@ func TestControllerGetCapabilities(t *testing.T) {
 			caps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
-				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
 			},
 			wantCaps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
-				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
 			},
 		},
