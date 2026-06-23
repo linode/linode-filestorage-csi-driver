@@ -11,6 +11,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 
+	"github.com/linode/linode-filestorage-csi-driver/pkg/filesystem"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
@@ -21,6 +22,10 @@ type NodeServer struct {
 
 	csi.UnimplementedNodeServer
 }
+
+var _ csi.NodeServer = &NodeServer{}
+
+const bindMountOption = "bind"
 
 func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
@@ -75,9 +80,31 @@ func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstage
 func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodePublishVolume")
 
-	// Future implementation will bind-mount the staged path into the pod target path.
-	_ = req
-	return nil, errNotImplemented
+	volumeID := req.GetVolumeId()
+	klog.V(2).InfoS("Processing request", "volumeID", volumeID)
+
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	// Validate the request object
+	klog.V(4).InfoS("Validating request", "volumeID", volumeID)
+	if err := validateNodePublishVolumeRequest(req); err != nil {
+		return nil, err
+	}
+
+	// Check if target path is a valid mount point
+	targetPath := req.GetTargetPath()
+	klog.V(4).InfoS("Ensuring target path is a valid mount point", "volumeID", volumeID, "targetPath", targetPath)
+	notMnt, err := s.ensureMountPoint(targetPath, filesystem.NewFileSystem())
+	if err != nil {
+		return nil, err
+	}
+	if !notMnt {
+		klog.V(4).InfoS("Target path is already a mount point", "volumeID", volumeID, "targetPath", targetPath)
+		return &csi.NodePublishVolumeResponse{}, nil
+	}
+
+	return s.nodePublishVolume(req)
 }
 
 func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {

@@ -40,7 +40,7 @@ lint:
 
 # Run unit tests
 test:
-    go test ./...
+    go test ./... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 # Build the binary
 build:
@@ -73,6 +73,7 @@ release:
 gen-mock:
     go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/linode-client/client.go -destination=mocks/mock_linodeclient.go -package=mocks
     go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/mount-manager/safe_mounter.go -destination=mocks/mock_safe-mounter.go -package=mocks
+    go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/filesystem/filesystem.go -destination=mocks/mock_filesystem.go -package=mocks
 
 # Run all CI steps
 ci: fmt vet lint gen-mock test build

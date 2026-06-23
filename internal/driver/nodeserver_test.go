@@ -109,10 +109,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 			_, err := server.NodeUnstageVolume(context.Background(), &csi.NodeUnstageVolumeRequest{})
 			return err
 		}},
-		{name: "NodePublishVolume", call: func(server *NodeServer) error {
-			_, err := server.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{})
-			return err
-		}},
 		{name: "NodeGetVolumeStats", call: func(server *NodeServer) error {
 			_, err := server.NodeGetVolumeStats(context.Background(), &csi.NodeGetVolumeStatsRequest{})
 			return err
@@ -141,6 +137,127 @@ func testPrivateNetwork(prefix string) *metadataapi.NetworkData {
 	}
 }
 
+func TestNodePublishVolume(t *testing.T) {
+	tests := []struct {
+		name               string
+		req                *csi.NodePublishVolumeRequest
+		resp               *csi.NodePublishVolumeResponse
+		expectMounterCalls func(m *mocks.MockMounter)
+		expectedError      error
+	}{
+		{
+			name: "Existing read only mount point",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId: "vol-123",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				},
+				Readonly: true,
+			},
+			resp: &csi.NodePublishVolumeResponse{},
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				m.EXPECT().IsLikelyNotMountPoint("/tmp/target").Return(false, nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name: "No volume ID",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoVolumeID,
+		},
+		{
+			name: "No staging target path",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoStagingTargetPath,
+		},
+		{
+			name: "No target path",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				}},
+			expectedError: errNoTargetPath,
+		},
+		{
+			name: "No volume capability",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeContext: map[string]string{
+					"mount-target": "nfs.server.linode.com:/fs-id",
+				},
+			},
+			expectedError: errNoVolumeCapability,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+			if tt.expectMounterCalls != nil {
+				tt.expectMounterCalls(mockMounter)
+			}
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+			}
+			returnedResp, err := ns.NodePublishVolume(context.Background(), tt.req)
+			if err != nil && !errors.Is(err, tt.expectedError) {
+				t.Errorf("NodePublishVolume error = %v, wantErr %v", err, tt.expectedError)
+			}
+			if !reflect.DeepEqual(returnedResp, tt.resp) {
+				t.Errorf("NodeServer.NodePublishVolume() = %v, want %v", returnedResp, tt.resp)
+			}
+		})
+	}
+}
+
 func TestNodeUnpublishVolume(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -150,7 +267,7 @@ func TestNodeUnpublishVolume(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name: "unpublishhappypath",
+			name: "Path does not exist",
 			req: &csi.NodeUnpublishVolumeRequest{
 				VolumeId:   "vol-123",
 				TargetPath: "/mnt/target",
@@ -158,6 +275,22 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			resp:               &csi.NodeUnpublishVolumeResponse{},
 			expectMounterCalls: func(m *mocks.MockMounter) {},
 			expectedError:      nil,
+		},
+		{
+			name: "No volume ID",
+			req: &csi.NodeUnpublishVolumeRequest{
+				VolumeId:   "",
+				TargetPath: "/tmp/target",
+			},
+			expectedError: errNoVolumeID,
+		},
+		{
+			name: "No target path",
+			req: &csi.NodeUnpublishVolumeRequest{
+				VolumeId:   "vol-123",
+				TargetPath: "",
+			},
+			expectedError: errNoTargetPath,
 		},
 	}
 
