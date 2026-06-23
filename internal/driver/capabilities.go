@@ -31,6 +31,8 @@ func controllerServiceCapabilities() []*csi.ControllerServiceCapability {
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES,
+		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 	}
 
 	// Future post-v1 capabilities once core filesystem lifecycle is complete.

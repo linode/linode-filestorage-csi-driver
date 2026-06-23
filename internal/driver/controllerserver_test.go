@@ -496,6 +496,157 @@ func TestControllerUnpublishVolume(t *testing.T) {
 	}
 }
 
+func TestValidateVolumeCapabilities(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.ValidateVolumeCapabilitiesRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+		assert   func(t *testing.T, response *csi.ValidateVolumeCapabilitiesResponse)
+	}{
+		{
+			name:     "requires volume id",
+			request:  &csi.ValidateVolumeCapabilitiesRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "requires capabilities",
+			request:  &csi.ValidateVolumeCapabilitiesRequest{VolumeId: testVolumeID},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "returns message for unsupported capability",
+			request: &csi.ValidateVolumeCapabilitiesRequest{
+				VolumeId: testVolumeID,
+				VolumeCapabilities: []*csi.VolumeCapability{{
+					AccessType: &csi.VolumeCapability_Block{},
+					AccessMode: &csi.VolumeCapability_AccessMode{Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER},
+				}},
+			},
+			assert: func(t *testing.T, response *csi.ValidateVolumeCapabilitiesResponse) {
+				t.Helper()
+				if response.GetConfirmed() != nil {
+					t.Fatalf("expected nil confirmed, got %#v", response.GetConfirmed())
+				}
+				if response.GetMessage() == "" {
+					t.Fatal("expected validation message")
+				}
+			},
+		},
+		{
+			name: "confirms supported mount",
+			request: &csi.ValidateVolumeCapabilitiesRequest{
+				VolumeId:           testVolumeID,
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystem{
+					ID:          "fs-12345678",
+					SpaceID:     "nfss-123abc",
+					Region:      "us-east",
+					MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				}, nil)
+			},
+			assert: func(t *testing.T, response *csi.ValidateVolumeCapabilitiesResponse) {
+				t.Helper()
+				if response.GetConfirmed() == nil {
+					t.Fatal("expected confirmed capabilities")
+				}
+				if len(response.GetConfirmed().GetVolumeContext()) != 4 {
+					t.Fatalf("unexpected volume context %#v", response.GetConfirmed().GetVolumeContext())
+				}
+				if !reflect.DeepEqual(response.GetConfirmed().GetVolumeCapabilities(), []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)}) {
+					t.Fatalf("unexpected confirmed capabilities %#v", response.GetConfirmed().GetVolumeCapabilities())
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.ValidateVolumeCapabilities(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("ValidateVolumeCapabilities() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if tt.assert != nil {
+				tt.assert(t, response)
+			}
+		})
+	}
+}
+
+func TestControllerGetVolume(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.ControllerGetVolumeRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+		assert   func(t *testing.T, response *csi.ControllerGetVolumeResponse)
+	}{
+		{
+			name:     "requires volume id",
+			request:  &csi.ControllerGetVolumeRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "returns filesystem metadata",
+			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystem{
+					ID:          "fs-12345678",
+					SpaceID:     "nfss-123abc",
+					Region:      "us-east",
+					MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				}, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					LinodeIDs:    []int{202, 303},
+				}, nil)
+			},
+			assert: func(t *testing.T, response *csi.ControllerGetVolumeResponse) {
+				t.Helper()
+				if response.GetVolume().GetVolumeId() != testVolumeID {
+					t.Fatalf("unexpected volume id %q", response.GetVolume().GetVolumeId())
+				}
+				if response.GetStatus() == nil {
+					t.Fatal("expected volume status")
+				}
+				if !reflect.DeepEqual(response.GetStatus().GetPublishedNodeIds(), []string{"202", "303"}) {
+					t.Fatalf("unexpected published node ids %#v", response.GetStatus().GetPublishedNodeIds())
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.ControllerGetVolume(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("ControllerGetVolume() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if tt.assert != nil {
+				tt.assert(t, response)
+			}
+		})
+	}
+}
+
 func TestControllerGetCapabilities(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -507,10 +658,14 @@ func TestControllerGetCapabilities(t *testing.T) {
 			caps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
 			},
 			wantCaps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
 			},
 		},
 	}
@@ -535,10 +690,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		name string
 		call func(*ControllerServer) error
 	}{
-		{name: "ValidateVolumeCapabilities", call: func(server *ControllerServer) error {
-			_, err := server.ValidateVolumeCapabilities(context.Background(), &csi.ValidateVolumeCapabilitiesRequest{})
-			return err
-		}},
 		{name: "ControllerExpandVolume", call: func(server *ControllerServer) error {
 			_, err := server.ControllerExpandVolume(context.Background(), &csi.ControllerExpandVolumeRequest{})
 			return err
@@ -549,10 +700,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "ListVolumes", call: func(server *ControllerServer) error {
 			_, err := server.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			return err
-		}},
-		{name: "ControllerGetVolume", call: func(server *ControllerServer) error {
-			_, err := server.ControllerGetVolume(context.Background(), &csi.ControllerGetVolumeRequest{})
 			return err
 		}},
 		{name: "CreateSnapshot", call: func(server *ControllerServer) error {

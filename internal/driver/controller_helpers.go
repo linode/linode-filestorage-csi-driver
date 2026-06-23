@@ -185,6 +185,18 @@ func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64) *csi.Vol
 	}
 }
 
+func publishedNodeIDs(linodeIDs []int) []string {
+	if len(linodeIDs) == 0 {
+		return nil
+	}
+
+	nodeIDs := make([]string, 0, len(linodeIDs))
+	for _, linodeID := range linodeIDs {
+		nodeIDs = append(nodeIDs, strconv.Itoa(linodeID))
+	}
+	return nodeIDs
+}
+
 func linodeError(err error, message string) error {
 	if err == nil {
 		return nil

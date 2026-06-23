@@ -191,9 +191,35 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ValidateVolumeCapabilities")
 
-	// Future implementation will compare the requested access mode and mount flags with supported NFS semantics.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+	if len(req.GetVolumeCapabilities()) == 0 {
+		return nil, errNoVolumeCapabilities
+	}
+
+	handle, err := parseVolumeHandle(req.GetVolumeId())
+	if err != nil {
+		return nil, err
+	}
+
+	for _, capability := range req.GetVolumeCapabilities() {
+		if supported, message := volumeCapabilitySupported(capability); !supported {
+			return &csi.ValidateVolumeCapabilitiesResponse{Message: message}, nil
+		}
+	}
+
+	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	if err != nil {
+		return nil, linodeError(err, "get NFS filesystem")
+	}
+
+	return &csi.ValidateVolumeCapabilitiesResponse{
+		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
+			VolumeContext:      volumeContext(filesystem),
+			VolumeCapabilities: req.GetVolumeCapabilities(),
+		},
+	}, nil
 }
 
 func (s *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
@@ -229,9 +255,29 @@ func (s *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumes
 func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerGetVolume")
 
-	// Future implementation will return filesystem metadata for a single CSI volume.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+
+	handle, err := parseVolumeHandle(req.GetVolumeId())
+	if err != nil {
+		return nil, err
+	}
+
+	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	if err != nil {
+		return nil, linodeError(err, "get NFS filesystem")
+	}
+
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
+	if err != nil {
+		return nil, linodeError(err, "get NFS filesystem access policy")
+	}
+
+	return &csi.ControllerGetVolumeResponse{
+		Volume: csiVolume(filesystem, 0),
+		Status: &csi.ControllerGetVolumeResponse_VolumeStatus{PublishedNodeIds: publishedNodeIDs(policy.LinodeIDs)},
+	}, nil
 }
 
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
