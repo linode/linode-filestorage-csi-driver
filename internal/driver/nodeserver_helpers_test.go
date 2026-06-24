@@ -173,6 +173,45 @@ func Test_validateNodeUnpublishVolumeRequest(t *testing.T) {
 	}
 }
 
+func Test_validateNodeUnstageVolumeRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *csi.NodeUnstageVolumeRequest
+		err  error
+	}{
+		{
+			name: "Valid request",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "vol-123",
+				StagingTargetPath: "/mnt/staging",
+			},
+			err: nil,
+		},
+		{
+			name: "Missing volume ID",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "",
+				StagingTargetPath: "/mnt/staging",
+			},
+			err: errNoVolumeID,
+		},
+		{
+			name: "Missing staging target path",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "vol-123",
+				StagingTargetPath: "",
+			},
+			err: errNoStagingTargetPath,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validateNodeUnstageVolumeRequest(tt.req)
+			compareGRPCErrors(t, got, tt.err)
+		})
+	}
+}
+
 func TestNodeServer_ensureMountPoint(t *testing.T) {
 	tests := []struct {
 		name              string

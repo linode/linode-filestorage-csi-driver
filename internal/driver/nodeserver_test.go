@@ -106,10 +106,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 			_, err := server.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{})
 			return err
 		}},
-		{name: "NodeUnstageVolume", call: func(server *NodeServer) error {
-			_, err := server.NodeUnstageVolume(context.Background(), &csi.NodeUnstageVolumeRequest{})
-			return err
-		}},
 		{name: "NodeExpandVolume", call: func(server *NodeServer) error {
 			_, err := server.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{})
 			return err
@@ -315,6 +311,67 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			}
 			if !reflect.DeepEqual(returnedResp, tt.resp) {
 				t.Errorf("NodeServer.NodeUnpublishVolume() = %v, want %v", returnedResp, tt.resp)
+			}
+		})
+	}
+}
+
+func TestNodeUnstageVolume(t *testing.T) {
+	tests := []struct {
+		name          string
+		req           *csi.NodeUnstageVolumeRequest
+		resp          *csi.NodeUnstageVolumeResponse
+		expectedError error
+	}{
+		{
+			name: "Path does not exist",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "1001-volkey",
+				StagingTargetPath: "/mnt/staging",
+			},
+			resp:          &csi.NodeUnstageVolumeResponse{},
+			expectedError: nil,
+		},
+		{
+			name: "No volume ID",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "",
+				StagingTargetPath: "/mnt/staging",
+			},
+			expectedError: errNoVolumeID,
+		},
+		{
+			name: "No target path",
+			req: &csi.NodeUnstageVolumeRequest{
+				VolumeId:          "1001-volkey",
+				StagingTargetPath: "",
+			},
+			expectedError: errNoStagingTargetPath,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+			}
+			returnedResp, err := ns.NodeUnstageVolume(context.Background(), tt.req)
+			if err != nil && !errors.Is(err, tt.expectedError) {
+				t.Errorf("NodeUnstageVolume error = %v, wantErr %v", err, tt.expectedError)
+			}
+			if !reflect.DeepEqual(returnedResp, tt.resp) {
+				t.Errorf("NodeServer.NodeUnstageVolume() = %v, want %v", returnedResp, tt.resp)
 			}
 		})
 	}

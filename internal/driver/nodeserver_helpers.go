@@ -52,6 +52,22 @@ func validateNodeUnpublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) err
 	return nil
 }
 
+// validateNodeUnstageVolumeRequest validates the node unstage volume request.
+// It validates the volume ID and staging target path.
+func validateNodeUnstageVolumeRequest(req *csi.NodeUnstageVolumeRequest) error {
+	klog.V(4).InfoS("Entering validateNodeUnstageVolumeRequest", "volumeID", req.GetVolumeId(), "targetPath", req.GetStagingTargetPath())
+
+	if req.GetVolumeId() == "" {
+		return errNoVolumeID
+	}
+	if req.GetStagingTargetPath() == "" {
+		return errNoStagingTargetPath
+	}
+
+	klog.V(4).InfoS("Exiting validateNodeUnstageVolumeRequest")
+	return nil
+}
+
 // ensureMountPoint checks if the target path is a mount point or not.
 // If not, it creates a directory at the target path.
 func (ns *NodeServer) ensureMountPoint(path string, fs filesystem.FileSystem) (bool, error) {
