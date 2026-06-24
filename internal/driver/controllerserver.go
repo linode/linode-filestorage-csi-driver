@@ -139,14 +139,14 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		if policy.Enabled {
 			return &csi.ControllerPublishVolumeResponse{}, nil
 		}
-		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, slices.Clone(policy.LinodeIDs))); err != nil {
+		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, policy.LinodeIDs)); err != nil {
 			return nil, linodeError(err, "update NFS filesystem access policy")
 		}
 		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
-	updatedIDs := append(slices.Clone(policy.LinodeIDs), linodeID)
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, updatedIDs)); err != nil {
+	policy.LinodeIDs = append(policy.LinodeIDs, linodeID)
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, policy.LinodeIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
 	}
 

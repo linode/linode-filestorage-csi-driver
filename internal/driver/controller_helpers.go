@@ -321,11 +321,11 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID st
 	if slices.Contains(policy.VPCIDs, vpcID) {
 		return nil
 	}
-	updatedVPCIDs := append(slices.Clone(policy.VPCIDs), vpcID)
+	policy.VPCIDs = append(policy.VPCIDs, vpcID)
 	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:        policy.Label,
 		Enabled:      ptr.To(policy.Enabled),
-		VPCIDs:       updatedVPCIDs,
+		VPCIDs:       policy.VPCIDs,
 		AllowedCIDRs: policy.AllowedCIDRs,
 		MTLSMode:     policy.MTLSMode,
 	}); err != nil {

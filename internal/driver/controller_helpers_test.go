@@ -147,14 +147,14 @@ func TestParseVolumeHandleAndNodeID(t *testing.T) {
 
 func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 	tests := []struct {
-		name          string
-		volumeID      string
-		nodeID        string
-		setup         func(controllerTestEnv) *linodego.NFSFilesystemAccessPolicy
-		wantHandle    volumeHandle
-		wantID        int
-		wantCode      codes.Code
-		wantNotFound  bool
+		name           string
+		volumeID       string
+		nodeID         string
+		setup          func(controllerTestEnv) *linodego.NFSFilesystemAccessPolicy
+		wantHandle     volumeHandle
+		wantID         int
+		wantCode       codes.Code
+		wantNotFound   bool
 		wantSamePolicy bool
 	}{
 		{
