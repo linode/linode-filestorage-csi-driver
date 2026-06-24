@@ -53,7 +53,6 @@ linters:
     - sqlclosecheck
     - testifylint
     - thelper
-    - unconvert
     - unparam
     - usestdlibvars
     - varnamelen
@@ -61,6 +60,7 @@ linters:
     - zerologlint
     - unused
   disable:
+    - unconvert
     - spancheck
   settings:
     dupl:

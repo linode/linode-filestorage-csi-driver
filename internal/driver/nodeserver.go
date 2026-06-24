@@ -2,10 +2,13 @@ package driver
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
@@ -133,12 +136,63 @@ func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpub
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
+// unixStatfs is used to mock the unix.Statfs function.
+var unixStatfs = unix.Statfs
+
 func (s *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetVolumeStats")
 
-	// Future implementation will report filesystem usage for the mounted NFS path.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+
+	if req.GetVolumePath() == "" {
+		return nil, errNoVolumePath
+	}
+
+	var statfs unix.Statfs_t
+	// See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
+	err := unixStatfs(req.GetVolumePath(), &statfs)
+	switch {
+	case errors.Is(err, unix.EIO):
+		// EIO is returned when the filesystem is not mounted.
+		return &csi.NodeGetVolumeStatsResponse{
+			VolumeCondition: &csi.VolumeCondition{
+				Abnormal: true,
+				Message:  fmt.Sprintf("failed to get stats: %v", err.Error()),
+			},
+		}, nil
+	case errors.Is(err, unix.ENOENT):
+		// ENOENT is returned when the volume path does not exist.
+		return nil, errNotFound("volume path not found: %v", err.Error())
+	case err != nil:
+		// Any other error is considered an internal error.
+		return nil, errInternal("failed to get stats: %v", err.Error())
+	}
+
+	response := &csi.NodeGetVolumeStatsResponse{
+		Usage: []*csi.VolumeUsage{
+			{
+				Available: int64(statfs.Bavail) * int64(statfs.Bsize),
+				Total:     int64(statfs.Blocks) * int64(statfs.Bsize),
+				Used:      int64(statfs.Blocks-statfs.Bfree) * int64(statfs.Bsize),
+				Unit:      csi.VolumeUsage_BYTES,
+			},
+			{
+				Available: int64(statfs.Ffree),
+				Total:     int64(statfs.Files),
+				Used:      int64(statfs.Files) - int64(statfs.Ffree),
+				Unit:      csi.VolumeUsage_INODES,
+			},
+		},
+		VolumeCondition: &csi.VolumeCondition{
+			Abnormal: false,
+			Message:  "healthy",
+		},
+	}
+
+	klog.V(2).Info("Successfully retrieved volume stats", "volumeID", req.GetVolumeId(), "volumePath", req.GetVolumePath(), "response", response)
+	return response, nil
 }
 
 func (s *NodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {

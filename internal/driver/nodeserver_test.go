@@ -10,6 +10,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	metadataapi "github.com/linode/go-metadata"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/mount"
@@ -107,10 +108,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "NodeUnstageVolume", call: func(server *NodeServer) error {
 			_, err := server.NodeUnstageVolume(context.Background(), &csi.NodeUnstageVolumeRequest{})
-			return err
-		}},
-		{name: "NodeGetVolumeStats", call: func(server *NodeServer) error {
-			_, err := server.NodeGetVolumeStats(context.Background(), &csi.NodeGetVolumeStatsRequest{})
 			return err
 		}},
 		{name: "NodeExpandVolume", call: func(server *NodeServer) error {
@@ -318,6 +315,138 @@ func TestNodeUnpublishVolume(t *testing.T) {
 			}
 			if !reflect.DeepEqual(returnedResp, tt.resp) {
 				t.Errorf("NodeServer.NodeUnpublishVolume() = %v, want %v", returnedResp, tt.resp)
+			}
+		})
+	}
+}
+
+func TestNodeGetVolumeStats(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStatfs := func(path string, stat *unix.Statfs_t) error {
+		switch path {
+		case "/valid/path":
+			stat.Blocks = 1000
+			stat.Bfree = 200
+			stat.Bavail = 150
+			stat.Files = 500
+			stat.Ffree = 100
+			stat.Bsize = 4096
+			return nil
+		case "/not/mounted":
+			return unix.EIO
+		case "/not/exist":
+			return unix.ENOENT
+		default:
+			return errors.New("internal error")
+		}
+	}
+
+	unixStatfs = mockStatfs
+
+	testCases := []struct {
+		name        string
+		volumeID    string
+		volumePath  string
+		expectedErr error
+		expectedRes *csi.NodeGetVolumeStatsResponse
+	}{
+		{
+			name:        "Valid request with healthy volume",
+			volumeID:    "valid-volume",
+			volumePath:  "/valid/path",
+			expectedErr: nil,
+			expectedRes: &csi.NodeGetVolumeStatsResponse{
+				Usage: []*csi.VolumeUsage{
+					{
+						Available: 150 * 4096,
+						Total:     1000 * 4096,
+						Used:      (1000 - 200) * 4096,
+						Unit:      csi.VolumeUsage_BYTES,
+					},
+					{
+						Available: 100,
+						Total:     500,
+						Used:      500 - 100,
+						Unit:      csi.VolumeUsage_INODES,
+					},
+				},
+				VolumeCondition: &csi.VolumeCondition{
+					Abnormal: false,
+					Message:  "healthy",
+				},
+			},
+		},
+		{
+			name:        "Request with empty volume ID",
+			volumeID:    "",
+			volumePath:  "/valid/path",
+			expectedErr: errNoVolumeID,
+			expectedRes: nil,
+		},
+		{
+			name:        "Request with empty volume path",
+			volumeID:    "valid-volume",
+			volumePath:  "",
+			expectedErr: errNoVolumePath,
+			expectedRes: nil,
+		},
+		{
+			name:        "Filesystem not mounted",
+			volumeID:    "not-mounted-volume",
+			volumePath:  "/not/mounted",
+			expectedErr: nil,
+			expectedRes: &csi.NodeGetVolumeStatsResponse{
+				VolumeCondition: &csi.VolumeCondition{
+					Abnormal: true,
+					Message:  "failed to get stats: input/output error",
+				},
+			},
+		},
+		{
+			name:        "Volume path does not exist",
+			volumeID:    "non-existent-volume",
+			volumePath:  "/not/exist",
+			expectedErr: errNotFound("volume path not found: no such file or directory"),
+			expectedRes: nil,
+		},
+		{
+			name:        "Internal error during Statfs call",
+			volumeID:    "internal-error-volume",
+			volumePath:  "/internal/error",
+			expectedErr: errInternal("failed to get stats: internal error"),
+			expectedRes: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			req := &csi.NodeGetVolumeStatsRequest{
+				VolumeId:   tc.volumeID,
+				VolumePath: tc.volumePath,
+			}
+
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+			}
+			resp, err := ns.NodeGetVolumeStats(ctx, req)
+
+			if err != nil && !errors.Is(err, tc.expectedErr) {
+				t.Errorf("NodeGetVolumeStats error = %v, wantErr %v", err, tc.expectedErr)
+			}
+
+			if !reflect.DeepEqual(resp, tc.expectedRes) {
+				t.Errorf("NodeServer.NodeGetVolumeStats() = %v, want %v", resp, tc.expectedRes)
 			}
 		})
 	}

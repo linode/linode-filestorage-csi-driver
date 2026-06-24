@@ -9,15 +9,13 @@ import (
 
 // Errors that are returned from RPC methods.
 // They are defined here so they can be reused as lifecycle handlers are implemented.
-//
-//nolint:unused // This scaffold intentionally defines the full error set before all handlers use it.
 var (
 	errNilDriver            = status.Error(codes.Internal, "nil driver")
 	errNilMounter           = status.Error(codes.Internal, "nil mounter")
 	errNoVolumeName         = status.Error(codes.InvalidArgument, "volume name is required")
 	errNoVolumeCapabilities = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability   = status.Error(codes.InvalidArgument, "no volume capability set")
-	errNoVolumeID           = status.Error(codes.InvalidArgument, "volume id is not set")
+	errNoVolumeID           = status.Error(codes.InvalidArgument, "volume ID is not set")
 	errNoVolumePath         = status.Error(codes.InvalidArgument, "volume path is not set")
 	errNoTargetPath         = status.Error(codes.InvalidArgument, "target path is not set")
 	errNoStagingTargetPath  = status.Error(codes.InvalidArgument, "staging target path is not set")
@@ -32,4 +30,10 @@ var (
 // INTERNAL status code.
 func errInternal(format string, args ...any) error {
 	return status.Errorf(codes.Internal, format, args...)
+}
+
+// errNotFound returns a gRPC error with a NOT_FOUND status code.
+// It formats the error message using the provided format and arguments.
+func errNotFound(format string, args ...any) error {
+	return status.Errorf(codes.NotFound, format, args...)
 }
