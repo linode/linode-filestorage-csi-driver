@@ -21,10 +21,11 @@ const (
 	storageClassParamRootSquash = "filesystem-root-squash"
 	storageClassParamTags       = "tags"
 
-	volumeContextSpaceID      = "space-id"
-	volumeContextFilesystemID = "filesystem-id"
-	volumeContextMountTarget  = "mount-target"
-	volumeContextRegion       = "region"
+	volumeContextSpaceID       = "space-id"
+	volumeContextFilesystemID  = "filesystem-id"
+	volumeContextMountTarget   = "mount-target"
+	volumeContextRegion        = "region"
+	volumeContextSpaceMTLSMode = "mtls-mode"
 )
 
 type createVolumeParameters struct {
@@ -167,21 +168,24 @@ func volumeCapabilitySupported(capability *csi.VolumeCapability) (supported bool
 	}
 }
 
-func volumeContext(filesystem *linodego.NFSFilesystem) map[string]string {
+func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLSMode) map[string]string {
 	values := map[string]string{
 		volumeContextSpaceID:      filesystem.SpaceID,
 		volumeContextFilesystemID: filesystem.ID,
 		volumeContextMountTarget:  filesystem.MountTarget,
 		volumeContextRegion:       filesystem.Region,
 	}
+	if mtlsMode != "" {
+		values[volumeContextSpaceMTLSMode] = string(mtlsMode)
+	}
 	return values
 }
 
-func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64) *csi.Volume {
+func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
 	return &csi.Volume{
 		VolumeId:      volumeID(filesystem.SpaceID, filesystem.ID),
 		CapacityBytes: capacityBytes,
-		VolumeContext: volumeContext(filesystem),
+		VolumeContext: volumeContext(filesystem, mtlsMode),
 	}
 }
 
@@ -329,14 +333,25 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 	return nil
 }
 
-func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID string) error {
+func (s *ControllerServer) getSpaceAccessPolicy(ctx context.Context, spaceID string) (*linodego.NFSSpaceAccessPolicy, error) {
+	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)
+	if err != nil {
+		return nil, linodeError(err, "get NFS space access policy")
+	}
+	return policy, nil
+}
+
+func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID string, policy *linodego.NFSSpaceAccessPolicy) error {
 	if vpcID == "" {
 		return status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
 	}
 
-	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)
-	if err != nil {
-		return linodeError(err, "get NFS space access policy")
+	if policy == nil {
+		var err error
+		policy, err = s.getSpaceAccessPolicy(ctx, spaceID)
+		if err != nil {
+			return err
+		}
 	}
 	if slices.Contains(policy.VPCIDs, vpcID) {
 		return nil

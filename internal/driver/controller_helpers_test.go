@@ -298,8 +298,9 @@ func TestVolumeContext(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
-		want map[string]string
+		name     string
+		mtlsMode linodego.NFSMTLSMode
+		want     map[string]string
 	}{
 		{
 			name: "owned",
@@ -311,19 +312,21 @@ func TestVolumeContext(t *testing.T) {
 			},
 		},
 		{
-			name: "unowned",
+			name:     "with mtls mode",
+			mtlsMode: linodego.NFSMTLSModeRequired,
 			want: map[string]string{
-				volumeContextSpaceID:      "nfss-123abc",
-				volumeContextFilesystemID: "fs-12345678",
-				volumeContextMountTarget:  "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
-				volumeContextRegion:       "us-east",
+				volumeContextSpaceID:       "nfss-123abc",
+				volumeContextFilesystemID:  "fs-12345678",
+				volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				volumeContextRegion:        "us-east",
+				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := volumeContext(filesystem); !reflect.DeepEqual(got, tt.want) {
+			if got := volumeContext(filesystem, tt.mtlsMode); !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("volumeContext() = %#v, want %#v", got, tt.want)
 			}
 		})
@@ -338,7 +341,7 @@ func TestCSIVolume(t *testing.T) {
 		MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
 	}
 
-	volume := csiVolume(filesystem, 1024)
+	volume := csiVolume(filesystem, 1024, "")
 	if volume.GetVolumeId() != "nfss-123abc/fs-12345678" {
 		t.Fatalf("csiVolume() volume id = %q", volume.GetVolumeId())
 	}
@@ -347,6 +350,11 @@ func TestCSIVolume(t *testing.T) {
 	}
 	if len(volume.GetVolumeContext()) != 4 {
 		t.Fatalf("csiVolume() context = %#v", volume.GetVolumeContext())
+	}
+
+	volumeWithMTLS := csiVolume(filesystem, 1024, linodego.NFSMTLSModeOptional)
+	if got := volumeWithMTLS.GetVolumeContext()[volumeContextSpaceMTLSMode]; got != string(linodego.NFSMTLSModeOptional) {
+		t.Fatalf("csiVolume() mtls mode = %q", got)
 	}
 }
 

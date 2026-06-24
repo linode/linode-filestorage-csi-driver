@@ -67,7 +67,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				expectSingleNodeCluster(env, 123456)
 				env.client.EXPECT().GetNFSSpace(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpace{ID: "nfss-123abc", Label: "prod-space"}, nil)
 				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return(nil, nil)
-				expectSpaceVPCAssociation(env, "nfss-123abc", "space-policy", "123456")
+				expectSpaceVPCAssociation(env, "nfss-123abc", "space-policy", "123456", linodego.NFSMTLSModeRequired)
 				env.client.EXPECT().
 					CreateNFSFilesystem(gomock.Any(), "nfss-123abc", gomock.Eq(linodego.NFSFilesystemCreateOptions{
 						Label:            "pvc-abc",
@@ -88,10 +88,11 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
 				assertCreateVolumeResponse(t, response, testVolumeID, 1024, map[string]string{
-					volumeContextSpaceID:      "nfss-123abc",
-					volumeContextFilesystemID: "fs-12345678",
-					volumeContextMountTarget:  "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
-					volumeContextRegion:       "us-east",
+					volumeContextSpaceID:       "nfss-123abc",
+					volumeContextFilesystemID:  "fs-12345678",
+					volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+					volumeContextRegion:        "us-east",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
 				})
 			},
 		},
@@ -106,21 +107,28 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				t.Helper()
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpace{ID: "nfss-123abc"}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
-					ID:          "fs-existing",
-					SpaceID:     "nfss-123abc",
-					Label:       "pvc-abc",
-					Region:      "us-east",
-					MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-existing",
-					Tags:        []string{"tag-a"},
-				}}, nil)
+				gomock.InOrder(
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpace{ID: "nfss-123abc"}, nil),
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
+						ID:          "fs-existing",
+						SpaceID:     "nfss-123abc",
+						Label:       "pvc-abc",
+						Region:      "us-east",
+						MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-existing",
+						Tags:        []string{"tag-a"},
+					}}, nil),
+					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
+				)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				if response.GetVolume().GetVolumeId() != "nfss-123abc/fs-existing" {
-					t.Fatalf("unexpected volume id %q", response.GetVolume().GetVolumeId())
-				}
+				assertCreateVolumeResponse(t, response, "nfss-123abc/fs-existing", 0, map[string]string{
+					volumeContextSpaceID:       "nfss-123abc",
+					volumeContextFilesystemID:  "fs-existing",
+					volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-existing",
+					volumeContextRegion:        "us-east",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+				})
 			},
 		},
 		{
@@ -140,14 +148,18 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				expectSingleNodeCluster(env, 123456)
 				env.client.EXPECT().ListNFSSpaces(gomock.Any(), gomock.Eq(spaceOptions)).Return([]linodego.NFSSpace{{ID: "nfss-123abc", Label: "prod-space"}}, nil)
 				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return(nil, nil)
-				expectSpaceVPCAssociation(env, "nfss-123abc", "space-policy", "123456")
+				expectSpaceVPCAssociation(env, "nfss-123abc", "space-policy", "123456", linodego.NFSMTLSModeDisabled)
 				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), "nfss-123abc", gomock.Eq(linodego.NFSFilesystemCreateOptions{Label: "pvc-abc", Region: "us-east", ProtocolVersions: []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}, Tags: []string{"tag-a"}})).Return(&linodego.NFSFilesystem{ID: "fs-12345678", SpaceID: "nfss-123abc", Label: "pvc-abc", Region: "us-east", MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678"}, nil)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				if response.GetVolume().GetVolumeId() != testVolumeID {
-					t.Fatalf("unexpected volume id %q", response.GetVolume().GetVolumeId())
-				}
+				assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
+					volumeContextSpaceID:       "nfss-123abc",
+					volumeContextFilesystemID:  "fs-12345678",
+					volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+					volumeContextRegion:        "us-east",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeDisabled),
+				})
 			},
 		},
 	}
@@ -252,16 +264,18 @@ func expectSingleNodeCluster(env controllerTestEnv, vpcID int) {
 	}}, nil)
 }
 
-func expectSpaceVPCAssociation(env controllerTestEnv, spaceID, label, vpcID string) {
+func expectSpaceVPCAssociation(env controllerTestEnv, spaceID, label, vpcID string, mtlsMode linodego.NFSMTLSMode) {
 	env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), spaceID).Return(&linodego.NFSSpaceAccessPolicy{
-		Label:   label,
-		Enabled: true,
+		Label:    label,
+		Enabled:  true,
+		MTLSMode: mtlsMode,
 	}, nil)
 	env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), spaceID, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
-		Label:   label,
-		Enabled: ptr.To(true),
-		VPCIDs:  []string{vpcID},
-	})).Return(&linodego.NFSSpaceAccessPolicy{VPCIDs: []string{vpcID}}, nil)
+		Label:    label,
+		Enabled:  ptr.To(true),
+		VPCIDs:   []string{vpcID},
+		MTLSMode: mtlsMode,
+	})).Return(&linodego.NFSSpaceAccessPolicy{VPCIDs: []string{vpcID}, MTLSMode: mtlsMode}, nil)
 }
 
 func assertCreateVolumeResponse(t *testing.T, response *csi.CreateVolumeResponse, wantVolumeID string, wantCapacity int64, wantContext map[string]string) {
