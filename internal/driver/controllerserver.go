@@ -58,6 +58,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
+	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 	existing, found, err := s.findExistingFilesystem(ctx, space.ID, req.GetName(), params.region)
@@ -68,10 +72,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
 			return nil, err
 		}
-		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes)}, nil
+		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
 	}
 
-	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID); err != nil {
+	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
 		return nil, err
 	}
 
@@ -91,7 +95,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		}
 	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes)}, nil
+	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode)}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -216,7 +220,7 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 
 	return &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
-			VolumeContext:      volumeContext(filesystem),
+			VolumeContext:      volumeContext(filesystem, ""),
 			VolumeCapabilities: req.GetVolumeCapabilities(),
 		},
 	}, nil
@@ -275,7 +279,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	}
 
 	return &csi.ControllerGetVolumeResponse{
-		Volume: csiVolume(filesystem, 0),
+		Volume: csiVolume(filesystem, 0, ""),
 		Status: csiControllerVolumeStatus(policy),
 	}, nil
 }
