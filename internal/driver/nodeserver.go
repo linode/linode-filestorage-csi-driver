@@ -75,9 +75,25 @@ func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolu
 func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodeUnstageVolume")
 
-	// Future implementation will unmount the staged NFS path and clean up node-local state.
-	_ = req
-	return nil, errNotImplemented
+	stagingTargetPath := req.GetStagingTargetPath()
+	volumeID := req.GetVolumeId()
+
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	// Validate req (NodeUnstageVolumeRequest)
+	klog.V(4).InfoS("Validating request", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
+	if err := validateNodeUnstageVolumeRequest(req); err != nil {
+		return nil, err
+	}
+
+	klog.V(4).InfoS("Unmounting staging target path", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
+	if err := mount.CleanupMountPoint(stagingTargetPath, s.mounter.Interface, true /* bind mount */); err != nil {
+		return nil, errInternal("NodeUnstageVolume failed to unmount at path %s: %v", stagingTargetPath, err)
+	}
+
+	klog.V(2).InfoS("Successfully completed", "volumeID", volumeID)
+	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
 func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
