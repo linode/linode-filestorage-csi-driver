@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"errors"
+	"slices"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -117,17 +118,74 @@ func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolu
 func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerPublishVolume")
 
-	// Future implementation will authorize the target node in the filesystem access policy.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+	if req.GetNodeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "node id is required")
+	}
+	if supported, message := volumeCapabilitySupported(req.GetVolumeCapability()); !supported {
+		return nil, status.Error(codes.InvalidArgument, message)
+	}
+
+	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
+	if err != nil {
+		if status.Code(err) == codes.InvalidArgument {
+			return nil, err
+		}
+		return nil, linodeError(err, "get NFS filesystem access policy")
+	}
+	if slices.Contains(policy.LinodeIDs, linodeID) {
+		if policy.Enabled {
+			return &csi.ControllerPublishVolumeResponse{}, nil
+		}
+		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, policy.LinodeIDs)); err != nil {
+			return nil, linodeError(err, "update NFS filesystem access policy")
+		}
+		return &csi.ControllerPublishVolumeResponse{}, nil
+	}
+
+	policy.LinodeIDs = append(policy.LinodeIDs, linodeID)
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, policy.LinodeIDs)); err != nil {
+		return nil, linodeError(err, "update NFS filesystem access policy")
+	}
+
+	return &csi.ControllerPublishVolumeResponse{}, nil
 }
 
 func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerUnpublishVolume")
 
-	// Future implementation will remove the target node from the filesystem access policy.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+	if req.GetNodeId() == "" {
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
+	}
+
+	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
+	if err != nil {
+		if linodego.IsNotFound(err) {
+			return &csi.ControllerUnpublishVolumeResponse{}, nil
+		}
+		if status.Code(err) == codes.InvalidArgument {
+			return nil, err
+		}
+		return nil, linodeError(err, "get NFS filesystem access policy")
+	}
+
+	if !slices.Contains(policy.LinodeIDs, linodeID) {
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
+	}
+
+	updatedIDs := slices.DeleteFunc(policy.LinodeIDs, func(existing int) bool {
+		return existing == linodeID
+	})
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, policy.Enabled, updatedIDs)); err != nil {
+		return nil, linodeError(err, "update NFS filesystem access policy")
+	}
+
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {

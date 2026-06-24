@@ -310,6 +310,192 @@ func TestDeleteVolume(t *testing.T) {
 	}
 }
 
+func TestControllerPublishVolume(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.ControllerPublishVolumeRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+	}{
+		{
+			name: "adds node and enables policy",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "202",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				policy := &linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Label:        "policy-a",
+					Enabled:      false,
+					LinodeIDs:    []int{101},
+					RootSquash:   linodego.NFSRootSquashModeNone,
+					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
+					Label:      "policy-a",
+					Enabled:    ptr.To(true),
+					LinodeIDs:  []int{101, 202},
+					RootSquash: linodego.NFSRootSquashModeNone,
+					Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				})).Return(policy, nil)
+			},
+		},
+		{
+			name: "is idempotent when node already allowed",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "202",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678", Enabled: true, LinodeIDs: []int{101, 202}}, nil)
+			},
+		},
+		{
+			name: "enables policy without duplicating existing node",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "202",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				policy := &linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Label:        "policy-a",
+					Enabled:      false,
+					LinodeIDs:    []int{101, 202},
+					RootSquash:   linodego.NFSRootSquashModeNone,
+					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
+					Label:      "policy-a",
+					Enabled:    ptr.To(true),
+					LinodeIDs:  []int{101, 202},
+					RootSquash: linodego.NFSRootSquashModeNone,
+					Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				})).Return(policy, nil)
+			},
+		},
+		{
+			name: "preserves existing policy fields",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "202",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				policy := &linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Label:        "policy-a",
+					Enabled:      true,
+					LinodeIDs:    []int{101},
+					RootSquash:   linodego.NFSRootSquashModeRootSquash,
+					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
+					Label:      "policy-a",
+					Enabled:    ptr.To(true),
+					LinodeIDs:  []int{101, 202},
+					RootSquash: linodego.NFSRootSquashModeRootSquash,
+					Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				})).Return(policy, nil)
+			},
+		},
+		{
+			name: "rejects malformed node id",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "node-a",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			wantCode: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			_, err := env.server.ControllerPublishVolume(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("ControllerPublishVolume() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestControllerUnpublishVolume(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.ControllerUnpublishVolumeRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+	}{
+		{
+			name:    "removes only target node",
+			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID, NodeId: "202"},
+			setup: func(env controllerTestEnv) {
+				policy := &linodego.NFSFilesystemAccessPolicy{
+					FilesystemID: "fs-12345678",
+					Label:        "policy-a",
+					Enabled:      true,
+					LinodeIDs:    []int{101, 202, 303},
+					RootSquash:   linodego.NFSRootSquashModeRootSquash,
+					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
+					Label:      "policy-a",
+					Enabled:    ptr.To(true),
+					LinodeIDs:  []int{101, 303},
+					RootSquash: linodego.NFSRootSquashModeRootSquash,
+					Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				})).Return(policy, nil)
+			},
+		},
+		{
+			name:    "is idempotent when node is already absent",
+			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID, NodeId: "202"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678", Enabled: true, LinodeIDs: []int{101, 303}}, nil)
+			},
+		},
+		{
+			name:    "empty node id is success",
+			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID},
+		},
+		{
+			name:    "not found is success",
+			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID, NodeId: "202"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			_, err := env.server.ControllerUnpublishVolume(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("ControllerUnpublishVolume() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+		})
+	}
+}
+
 func TestControllerGetCapabilities(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -320,9 +506,11 @@ func TestControllerGetCapabilities(t *testing.T) {
 			name: "returns configured capabilities",
 			caps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
 			},
 			wantCaps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
 			},
 		},
 	}
@@ -347,14 +535,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		name string
 		call func(*ControllerServer) error
 	}{
-		{name: "ControllerPublishVolume", call: func(server *ControllerServer) error {
-			_, err := server.ControllerPublishVolume(context.Background(), &csi.ControllerPublishVolumeRequest{})
-			return err
-		}},
-		{name: "ControllerUnpublishVolume", call: func(server *ControllerServer) error {
-			_, err := server.ControllerUnpublishVolume(context.Background(), &csi.ControllerUnpublishVolumeRequest{})
-			return err
-		}},
 		{name: "ValidateVolumeCapabilities", call: func(server *ControllerServer) error {
 			_, err := server.ValidateVolumeCapabilities(context.Background(), &csi.ValidateVolumeCapabilitiesRequest{})
 			return err
