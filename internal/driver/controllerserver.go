@@ -58,10 +58,6 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-	if err != nil {
-		return nil, err
-	}
 
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 	existing, found, err := s.findExistingFilesystem(ctx, space.ID, req.GetName(), params.region)
@@ -72,7 +68,16 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
 			return nil, err
 		}
+		spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+		if err != nil {
+			return nil, err
+		}
 		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
+	}
+
+	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {

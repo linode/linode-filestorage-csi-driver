@@ -107,16 +107,18 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				t.Helper()
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpace{ID: "nfss-123abc"}, nil)
-				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
-					ID:          "fs-existing",
-					SpaceID:     "nfss-123abc",
-					Label:       "pvc-abc",
-					Region:      "us-east",
-					MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-existing",
-					Tags:        []string{"tag-a"},
-				}}, nil)
+				gomock.InOrder(
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpace{ID: "nfss-123abc"}, nil),
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "nfss-123abc", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
+						ID:          "fs-existing",
+						SpaceID:     "nfss-123abc",
+						Label:       "pvc-abc",
+						Region:      "us-east",
+						MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-existing",
+						Tags:        []string{"tag-a"},
+					}}, nil),
+					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), "nfss-123abc").Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
+				)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
