@@ -32,6 +32,10 @@ run = "just lint"
 description = "Run tests"
 run = "just test"
 
+[tasks.cover]
+description = "Open HTML coverage report"
+run = "just cover"
+
 [tasks.gen-mock]
 description = "Regenerate Go mocks"
 run = "just gen-mock"
