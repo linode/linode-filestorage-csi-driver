@@ -42,6 +42,9 @@ lint:
 test:
     go test ./... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
+cover:
+    go tool cover -html=coverage.out
+
 # Build the binary
 build:
     go build -ldflags "-X main.vendorVersion={{ IMAGE_VERSION }}" ./...
