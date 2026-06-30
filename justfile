@@ -36,7 +36,7 @@ vet: fmt
 
 # Run golangci-lint
 lint:
-    golangci-lint run ./...
+    golangci-lint run --fix ./...
 
 # Run unit tests
 test:

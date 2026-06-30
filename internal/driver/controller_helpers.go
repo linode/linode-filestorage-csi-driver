@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -118,10 +118,6 @@ func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Conte
 	return handle, linodeID, policy, nil
 }
 
-func volumeID(spaceID, filesystemID string) string {
-	return fmt.Sprintf("%s/%s", spaceID, filesystemID)
-}
-
 func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
 	if capacityRange == nil {
 		return 0
@@ -183,7 +179,7 @@ func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLS
 
 func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
 	return &csi.Volume{
-		VolumeId:      volumeID(filesystem.SpaceID, filesystem.ID),
+		VolumeId:      fmt.Sprintf("%s/%s", filesystem.SpaceID, filesystem.ID),
 		CapacityBytes: capacityBytes,
 		VolumeContext: volumeContext(filesystem, mtlsMode),
 	}

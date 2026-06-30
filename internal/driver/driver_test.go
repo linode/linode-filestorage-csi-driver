@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 	"k8s.io/utils/mount"

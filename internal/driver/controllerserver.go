@@ -5,7 +5,7 @@ import (
 	"errors"
 	"slices"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -16,8 +16,70 @@ import (
 	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
+	util "github.com/linode/linode-filestorage-csi-driver/pkg"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
+
+func defaultNodeServer(t *testing.T) (*NodeServer, *mocks.MockMounter) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	mounter := mocks.NewMockMounter(ctrl)
+	return &NodeServer{
+		driver: &LinodeDriver{},
+		mounter: &mountmanager.SafeFormatAndMount{
+			SafeFormatAndMount: &mount.SafeFormatAndMount{
+				Interface: mounter,
+				Exec:      mocks.NewMockExecutor(ctrl),
+			},
+		},
+		volumeLocks: util.NewVolumeLocks(),
+	}, mounter
+}
+
+func TestNewNodeServer(t *testing.T) {
+	tests := []struct {
+		name           string
+		wantErr        error
+		driver         *LinodeDriver
+		mounter        *mountmanager.SafeFormatAndMount
+		wantNodeServer *NodeServer
+	}{
+		{
+			name:    "nil driver",
+			wantErr: errNilDriver,
+			mounter: &mountmanager.SafeFormatAndMount{},
+		},
+		{
+			name:    "nil mounter",
+			wantErr: errNilMounter,
+			driver:  &LinodeDriver{},
+		},
+		{
+			name: "success",
+			wantNodeServer: &NodeServer{
+				driver:      &LinodeDriver{},
+				mounter:     &mountmanager.SafeFormatAndMount{},
+				volumeLocks: util.NewVolumeLocks(),
+			},
+			driver:  &LinodeDriver{},
+			mounter: &mountmanager.SafeFormatAndMount{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nodeServer, err := NewNodeServer(context.Background(), tt.driver, tt.mounter)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("NewNodeServer() code = %v, want %v", status.Code(err), tt.wantErr)
+			}
+			if !reflect.DeepEqual(nodeServer, tt.wantNodeServer) {
+				t.Fatalf("NewNodeServer() nodeserver = %v, want %v", nodeServer, tt.wantNodeServer)
+			}
+		})
+	}
+}
 
 func TestNodeGetInfo(t *testing.T) {
 	tests := []struct {
@@ -39,6 +101,7 @@ func TestNodeGetInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 			instanceClient := mocks.NewMockInstanceMetadataClient(ctrl)
 			if tt.setup != nil {
 				tt.setup(instanceClient)
@@ -224,21 +287,9 @@ func TestNodePublishVolume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockMounter := mocks.NewMockMounter(ctrl)
-			mockExec := mocks.NewMockExecutor(ctrl)
+			ns, mounter := defaultNodeServer(t)
 			if tt.expectMounterCalls != nil {
-				tt.expectMounterCalls(mockMounter)
-			}
-			ns := &NodeServer{
-				driver: &LinodeDriver{},
-				mounter: &mountmanager.SafeFormatAndMount{
-					SafeFormatAndMount: &mount.SafeFormatAndMount{
-						Interface: mockMounter,
-						Exec:      mockExec,
-					},
-				},
+				tt.expectMounterCalls(mounter)
 			}
 			returnedResp, err := ns.NodePublishVolume(context.Background(), tt.req)
 			if err != nil && !errors.Is(err, tt.expectedError) {
@@ -289,21 +340,9 @@ func TestNodeUnpublishVolume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockMounter := mocks.NewMockMounter(ctrl)
-			mockExec := mocks.NewMockExecutor(ctrl)
+			ns, mounter := defaultNodeServer(t)
 			if tt.expectMounterCalls != nil {
-				tt.expectMounterCalls(mockMounter)
-			}
-			ns := &NodeServer{
-				driver: &LinodeDriver{},
-				mounter: &mountmanager.SafeFormatAndMount{
-					SafeFormatAndMount: &mount.SafeFormatAndMount{
-						Interface: mockMounter,
-						Exec:      mockExec,
-					},
-				},
+				tt.expectMounterCalls(mounter)
 			}
 			returnedResp, err := ns.NodeUnpublishVolume(context.Background(), tt.req)
 			if err != nil && !errors.Is(err, tt.expectedError) {
@@ -352,20 +391,7 @@ func TestNodeUnstageVolume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockMounter := mocks.NewMockMounter(ctrl)
-			mockExec := mocks.NewMockExecutor(ctrl)
-
-			ns := &NodeServer{
-				driver: &LinodeDriver{},
-				mounter: &mountmanager.SafeFormatAndMount{
-					SafeFormatAndMount: &mount.SafeFormatAndMount{
-						Interface: mockMounter,
-						Exec:      mockExec,
-					},
-				},
-			}
+			ns, _ := defaultNodeServer(t)
 			returnedResp, err := ns.NodeUnstageVolume(context.Background(), tt.req)
 			if err != nil && !errors.Is(err, tt.expectedError) {
 				t.Errorf("NodeUnstageVolume error = %v, wantErr %v", err, tt.expectedError)
@@ -485,17 +511,7 @@ func TestNodeGetVolumeStats(t *testing.T) {
 				VolumePath: tc.volumePath,
 			}
 
-			mockMounter := mocks.NewMockMounter(ctrl)
-			mockExec := mocks.NewMockExecutor(ctrl)
-			ns := &NodeServer{
-				driver: &LinodeDriver{},
-				mounter: &mountmanager.SafeFormatAndMount{
-					SafeFormatAndMount: &mount.SafeFormatAndMount{
-						Interface: mockMounter,
-						Exec:      mockExec,
-					},
-				},
-			}
+			ns, _ := defaultNodeServer(t)
 			resp, err := ns.NodeGetVolumeStats(ctx, req)
 
 			if err != nil && !errors.Is(err, tc.expectedErr) {
