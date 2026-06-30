@@ -79,7 +79,7 @@ gen-mock:
     go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/filesystem/filesystem.go -destination=mocks/mock_filesystem.go -package=mocks
 
 # Run all CI steps
-ci: fmt vet lint gen-mock test build
+ci: fmt gen-mock vet lint test build
 
 # Install the Helm chart
 helm-install:

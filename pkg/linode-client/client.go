@@ -14,17 +14,26 @@ import (
 
 type LinodeClient interface {
 	ListInterfaces(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.LinodeInterface, error)
+
 	ListNFSSpaces(ctx context.Context, opts *linodego.ListOptions) ([]linodego.NFSSpace, error)
 	GetNFSSpace(ctx context.Context, spaceID string) (*linodego.NFSSpace, error)
+
 	ListNFSFilesystems(ctx context.Context, spaceID string, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error)
 	GetNFSFilesystem(ctx context.Context, spaceID string, filesystemID string) (*linodego.NFSFilesystem, error)
 	GetNFSFilesystemByID(ctx context.Context, filesystemID string) (*linodego.NFSFilesystem, error)
 	CreateNFSFilesystem(ctx context.Context, spaceID string, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error)
 	DeleteNFSFilesystem(ctx context.Context, spaceID string, filesystemID string) error
+
 	GetNFSSpaceAccessPolicy(ctx context.Context, spaceID string) (*linodego.NFSSpaceAccessPolicy, error)
 	UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID string, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error)
 	GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID string, filesystemID string) (*linodego.NFSFilesystemAccessPolicy, error)
 	UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID string, filesystemID string, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error)
+
+	ListNFSSnapshots(ctx context.Context, spaceID string, filesystemID string, opts *linodego.ListOptions) ([]linodego.NFSSnapshot, error)
+	GetNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string) (*linodego.NFSSnapshot, error)
+	CreateNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error)
+	DeleteNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string) error
+	CloneNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error)
 }
 
 var _ LinodeClient = (*linodego.Client)(nil)
