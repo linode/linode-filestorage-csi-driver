@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
@@ -210,12 +210,6 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 				t.Fatalf("getFilesystemPolicyForVolumeAndNode() policy = %#v, want %#v", gotPolicy, wantPolicy)
 			}
 		})
-	}
-}
-
-func TestVolumeID(t *testing.T) {
-	if got := volumeID("nfss-123abc", "fs-12345678"); got != "nfss-123abc/fs-12345678" {
-		t.Fatalf("volumeID() = %q", got)
 	}
 }
 

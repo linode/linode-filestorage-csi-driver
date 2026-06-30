@@ -14,65 +14,9 @@ const (
 	rwPermission = os.FileMode(0o755)
 )
 
-// validateNodePublishVolumeRequest validates the node publish volume request.
-// It checks the volume ID, staging target path, target path, and volume capability in the provided request.
-func validateNodePublishVolumeRequest(req *csi.NodePublishVolumeRequest) error {
-	klog.V(4).InfoS("Entering validateNodePublishVolumeRequest", "volumeID", req.GetVolumeId(), "stagingTargetPath", req.GetStagingTargetPath(), "targetPath", req.GetTargetPath())
-
-	if req.GetVolumeId() == "" {
-		return errNoVolumeID
-	}
-	if req.GetStagingTargetPath() == "" {
-		return errNoStagingTargetPath
-	}
-	if req.GetTargetPath() == "" {
-		return errNoTargetPath
-	}
-	if req.GetVolumeCapability() == nil {
-		return errNoVolumeCapability
-	}
-
-	klog.V(4).InfoS("Exiting validateNodePublishVolumeRequest")
-	return nil
-}
-
-// validateNodeUnpublishVolumeRequest validates the node unpublish volume request.
-// It checks the volume ID and target path in the provided request.
-func validateNodeUnpublishVolumeRequest(req *csi.NodeUnpublishVolumeRequest) error {
-	klog.V(4).InfoS("Entering validateNodeUnpublishVolumeRequest", "volumeID", req.GetVolumeId(), "targetPath", req.GetTargetPath())
-
-	if req.GetVolumeId() == "" {
-		return errNoVolumeID
-	}
-	if req.GetTargetPath() == "" {
-		return errNoTargetPath
-	}
-
-	klog.V(4).InfoS("Exiting validateNodeUnpublishVolumeRequest")
-	return nil
-}
-
-// validateNodeUnstageVolumeRequest validates the node unstage volume request.
-// It validates the volume ID and staging target path.
-func validateNodeUnstageVolumeRequest(req *csi.NodeUnstageVolumeRequest) error {
-	klog.V(4).InfoS("Entering validateNodeUnstageVolumeRequest", "volumeID", req.GetVolumeId(), "targetPath", req.GetStagingTargetPath())
-
-	if req.GetVolumeId() == "" {
-		return errNoVolumeID
-	}
-	if req.GetStagingTargetPath() == "" {
-		return errNoStagingTargetPath
-	}
-
-	klog.V(4).InfoS("Exiting validateNodeUnstageVolumeRequest")
-	return nil
-}
-
 // ensureMountPoint checks if the target path is a mount point or not.
 // If not, it creates a directory at the target path.
 func (ns *NodeServer) ensureMountPoint(path string, fs filesystem.FileSystem) (bool, error) {
-	klog.V(4).InfoS("Entering ensureMountPoint", "path", path)
-
 	// Check if the target path is a mount point.
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(path)
 	if err != nil {
@@ -87,7 +31,6 @@ func (ns *NodeServer) ensureMountPoint(path string, fs filesystem.FileSystem) (b
 		}
 	}
 
-	klog.V(4).InfoS("Exiting ensureMountPoint", "notMnt", notMnt)
 	return notMnt, nil
 }
 
@@ -117,6 +60,5 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 		return nil, errInternal("NodePublishVolume could not mount %s at %s: %v", stagingTargetPath, targetPath, err)
 	}
 
-	klog.V(4).InfoS("Successfully published", "volumeID", volumeID)
 	return &csi.NodePublishVolumeResponse{}, nil
 }

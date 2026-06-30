@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/sys/unix"
@@ -14,14 +13,15 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 
+	util "github.com/linode/linode-filestorage-csi-driver/pkg"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/filesystem"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
 )
 
 type NodeServer struct {
-	driver  *LinodeDriver
-	mounter *mountmanager.SafeFormatAndMount
-	mux     sync.Mutex
+	driver      *LinodeDriver
+	mounter     *mountmanager.SafeFormatAndMount
+	volumeLocks *util.VolumeLocks
 
 	csi.UnimplementedNodeServer
 }
@@ -38,7 +38,11 @@ func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmana
 	if mounter == nil {
 		return nil, errNilMounter
 	}
-	return &NodeServer{driver: driver, mounter: mounter}, nil
+	return &NodeServer{
+		driver:      driver,
+		mounter:     mounter,
+		volumeLocks: util.NewVolumeLocks(),
+	}, nil
 }
 
 func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
@@ -77,22 +81,24 @@ func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstage
 
 	stagingTargetPath := req.GetStagingTargetPath()
 	volumeID := req.GetVolumeId()
-
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
-	// Validate req (NodeUnstageVolumeRequest)
-	klog.V(4).InfoS("Validating request", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
-	if err := validateNodeUnstageVolumeRequest(req); err != nil {
-		return nil, err
+	if volumeID == "" {
+		return nil, errNoVolumeID
 	}
+	if stagingTargetPath == "" {
+		return nil, errNoStagingTargetPath
+	}
+
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(stagingTargetPath)
 
 	klog.V(4).InfoS("Unmounting staging target path", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
 	if err := mount.CleanupMountPoint(stagingTargetPath, s.mounter.Interface, true /* bind mount */); err != nil {
 		return nil, errInternal("NodeUnstageVolume failed to unmount at path %s: %v", stagingTargetPath, err)
 	}
 
-	klog.V(2).InfoS("Successfully completed", "volumeID", volumeID)
+	klog.V(2).InfoS("Successfully unstaged", "volumeID", volumeID)
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
@@ -100,19 +106,29 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 	klog.V(4).InfoS("handling node rpc", "method", "NodePublishVolume")
 
 	volumeID := req.GetVolumeId()
-	klog.V(2).InfoS("Processing request", "volumeID", volumeID)
+	targetPath := req.GetTargetPath()
+	stagingTargetPath := req.GetStagingTargetPath()
 
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
-	// Validate the request object
-	klog.V(4).InfoS("Validating request", "volumeID", volumeID)
-	if err := validateNodePublishVolumeRequest(req); err != nil {
-		return nil, err
+	if volumeID == "" {
+		return nil, errNoVolumeID
+	}
+	if stagingTargetPath == "" {
+		return nil, errNoStagingTargetPath
+	}
+	if targetPath == "" {
+		return nil, errNoTargetPath
+	}
+	if req.GetVolumeCapability() == nil {
+		return nil, errNoVolumeCapability
 	}
 
+	// Acquire a lock on the target path instead of volumeID, since we do not want to serialize multiple node publish calls on the same volume.
+	if acquired := s.volumeLocks.TryAcquire(targetPath); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, targetPath)
+	}
+	defer s.volumeLocks.Release(targetPath)
+
 	// Check if target path is a valid mount point
-	targetPath := req.GetTargetPath()
 	klog.V(4).InfoS("Ensuring target path is a valid mount point", "volumeID", volumeID, "targetPath", targetPath)
 	notMnt, err := s.ensureMountPoint(targetPath, filesystem.NewFileSystem())
 	if err != nil {
@@ -123,6 +139,7 @@ func (s *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
+	klog.V(4).InfoS("Successfully published", "volumeID", volumeID)
 	return s.nodePublishVolume(req)
 }
 
@@ -131,16 +148,19 @@ func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpub
 
 	targetPath := req.GetTargetPath()
 	volumeID := req.GetVolumeId()
+	if volumeID == "" {
+		return nil, errNoVolumeID
+	}
+	if targetPath == "" {
+		return nil, errNoTargetPath
+	}
 	klog.V(2).InfoS("Processing request", "volumeID", volumeID, "targetPath", targetPath)
 
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
-	klog.V(4).InfoS("Validating request", "volumeID", volumeID, "targetPath", targetPath)
-
-	if err := validateNodeUnpublishVolumeRequest(req); err != nil {
-		return nil, err
+	// Acquire a lock on the target path instead of volumeID, since we do not want to serialize multiple node unpublish calls on the same volume.
+	if acquired := s.volumeLocks.TryAcquire(targetPath); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, targetPath)
 	}
+	defer s.volumeLocks.Release(targetPath)
 
 	// Unmount the target path and delete the remaining directory
 	klog.V(4).InfoS("Unmounting and deleting target path", "volumeID", volumeID, "targetPath", targetPath)
@@ -148,7 +168,7 @@ func (s *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpub
 		return nil, errInternal("NodeUnpublishVolume could not unmount %s: %v", targetPath, err)
 	}
 
-	klog.V(2).InfoS("Successfully completed", "volumeID", volumeID, "targetPath", targetPath)
+	klog.V(2).InfoS("Successfully unpublished", "volumeID", volumeID, "targetPath", targetPath)
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
@@ -161,7 +181,6 @@ func (s *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVol
 	if req.GetVolumeId() == "" {
 		return nil, errNoVolumeID
 	}
-
 	if req.GetVolumePath() == "" {
 		return nil, errNoVolumePath
 	}
