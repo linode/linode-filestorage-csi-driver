@@ -91,7 +91,7 @@ func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstage
 	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
 		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
 	}
-	defer s.volumeLocks.Release(stagingTargetPath)
+	defer s.volumeLocks.Release(volumeID)
 
 	klog.V(4).InfoS("Unmounting staging target path", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
 	if err := mount.CleanupMountPoint(stagingTargetPath, s.mounter.Interface, true /* bind mount */); err != nil {
