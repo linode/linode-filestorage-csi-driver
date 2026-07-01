@@ -194,7 +194,7 @@ func TestNodeStageVolume(t *testing.T) {
 			VolumeCapability: &csi.VolumeCapability{
 				AccessType: &csi.VolumeCapability_Mount{
 					Mount: &csi.VolumeCapability_MountVolume{
-						FsType:     "nfs4",
+						FsType:     nfsFilesystemType,
 						MountFlags: mountFlags,
 					},
 				},
@@ -218,7 +218,7 @@ func TestNodeStageVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				},
 			},
@@ -233,7 +233,7 @@ func TestNodeStageVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				},
 			},
@@ -278,7 +278,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "nconnect=8"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "nconnect=8"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -297,8 +297,8 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -317,7 +317,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -336,8 +336,8 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard"}).Return(errors.New("plain mount failed")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard"}).Return(errors.New("plain mount failed")),
 				)
 			},
 			wantCode: codes.Internal,
@@ -356,7 +356,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -372,7 +372,7 @@ func TestNodeStageVolume(t *testing.T) {
 				m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(false, nil)
 				m.EXPECT().List().AnyTimes().Return([]mount.MountPoint{{
 					Device: "nfs.server.linode.com:/fs-id",
-					Type:   "nfs4",
+					Type:   nfsFilesystemType,
 				}}, nil)
 			},
 			wantCode: codes.OK,
@@ -479,7 +479,7 @@ func TestNodePublishVolume(t *testing.T) {
 				StagingTargetPath: "/tmp/staging",
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				},
 				Readonly: true,
@@ -501,7 +501,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				}},
 			expectedError: errNoVolumeID,
@@ -517,7 +517,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				}},
 			expectedError: errNoStagingTargetPath,
@@ -533,7 +533,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: nfsFilesystemType},
 					},
 				}},
 			expectedError: errNoTargetPath,

@@ -174,7 +174,7 @@ func TestNodeServer_nodePublishVolume(t *testing.T) {
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
 						Mount: &csi.VolumeCapability_MountVolume{
-							FsType:     "nfs4",
+							FsType:     nfsFilesystemType,
 							MountFlags: []string{"vers=4", "proto=tcp", "retrans"},
 						},
 					},
@@ -183,7 +183,7 @@ func TestNodeServer_nodePublishVolume(t *testing.T) {
 			},
 			resp: &csi.NodePublishVolumeResponse{},
 			mntExpects: func(m *mocks.MockMounter) {
-				m.EXPECT().Mount("/tmp/staging", "/tmp/target", "nfs4", []string{"bind", "vers=4", "proto=tcp", "retrans", "ro"}).Return(nil)
+				m.EXPECT().Mount("/tmp/staging", "/tmp/target", nfsFilesystemType, []string{"bind", "vers=4", "proto=tcp", "retrans", "ro"}).Return(nil)
 			},
 			wantErr: nil,
 		},
@@ -199,14 +199,14 @@ func TestNodeServer_nodePublishVolume(t *testing.T) {
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
 						Mount: &csi.VolumeCapability_MountVolume{
-							FsType:     "nfs4",
+							FsType:     nfsFilesystemType,
 							MountFlags: []string{"vers=4", "proto=tcp", "retrans"},
 						},
 					},
 				},
 			},
 			mntExpects: func(m *mocks.MockMounter) {
-				m.EXPECT().Mount("/tmp/staging", "/tmp/target", "nfs4", []string{"bind", "vers=4", "proto=tcp", "retrans"}).Return(errors.New("mount failed"))
+				m.EXPECT().Mount("/tmp/staging", "/tmp/target", nfsFilesystemType, []string{"bind", "vers=4", "proto=tcp", "retrans"}).Return(errors.New("mount failed"))
 			},
 			wantErr: errInternal("NodePublishVolume could not mount %s at %s: %v", "/tmp/staging", "/tmp/target", errors.New("mount failed")),
 		},

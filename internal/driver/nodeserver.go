@@ -28,7 +28,10 @@ type NodeServer struct {
 
 var _ csi.NodeServer = &NodeServer{}
 
-const bindMountOption = "bind"
+const (
+	bindMountOption   = "bind"
+	nfsFilesystemType = "nfs4"
+)
 
 func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, volumeLocks *util.VolumeLocks) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
