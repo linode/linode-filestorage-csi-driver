@@ -194,7 +194,7 @@ func TestNodeStageVolume(t *testing.T) {
 			VolumeCapability: &csi.VolumeCapability{
 				AccessType: &csi.VolumeCapability_Mount{
 					Mount: &csi.VolumeCapability_MountVolume{
-						FsType:     "nfs",
+						FsType:     "nfs4",
 						MountFlags: mountFlags,
 					},
 				},
@@ -218,7 +218,7 @@ func TestNodeStageVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				},
 			},
@@ -233,7 +233,7 @@ func TestNodeStageVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				},
 			},
@@ -479,7 +479,7 @@ func TestNodePublishVolume(t *testing.T) {
 				StagingTargetPath: "/tmp/staging",
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				},
 				Readonly: true,
@@ -501,7 +501,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				}},
 			expectedError: errNoVolumeID,
@@ -517,7 +517,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				}},
 			expectedError: errNoStagingTargetPath,
@@ -533,7 +533,7 @@ func TestNodePublishVolume(t *testing.T) {
 				},
 				VolumeCapability: &csi.VolumeCapability{
 					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs4"},
 					},
 				}},
 			expectedError: errNoTargetPath,

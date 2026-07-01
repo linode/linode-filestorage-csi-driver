@@ -52,7 +52,7 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	// Mount stagingTargetPath to targetPath
 	klog.V(4).InfoS("Mounting volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath, "targetPath", targetPath, "options", options)
 	// Do we need to consider any sensitive mount options?
-	if err := ns.mounter.Mount(stagingTargetPath, targetPath, "nfs", options); err != nil {
+	if err := ns.mounter.Mount(stagingTargetPath, targetPath, "nfs4", options); err != nil {
 		klog.Errorf("Mount %q failed for volumeID %s, cleaning up", targetPath, volumeID)
 		if unmntErr := mount.CleanupMountPoint(stagingTargetPath, ns.mounter, false /* extensiveMountPointCheck */); unmntErr != nil {
 			klog.Errorf("Unmount %q failed on volumeID %s: %v", targetPath, volumeID, unmntErr.Error())
