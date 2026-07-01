@@ -16,8 +16,8 @@ import (
 	"k8s.io/utils/mount"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
-	util "github.com/linode/linode-filestorage-csi-driver/pkg"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 func defaultNodeServer(t *testing.T) (*NodeServer, *mocks.MockMounter) {
@@ -70,7 +70,7 @@ func TestNewNodeServer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nodeServer, err := NewNodeServer(context.Background(), tt.driver, tt.mounter)
+			nodeServer, err := NewNodeServer(context.Background(), tt.driver, tt.mounter, util.NewVolumeLocks())
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("NewNodeServer() code = %v, want %v", status.Code(err), tt.wantErr)
 			}

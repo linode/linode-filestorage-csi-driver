@@ -12,15 +12,17 @@ import (
 	"k8s.io/klog/v2"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 type ControllerServer struct {
-	driver *LinodeDriver
-	client linodeclient.LinodeClient
+	driver      *LinodeDriver
+	client      linodeclient.LinodeClient
+	volumeLocks *util.VolumeLocks
 	csi.UnimplementedControllerServer
 }
 
-func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linodeclient.LinodeClient) (*ControllerServer, error) {
+func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linodeclient.LinodeClient, volumeLocks *util.VolumeLocks) (*ControllerServer, error) {
 	klog.V(4).InfoS("creating controller server")
 	if driver == nil {
 		return nil, errNilDriver
@@ -28,7 +30,11 @@ func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linod
 	if client == nil {
 		return nil, errLinodeClientNotFound
 	}
-	return &ControllerServer{driver: driver, client: client}, nil
+	return &ControllerServer{
+		driver:      driver,
+		client:      client,
+		volumeLocks: volumeLocks,
+	}, nil
 }
 
 func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -292,9 +298,49 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateSnapshot")
 
-	// Future implementation will create a backend-native snapshot when the managed file storage API supports it.
-	_ = req
-	return nil, errNotImplemented
+	volumeID := req.GetSourceVolumeId()
+	if volumeID == "" {
+		return nil, errNoVolumeID
+	}
+
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
+
+	var snapshotResponse *csi.CreateSnapshotResponse
+
+	handle, err := parseVolumeHandle(volumeID)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
+		Label: req.GetName(),
+	})
+	if err != nil {
+		return nil, linodeError(err, "create NFS snapshot")
+	}
+
+	readyToUse := snapshot.Status == linodego.NFSSnapshotStatusActive
+
+	tp, err := util.ParseTimestamp(snapshot.Created)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse snapshot created time: %s", err)
+	}
+
+	snapshotResponse = &csi.CreateSnapshotResponse{
+		Snapshot: &csi.Snapshot{
+			SizeBytes:      snapshot.SizeBytes,
+			SnapshotId:     snapshot.ID,
+			SourceVolumeId: volumeID,
+			CreationTime:   tp,
+			ReadyToUse:     readyToUse,
+		},
+	}
+	klog.V(4).Infof("CreateSnapshot succeeded for volume %v, Backup ID: %v", volumeID, snapshot.ID)
+
+	return snapshotResponse, nil
 }
 
 func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {

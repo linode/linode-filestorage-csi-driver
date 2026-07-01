@@ -10,6 +10,7 @@ import (
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 const Name = "linodefs.csi.linode.com"
@@ -83,13 +84,13 @@ func (d *LinodeDriver) SetupLinodeDriver(
 
 	switch role {
 	case RoleController:
-		cs, err := NewControllerServer(ctx, d, client)
+		cs, err := NewControllerServer(ctx, d, client, util.NewVolumeLocks())
 		if err != nil {
 			return fmt.Errorf("new controller server: %w", err)
 		}
 		d.cs = cs
 	case RoleNode:
-		ns, err := NewNodeServer(ctx, d, mounter)
+		ns, err := NewNodeServer(ctx, d, mounter, util.NewVolumeLocks())
 		if err != nil {
 			return fmt.Errorf("new node server: %w", err)
 		}

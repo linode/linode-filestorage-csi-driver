@@ -13,9 +13,9 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 
-	util "github.com/linode/linode-filestorage-csi-driver/pkg"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/filesystem"
 	mountmanager "github.com/linode/linode-filestorage-csi-driver/pkg/mount-manager"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 type NodeServer struct {
@@ -30,7 +30,7 @@ var _ csi.NodeServer = &NodeServer{}
 
 const bindMountOption = "bind"
 
-func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount) (*NodeServer, error) {
+func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, volumeLocks *util.VolumeLocks) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
 	if driver == nil {
 		return nil, errNilDriver
@@ -41,7 +41,7 @@ func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmana
 	return &NodeServer{
 		driver:      driver,
 		mounter:     mounter,
-		volumeLocks: util.NewVolumeLocks(),
+		volumeLocks: volumeLocks,
 	}, nil
 }
 

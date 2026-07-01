@@ -2,22 +2,30 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 const testVolumeID = "nfss-123abc/fs-12345678"
+
+var (
+	timestamp = ptr.To(time.Now())
+)
 
 type controllerTestEnv struct {
 	client *mocks.MockLinodeClient
@@ -36,8 +44,9 @@ func newControllerTestEnv(t *testing.T) controllerTestEnv {
 		client: client,
 		kube:   kubeClient,
 		server: &ControllerServer{
-			driver: &LinodeDriver{metadata: metadataSvc},
-			client: client,
+			driver:      &LinodeDriver{metadata: metadataSvc},
+			client:      client,
+			volumeLocks: util.NewVolumeLocks(),
 		},
 	}
 }
@@ -724,6 +733,75 @@ func TestControllerGetCapabilities(t *testing.T) {
 	}
 }
 
+func TestControllerServerCreateSnapshot(t *testing.T) {
+	tests := []struct {
+		name         string
+		request      *csi.CreateSnapshotRequest
+		wantResponse *csi.CreateSnapshotResponse
+		setup        func(controllerTestEnv)
+		wantErr      error
+	}{
+		{
+			name: "creates a snapshot successfully",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           testVolumeID,
+			},
+			wantResponse: &csi.CreateSnapshotResponse{
+				Snapshot: &csi.Snapshot{
+					SizeBytes:      1000,
+					SnapshotId:     testVolumeID,
+					SourceVolumeId: testVolumeID,
+					CreationTime:   timestamppb.New(*timestamp),
+					ReadyToUse:     true,
+				},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), "nfss-123abc", "fs-12345678", linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
+					Return(&linodego.NFSSnapshot{
+						Status:    linodego.NFSSnapshotStatusActive,
+						Created:   timestamp,
+						ID:        testVolumeID,
+						SizeBytes: 1000,
+					}, nil)
+			},
+		},
+		{
+			name: "api error on snapshot creation",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           testVolumeID,
+			},
+			wantErr: linodeError(&linodego.Error{Code: http.StatusBadGateway}, "create NFS snapshot"),
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), "nfss-123abc", "fs-12345678", linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
+					Return(nil, &linodego.Error{Code: http.StatusBadGateway})
+			},
+		},
+		{
+			name:    "no source volume",
+			request: &csi.CreateSnapshotRequest{},
+			wantErr: errNoVolumeID,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.CreateSnapshot(context.Background(), tt.request)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ControllerCreateSnapshot() error = %v, want %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(response, tt.wantResponse) {
+				t.Fatalf("ControllerCreateSnapshot() response = %v, want %v", response, tt.wantResponse)
+			}
+		})
+	}
+}
+
 func TestControllerServerUnimplementedRPCs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -739,10 +817,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "ListVolumes", call: func(server *ControllerServer) error {
 			_, err := server.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			return err
-		}},
-		{name: "CreateSnapshot", call: func(server *ControllerServer) error {
-			_, err := server.CreateSnapshot(context.Background(), &csi.CreateSnapshotRequest{})
 			return err
 		}},
 		{name: "DeleteSnapshot", call: func(server *ControllerServer) error {
