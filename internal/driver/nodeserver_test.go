@@ -9,6 +9,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	metadataapi "github.com/linode/go-metadata"
+	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
@@ -165,10 +166,6 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 		name string
 		call func(*NodeServer) error
 	}{
-		{name: "NodeStageVolume", call: func(server *NodeServer) error {
-			_, err := server.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{})
-			return err
-		}},
 		{name: "NodeExpandVolume", call: func(server *NodeServer) error {
 			_, err := server.NodeExpandVolume(context.Background(), &csi.NodeExpandVolumeRequest{})
 			return err
@@ -182,6 +179,276 @@ func TestNodeServerUnimplementedRPCs(t *testing.T) {
 			err := tt.call(server)
 			if status.Code(err) != codes.Unimplemented {
 				t.Fatalf("%s code = %v, want %v", tt.name, status.Code(err), codes.Unimplemented)
+			}
+		})
+	}
+}
+
+func TestNodeStageVolume(t *testing.T) {
+	newRequest := func(stagingTargetPath string, volumeContext, secrets map[string]string, mountFlags ...string) *csi.NodeStageVolumeRequest {
+		return &csi.NodeStageVolumeRequest{
+			VolumeId:          "nfss-123abc/fs-12345678",
+			StagingTargetPath: stagingTargetPath,
+			VolumeContext:     volumeContext,
+			Secrets:           secrets,
+			VolumeCapability: &csi.VolumeCapability{
+				AccessType: &csi.VolumeCapability_Mount{
+					Mount: &csi.VolumeCapability_MountVolume{
+						FsType:     "nfs",
+						MountFlags: mountFlags,
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name               string
+		req                *csi.NodeStageVolumeRequest
+		setup              func(*NodeServer)
+		expectMounterCalls func(*mocks.MockMounter)
+		wantCode           codes.Code
+	}{
+		{
+			name: "missing volume id is invalid",
+			req: &csi.NodeStageVolumeRequest{
+				StagingTargetPath: t.TempDir(),
+				VolumeContext: map[string]string{
+					volumeContextMountTarget: "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "missing staging target path is invalid",
+			req: &csi.NodeStageVolumeRequest{
+				VolumeId: "nfss-123abc/fs-12345678",
+				VolumeContext: map[string]string{
+					volumeContextMountTarget: "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{FsType: "nfs"},
+					},
+				},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "missing volume capability is invalid",
+			req: &csi.NodeStageVolumeRequest{
+				VolumeId:          "nfss-123abc/fs-12345678",
+				StagingTargetPath: t.TempDir(),
+				VolumeContext: map[string]string{
+					volumeContextMountTarget: "nfs.server.linode.com:/fs-id",
+				},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "non-mount volume capability is invalid",
+			req: &csi.NodeStageVolumeRequest{
+				VolumeId:          "nfss-123abc/fs-12345678",
+				StagingTargetPath: t.TempDir(),
+				VolumeContext: map[string]string{
+					volumeContextMountTarget: "nfs.server.linode.com:/fs-id",
+				},
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Block{
+						Block: &csi.VolumeCapability_BlockVolume{},
+					},
+				},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "mounts staging target from volume context",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+				"hard",
+				"nconnect=8",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "nconnect=8"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "optional mtls without node mtls support falls back to plain mount",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{
+					volumeContextMountTarget:   "nfs.server.linode.com:/fs-id",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+				},
+				nil,
+				"hard",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "optional mtls succeeds on first tls mount",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{
+					volumeContextMountTarget:   "nfs.server.linode.com:/fs-id",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+				},
+				nil,
+				"hard",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "optional mtls returns error when tls and plain mounts fail",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{
+					volumeContextMountTarget:   "nfs.server.linode.com:/fs-id",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+				},
+				nil,
+				"hard",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard"}).Return(errors.New("plain mount failed")),
+				)
+			},
+			wantCode: codes.Internal,
+		},
+		{
+			name: "required mtls adds tls mount option",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{
+					volumeContextMountTarget:   "nfs.server.linode.com:/fs-id",
+					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
+				},
+				nil,
+				"hard",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), "nfs4", []string{"hard", "xprtsec=mtls"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "already staged mount is a no-op",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(false, nil)
+				m.EXPECT().List().AnyTimes().Return([]mount.MountPoint{{
+					Device: "nfs.server.linode.com:/fs-id",
+					Type:   "nfs4",
+				}}, nil)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "volume lock contention returns aborted",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+			),
+			setup: func(ns *NodeServer) {
+				ns.volumeLocks.TryAcquire("nfss-123abc/fs-12345678")
+			},
+			wantCode: codes.Aborted,
+		},
+		{
+			name: "missing mount target is invalid",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{},
+				nil,
+			),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "unknown mtls mode is invalid",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{
+					volumeContextMountTarget:   "nfs.server.linode.com:/fs-id",
+					volumeContextSpaceMTLSMode: "surprising",
+				},
+				nil,
+			),
+			wantCode: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockMounter := mocks.NewMockMounter(ctrl)
+			mockExec := mocks.NewMockExecutor(ctrl)
+			if tt.expectMounterCalls != nil {
+				tt.expectMounterCalls(mockMounter)
+			}
+
+			ns := &NodeServer{
+				driver: &LinodeDriver{},
+				mounter: &mountmanager.SafeFormatAndMount{
+					SafeFormatAndMount: &mount.SafeFormatAndMount{
+						Interface: mockMounter,
+						Exec:      mockExec,
+					},
+				},
+				volumeLocks: util.NewVolumeLocks(),
+			}
+			if tt.setup != nil {
+				tt.setup(ns)
+			}
+
+			resp, err := ns.NodeStageVolume(context.Background(), tt.req)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("NodeStageVolume() code = %v, want %v (err=%v)", status.Code(err), tt.wantCode, err)
+			}
+			if tt.wantCode == codes.OK {
+				if resp == nil {
+					t.Fatal("NodeStageVolume() response = nil, want non-nil")
+				}
+				return
+			}
+			if resp != nil {
+				t.Fatalf("NodeStageVolume() response = %v, want nil", resp)
 			}
 		})
 	}
