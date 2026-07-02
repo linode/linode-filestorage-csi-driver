@@ -52,7 +52,7 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	// Mount stagingTargetPath to targetPath
 	klog.V(4).InfoS("Mounting volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath, "targetPath", targetPath, "options", options)
 	// Do we need to consider any sensitive mount options?
-	if err := ns.mounter.Mount(stagingTargetPath, targetPath, "nfs", options); err != nil {
+	if err := ns.mounter.Mount(stagingTargetPath, targetPath, nfsFilesystemType, options); err != nil {
 		klog.Errorf("Mount %q failed for volumeID %s, cleaning up", targetPath, volumeID)
 		if unmntErr := mount.CleanupMountPoint(stagingTargetPath, ns.mounter, false /* extensiveMountPointCheck */); unmntErr != nil {
 			klog.Errorf("Unmount %q failed on volumeID %s: %v", targetPath, volumeID, unmntErr.Error())
@@ -61,4 +61,43 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	}
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+	stagingTargetPath := req.GetStagingTargetPath()
+	volumeID := req.GetVolumeId()
+
+	klog.V(4).InfoS("Staging volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
+
+	source := req.GetVolumeContext()["mount-target"]
+	mtlsMode := req.GetVolumeContext()["mtls-mode"]
+	options := req.GetVolumeCapability().GetMount().GetMountFlags()
+	switch mtlsMode {
+	case "required":
+		options = append(options, "xprtsec=mtls")
+	case "optional":
+		mtlsOptions := append(append([]string{}, options...), "xprtsec=mtls")
+		// TODO(moshevayner): Once the NFS service is ready, add a check for the error type to determine if the error is due to mTLS being required and failing, or if it's a different error. This would allow us to differentiate between a failed mTLS mount and other mount errors.
+		if err := s.mounter.Mount(source, stagingTargetPath, nfsFilesystemType, mtlsOptions); err == nil {
+			klog.V(4).InfoS("Successfully staged with mTLS", "volumeID", volumeID)
+			return &csi.NodeStageVolumeResponse{}, nil
+		}
+		klog.V(2).InfoS("Optional mTLS mount failed, retrying without mTLS", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
+	}
+
+	if err := s.mounter.Mount(source, stagingTargetPath, nfsFilesystemType, options); err != nil {
+		return nil, errInternal("NodeStageVolume failed to stage volume %s at path %s: %v", volumeID, stagingTargetPath, err)
+	}
+
+	klog.V(4).InfoS("Successfully staged", "volumeID", volumeID)
+	return &csi.NodeStageVolumeResponse{}, nil
+}
+
+func allowedMTLSMode(mode string) bool {
+	switch mode {
+	case "required", "optional", "disabled":
+		return true
+	default:
+		return false
+	}
 }

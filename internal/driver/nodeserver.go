@@ -28,7 +28,10 @@ type NodeServer struct {
 
 var _ csi.NodeServer = &NodeServer{}
 
-const bindMountOption = "bind"
+const (
+	bindMountOption   = "bind"
+	nfsFilesystemType = "nfs4"
+)
 
 func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, volumeLocks *util.VolumeLocks) (*NodeServer, error) {
 	klog.V(4).InfoS("creating node server")
@@ -71,9 +74,46 @@ func (s *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCa
 func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	klog.V(4).InfoS("handling node rpc", "method", "NodeStageVolume")
 
-	// Future implementation will mount server:/exportPath to the kubelet staging target.
-	_ = req
-	return nil, errNotImplemented
+	volumeID := req.GetVolumeId()
+	stagingTargetPath := req.GetStagingTargetPath()
+
+	if volumeID == "" {
+		return nil, errNoVolumeID
+	}
+	if stagingTargetPath == "" {
+		return nil, errNoStagingTargetPath
+	}
+	if req.GetVolumeCapability() == nil {
+		return nil, errNoVolumeCapability
+	}
+	if req.GetVolumeCapability().GetMount() == nil {
+		return nil, errNoMountVolumeCapability
+	}
+	if req.GetVolumeContext()["mount-target"] == "" {
+		return nil, errNoVolumeContextMountTarget
+	}
+	if req.GetVolumeContext()["mtls-mode"] != "" && !allowedMTLSMode(req.GetVolumeContext()["mtls-mode"]) {
+		return nil, errInvalidMTLSMode
+	}
+
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
+
+	// Check if target path is a valid mount point
+	klog.V(4).InfoS("Ensuring target path is a valid mount point", "volumeID", volumeID, "targetPath", stagingTargetPath)
+	notMnt, err := s.ensureMountPoint(stagingTargetPath, filesystem.NewFileSystem())
+	if err != nil {
+		return nil, err
+	}
+	if !notMnt {
+		klog.V(4).InfoS("Target path is already a mount point", "volumeID", volumeID, "targetPath", stagingTargetPath)
+		return &csi.NodeStageVolumeResponse{}, nil
+	}
+
+	klog.V(4).InfoS("Staging volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
+	return s.nodeStageVolume(req)
 }
 
 func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
