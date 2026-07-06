@@ -42,7 +42,7 @@ type NodeMetadata struct {
 // state.
 type ClusterMetadata struct {
 	Region string
-	VPCID  string
+	VPCID  int
 }
 
 type InstanceMetadataClient interface {
@@ -229,30 +229,29 @@ func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) 
 	return ClusterMetadata{Region: region, VPCID: vpcID}, nil
 }
 
-func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (string, error) {
+func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, error) {
 	interfaces, err := s.linodeClient.ListInterfaces(ctx, linodeID, nil)
 	if err != nil {
-		return "", fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
+		return 0, fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
 	}
 
-	vpcID := ""
+	vpcID := 0
 	for i := range interfaces {
 		iface := &interfaces[i]
 		if iface.VPC == nil || iface.VPC.VPCID == 0 {
 			continue
 		}
 
-		current := strconv.Itoa(iface.VPC.VPCID)
-		if vpcID == "" {
-			vpcID = current
+		if vpcID == 0 {
+			vpcID = iface.VPC.VPCID
 			continue
 		}
-		if current != vpcID {
-			return "", fmt.Errorf("linode %d has multiple VPCs: %q and %q", linodeID, vpcID, current)
+		if iface.VPC.VPCID != vpcID {
+			return 0, fmt.Errorf("linode %d has multiple VPCs: %d and %d", linodeID, vpcID, iface.VPC.VPCID)
 		}
 	}
-	if vpcID == "" {
-		return "", errClusterVPCNotFound
+	if vpcID == 0 {
+		return 0, errClusterVPCNotFound
 	}
 
 	return vpcID, nil
