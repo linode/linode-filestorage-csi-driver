@@ -76,6 +76,9 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
 			return nil, err
 		}
+		if err := validateFilesystemMountTarget(existing); err != nil {
+			return nil, err
+		}
 		spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
 		if err != nil {
 			return nil, err
@@ -105,8 +108,12 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeError(err, "create NFS filesystem")
 	}
 
-	if params.rootSquashSet {
-		if err := s.setInitialRootSquash(ctx, filesystem.SpaceID, filesystem.ID, params.rootSquash); err != nil {
+	if err := validateFilesystemMountTarget(filesystem); err != nil {
+		return nil, err
+	}
+
+	if params.squashPolicySet {
+		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
 			return nil, err
 		}
 	}
@@ -235,6 +242,9 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
 	}
+	if err := validateFilesystemMountTarget(filesystem); err != nil {
+		return nil, err
+	}
 
 	return &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
@@ -289,6 +299,9 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	filesystem, err := s.client.GetNFSFilesystem(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID))
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
+	}
+	if err := validateFilesystemMountTarget(filesystem); err != nil {
+		return nil, err
 	}
 
 	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID))

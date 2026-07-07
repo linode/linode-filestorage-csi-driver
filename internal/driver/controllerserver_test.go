@@ -189,6 +189,42 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 		wantMessage string
 	}{
 		{
+			name: "fails when created filesystem lacks mount target",
+			request: &csi.CreateVolumeRequest{
+				Name:               "pvc-abc",
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return(nil, nil)
+				expectSpaceVPCAssociation(env, "123", "space-policy", 123456, linodego.NFSMTLSModeRequired)
+				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), "123", gomock.Any()).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
+			},
+			wantCode:    codes.FailedPrecondition,
+			wantMessage: "NFS filesystem 456 does not have a mount target",
+		},
+		{
+			name: "fails when existing filesystem lacks mount target",
+			request: &csi.CreateVolumeRequest{
+				Name:               "pvc-abc",
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}}, nil)
+			},
+			wantCode:    codes.AlreadyExists,
+			wantMessage: "NFS filesystem \"pvc-abc\" already exists with incompatible parameters",
+		},
+		{
 			name: "fails when label matches multiple spaces",
 			request: &csi.CreateVolumeRequest{
 				Name:               "pvc-abc",

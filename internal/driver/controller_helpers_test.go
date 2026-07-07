@@ -30,10 +30,10 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 				storageClassParamRootSquash: string(linodego.NFSSquashPolicyRootSquash),
 			},
 			want: createVolumeParameters{
-				spaceID:       123,
-				tags:          []string{"tag-a", "tag-b"},
-				rootSquash:    linodego.NFSSquashPolicyRootSquash,
-				rootSquashSet: true,
+				spaceID:         123,
+				tags:            []string{"tag-a", "tag-b"},
+				squashPolicy:    linodego.NFSSquashPolicyRootSquash,
+				squashPolicySet: true,
 			},
 		},
 		{
@@ -409,7 +409,7 @@ func TestPtrToBool(t *testing.T) {
 	}
 }
 
-func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
+func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 	policy := &linodego.NFSFilesystemAccessPolicy{
 		Label:        "policy-a",
 		Enabled:      false,
@@ -418,7 +418,7 @@ func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
 		Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 	}
 
-	got := filesystemPolicyRootSquashUpdate(policy, linodego.NFSSquashPolicyRootSquash)
+	got := filesystemPolicySquashPolicyUpdate(policy, linodego.NFSSquashPolicyRootSquash)
 	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:        ptr.To("policy-a"),
 		Enabled:      ptr.To(false),
@@ -427,6 +427,6 @@ func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
 		Protocols:    ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("filesystemPolicyRootSquashUpdate() = %#v, want %#v", got, want)
+		t.Fatalf("filesystemPolicySquashPolicyUpdate() = %#v, want %#v", got, want)
 	}
 }

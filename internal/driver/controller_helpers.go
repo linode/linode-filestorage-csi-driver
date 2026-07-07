@@ -29,12 +29,12 @@ const (
 )
 
 type createVolumeParameters struct {
-	region        string
-	spaceID       int
-	spaceLabel    string
-	tags          []string
-	rootSquash    linodego.NFSSquashPolicy
-	rootSquashSet bool
+	region          string
+	spaceID         int
+	spaceLabel      string
+	tags            []string
+	squashPolicy    linodego.NFSSquashPolicy
+	squashPolicySet bool
 }
 
 type volumeHandle struct {
@@ -67,8 +67,8 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 		mode := linodego.NFSSquashPolicy(value)
 		switch mode {
 		case linodego.NFSSquashPolicyNone, linodego.NFSSquashPolicyRootSquash, linodego.NFSSquashPolicyAllSquash:
-			parsed.rootSquash = mode
-			parsed.rootSquashSet = true
+			parsed.squashPolicy = mode
+			parsed.squashPolicySet = true
 		default:
 			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "unsupported filesystem-root-squash value %q", value)
 		}
@@ -200,6 +200,13 @@ func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode
 	}
 }
 
+func validateFilesystemMountTarget(filesystem *linodego.NFSFilesystem) error {
+	if filesystemMountTarget(filesystem) == "" {
+		return status.Errorf(codes.FailedPrecondition, "NFS filesystem %d does not have a mount target", filesystem.ID)
+	}
+	return nil
+}
+
 func csiControllerVolumeStatus(policy *linodego.NFSFilesystemAccessPolicy) *csi.ControllerGetVolumeResponse_VolumeStatus {
 	if !policy.Enabled {
 		return &csi.ControllerGetVolumeResponse_VolumeStatus{}
@@ -288,9 +295,9 @@ func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled 
 	return options
 }
 
-func filesystemPolicyRootSquashUpdate(policy *linodego.NFSFilesystemAccessPolicy, rootSquash linodego.NFSSquashPolicy) linodego.NFSFilesystemAccessPolicyUpdateOptions {
+func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, squashPolicy linodego.NFSSquashPolicy) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	options := filesystemPolicyUpdate(policy, policy.Enabled, filesystemPolicyLinodeIDs(policy))
-	options.SquashPolicy = ptr.To(rootSquash)
+	options.SquashPolicy = ptr.To(squashPolicy)
 	return options
 }
 
@@ -348,7 +355,7 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 	if !slices.Equal(filesystem.Tags, params.tags) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
 	}
-	if !params.rootSquashSet {
+	if !params.squashPolicySet {
 		return nil
 	}
 
@@ -356,7 +363,7 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
-	if policy.SquashPolicy != params.rootSquash {
+	if policy.SquashPolicy != params.squashPolicy {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible root squash policy", filesystem.Label)
 	}
 	return nil
@@ -422,16 +429,16 @@ func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet
 	return ids
 }
 
-func (s *ControllerServer) setInitialRootSquash(ctx context.Context, spaceID, filesystemID int, rootSquash linodego.NFSSquashPolicy) error {
+func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, filesystemID int, squashPolicy linodego.NFSSquashPolicy) error {
 	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID))
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
-	if policy.SquashPolicy == rootSquash {
+	if policy.SquashPolicy == squashPolicy {
 		return nil
 	}
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), filesystemPolicyRootSquashUpdate(policy, rootSquash)); err != nil {
-		return linodeError(err, "update NFS filesystem root squash")
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
+		return linodeError(err, "update NFS filesystem squash policy")
 	}
 	return nil
 }
