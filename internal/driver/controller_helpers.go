@@ -2,11 +2,13 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -14,6 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
+
+const waitTimeout = 5 * time.Minute
 
 const (
 	storageClassParamSpaceID    = "space-id"
@@ -269,6 +273,23 @@ func linodeError(err error, message string) error {
 	}
 }
 
+func linodeWaitError(err error, message string) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return status.Errorf(codes.Canceled, "%s: %v", message, err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return status.Errorf(codes.DeadlineExceeded, "%s: %v", message, err)
+	}
+	return linodeError(err, message)
+}
+
+func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, waitTimeout)
+}
+
 func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions, error) {
 	filter := linodego.Filter{}
 	for key, value := range fields {
@@ -342,7 +363,7 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID i
 		return nil, false, nil
 	case 1:
 		filesystem := &filesystems[0]
-		if filesystem.Label != label || filesystem.Region != region || filesystem.SpaceID != spaceID || filesystemMountTarget(filesystem) == "" {
+		if filesystem.Label != label || filesystem.Region != region || filesystem.SpaceID != spaceID {
 			return nil, false, status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible parameters", label)
 		}
 		return filesystem, true, nil
@@ -412,6 +433,11 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	}); err != nil {
 		return linodeError(err, "update NFS space access policy")
 	}
+	waitCtx, cancel := waitContext(ctx)
+	defer cancel()
+	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), linodego.NFSAccessPolicyStatusActive); err != nil {
+		return linodeWaitError(err, "wait for NFS space access policy active")
+	}
 	return nil
 }
 
@@ -439,6 +465,11 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 	}
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
 		return linodeError(err, "update NFS filesystem squash policy")
+	}
+	waitCtx, cancel := waitContext(ctx)
+	defer cancel()
+	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+		return linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 	return nil
 }
