@@ -73,10 +73,8 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, err
 	}
 	if found {
-		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
-			return nil, err
-		}
-		if err := validateFilesystemMountTarget(existing); err != nil {
+		existing, err = s.readyExistingFilesystem(ctx, existing, &params)
+		if err != nil {
 			return nil, err
 		}
 		spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
@@ -106,6 +104,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	filesystem, err := s.client.CreateNFSFilesystem(ctx, strconv.Itoa(space.ID), createOptions)
 	if err != nil {
 		return nil, linodeError(err, "create NFS filesystem")
+	}
+	filesystem, err = s.client.WaitForNFSFilesystemStatus(ctx, strconv.Itoa(filesystem.SpaceID), strconv.Itoa(filesystem.ID), linodego.NFSFilesystemStatusActive)
+	if err != nil {
+		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
@@ -170,12 +172,18 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), filesystemPolicyUpdate(policy, true, linodeIDs)); err != nil {
 			return nil, linodeError(err, "update NFS filesystem access policy")
 		}
+		if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+			return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
+		}
 		return &csi.ControllerPublishVolumeResponse{}, nil
 	}
 
 	linodeIDs = append(linodeIDs, linodeID)
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), filesystemPolicyUpdate(policy, true, linodeIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
+	}
+	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+		return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 
 	return &csi.ControllerPublishVolumeResponse{}, nil
@@ -212,6 +220,9 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 	})
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), filesystemPolicyUpdate(policy, policy.Enabled, updatedIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
+	}
+	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+		return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
@@ -340,6 +351,10 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 	})
 	if err != nil {
 		return nil, linodeError(err, "create NFS snapshot")
+	}
+	snapshot, err = s.client.WaitForNFSSnapshotStatus(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID), strconv.Itoa(snapshot.ID), linodego.NFSSnapshotStatusActive)
+	if err != nil {
+		return nil, linodeWaitError(err, "wait for NFS snapshot active")
 	}
 
 	readyToUse := snapshot.Status == linodego.NFSSnapshotStatusActive

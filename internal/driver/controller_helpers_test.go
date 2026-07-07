@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -377,6 +378,28 @@ func TestLinodeError(t *testing.T) {
 			err := linodeError(tt.err, "test")
 			if status.Code(err) != tt.wantCode {
 				t.Fatalf("linodeError() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestLinodeWaitError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode codes.Code
+	}{
+		{name: "nil"},
+		{name: "context canceled", err: context.Canceled, wantCode: codes.Canceled},
+		{name: "context deadline exceeded", err: context.DeadlineExceeded, wantCode: codes.DeadlineExceeded},
+		{name: "unavailable", err: linodeAPIError(http.StatusServiceUnavailable), wantCode: codes.Unavailable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := linodeWaitError(tt.err, "wait")
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("linodeWaitError() code = %v, want %v", status.Code(err), tt.wantCode)
 			}
 		})
 	}
