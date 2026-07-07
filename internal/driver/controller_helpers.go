@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -15,6 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
+
+const waitTimeout = 5 * time.Minute
 
 const (
 	storageClassParamSpaceID    = "space-id"
@@ -283,6 +286,10 @@ func linodeWaitError(err error, message string) error {
 	return linodeError(err, message)
 }
 
+func waitContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, waitTimeout)
+}
+
 func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions, error) {
 	filter := linodego.Filter{}
 	for key, value := range fields {
@@ -426,7 +433,9 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	}); err != nil {
 		return linodeError(err, "update NFS space access policy")
 	}
-	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(ctx, strconv.Itoa(spaceID), linodego.NFSAccessPolicyStatusActive); err != nil {
+	waitCtx, cancel := waitContext(ctx)
+	defer cancel()
+	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), linodego.NFSAccessPolicyStatusActive); err != nil {
 		return linodeWaitError(err, "wait for NFS space access policy active")
 	}
 	return nil
@@ -457,7 +466,9 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
 		return linodeError(err, "update NFS filesystem squash policy")
 	}
-	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+	waitCtx, cancel := waitContext(ctx)
+	defer cancel()
+	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
 		return linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 	return nil
