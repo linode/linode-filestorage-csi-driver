@@ -128,6 +128,15 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 						Tags:            []string{"tag-a"},
 					}}, nil),
+					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "789", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
+						ID:              789,
+						SpaceID:         123,
+						Label:           "pvc-abc",
+						Region:          "us-east",
+						Status:          linodego.NFSFilesystemStatusActive,
+						MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
+						Tags:            []string{"tag-a"},
+					}, nil),
 					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), "123").Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
 				)
 			},

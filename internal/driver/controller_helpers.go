@@ -384,12 +384,9 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 }
 
 func (s *ControllerServer) readyExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) (*linodego.NFSFilesystem, error) {
-	var err error
-	if filesystem.Status != linodego.NFSFilesystemStatusActive {
-		filesystem, err = s.client.WaitForNFSFilesystemStatus(ctx, strconv.Itoa(filesystem.SpaceID), strconv.Itoa(filesystem.ID), linodego.NFSFilesystemStatusActive)
-		if err != nil {
-			return nil, linodeWaitError(err, "wait for NFS filesystem active")
-		}
+	filesystem, err := s.client.WaitForNFSFilesystemStatus(ctx, strconv.Itoa(filesystem.SpaceID), strconv.Itoa(filesystem.ID), linodego.NFSFilesystemStatusActive)
+	if err != nil {
+		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 	if err := s.validateExistingFilesystem(ctx, filesystem, params); err != nil {
 		return nil, err
