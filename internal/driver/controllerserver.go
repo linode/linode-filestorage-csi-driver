@@ -73,8 +73,14 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, err
 	}
 	if found {
-		existing, err = s.readyExistingFilesystem(ctx, existing, &params)
+		existing, err = s.client.WaitForNFSFilesystemStatus(ctx, strconv.Itoa(existing.SpaceID), strconv.Itoa(existing.ID), linodego.NFSFilesystemStatusActive)
 		if err != nil {
+			return nil, linodeWaitError(err, "wait for NFS filesystem active")
+		}
+		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
+			return nil, err
+		}
+		if err := validateFilesystemMountTarget(existing); err != nil {
 			return nil, err
 		}
 		spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
