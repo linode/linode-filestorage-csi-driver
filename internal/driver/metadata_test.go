@@ -117,7 +117,7 @@ func TestMetadataServiceCluster(t *testing.T) {
 					{VPC: &linodego.VPCInterface{VPCID: 123456}},
 				}, nil)
 			},
-			want: ClusterMetadata{Region: "us-east", VPCID: "123456"},
+			want: ClusterMetadata{Region: "us-east", VPCID: 123456},
 		},
 		{
 			name: "rejects mixed regions",

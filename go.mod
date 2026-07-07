@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/container-storage-interface/spec v1.12.0
 	github.com/linode/go-metadata v0.2.4
-	github.com/linode/linodego/v2 v2.0.0-20260610145824-e0f2b750f359
+	github.com/linode/linodego/v2 v2.0.0-20260706173454-70f8a82f6bbd
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/sys v0.45.0
@@ -56,4 +56,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/linode/linodego/v2 => github.com/komer3/linodego/v2 v2.0.0-20260610145824-e0f2b750f359
+replace github.com/linode/linodego/v2 => github.com/komer3/linodego/v2 v2.0.0-20260706173454-70f8a82f6bbd

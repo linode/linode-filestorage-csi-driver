@@ -25,15 +25,15 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 		{
 			name: "space id with tags",
 			params: map[string]string{
-				storageClassParamSpaceID:    " nfss-123abc ",
+				storageClassParamSpaceID:    " 123 ",
 				storageClassParamTags:       "tag-a, tag-b,, ",
-				storageClassParamRootSquash: string(linodego.NFSRootSquashModeRootSquash),
+				storageClassParamRootSquash: string(linodego.NFSSquashPolicyRootSquash),
 			},
 			want: createVolumeParameters{
-				spaceID:       "nfss-123abc",
-				tags:          []string{"tag-a", "tag-b"},
-				rootSquash:    linodego.NFSRootSquashModeRootSquash,
-				rootSquashSet: true,
+				spaceID:         123,
+				tags:            []string{"tag-a", "tag-b"},
+				squashPolicy:    linodego.NFSSquashPolicyRootSquash,
+				squashPolicySet: true,
 			},
 		},
 		{
@@ -51,7 +51,7 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 		{
 			name: "mutually exclusive space selectors",
 			params: map[string]string{
-				storageClassParamSpaceID:    "nfss-123abc",
+				storageClassParamSpaceID:    "123",
 				storageClassParamSpaceLabel: "shared-space",
 			},
 			wantCode: codes.InvalidArgument,
@@ -59,7 +59,7 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 		{
 			name: "invalid root squash",
 			params: map[string]string{
-				storageClassParamSpaceID:    "nfss-123abc",
+				storageClassParamSpaceID:    "123",
 				storageClassParamRootSquash: "invalid",
 			},
 			wantCode: codes.InvalidArgument,
@@ -89,11 +89,11 @@ func TestParseVolumeHandle(t *testing.T) {
 		want     volumeHandle
 		wantCode codes.Code
 	}{
-		{name: "valid", volumeID: " nfss-123abc/fs-12345678 ", want: volumeHandle{spaceID: "nfss-123abc", filesystemID: "fs-12345678"}},
+		{name: "valid", volumeID: " 123/456 ", want: volumeHandle{spaceID: 123, filesystemID: 456}},
 		{name: "empty", volumeID: "", wantCode: codes.InvalidArgument},
-		{name: "missing filesystem", volumeID: "nfss-123abc/", wantCode: codes.InvalidArgument},
-		{name: "missing space", volumeID: "/fs-12345678", wantCode: codes.InvalidArgument},
-		{name: "too many parts", volumeID: "nfss-123abc/fs-12345678/extra", wantCode: codes.InvalidArgument},
+		{name: "missing filesystem", volumeID: "123/", wantCode: codes.InvalidArgument},
+		{name: "missing space", volumeID: "/456", wantCode: codes.InvalidArgument},
+		{name: "too many parts", volumeID: "123/456/extra", wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {
@@ -121,9 +121,9 @@ func TestParseVolumeHandleAndNodeID(t *testing.T) {
 		wantID   int
 		wantCode codes.Code
 	}{
-		{name: "valid", volumeID: "nfss-123abc/fs-12345678", nodeID: "202", want: volumeHandle{spaceID: "nfss-123abc", filesystemID: "fs-12345678"}, wantID: 202},
-		{name: "invalid volume id", volumeID: "nfss-123abc", nodeID: "202", wantCode: codes.InvalidArgument},
-		{name: "invalid node id", volumeID: "nfss-123abc/fs-12345678", nodeID: "worker-a", wantCode: codes.InvalidArgument},
+		{name: "valid", volumeID: "123/456", nodeID: "202", want: volumeHandle{spaceID: 123, filesystemID: 456}, wantID: 202},
+		{name: "invalid volume id", volumeID: "123", nodeID: "202", wantCode: codes.InvalidArgument},
+		{name: "invalid node id", volumeID: "123/456", nodeID: "worker-a", wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {
@@ -161,11 +161,11 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			name:       "success",
 			volumeID:   testVolumeID,
 			nodeID:     "202",
-			wantHandle: volumeHandle{spaceID: "nfss-123abc", filesystemID: "fs-12345678"},
+			wantHandle: volumeHandle{spaceID: 123, filesystemID: 456},
 			wantID:     202,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
-				policy := &linodego.NFSFilesystemAccessPolicy{FilesystemID: "fs-12345678", Enabled: true, LinodeIDs: []int{202}}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(policy, nil)
+				policy := &linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: []linodego.NFSFilesystemAccessPolicyLinode{{ID: 202}}}
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
 				return policy
 			},
 			wantSamePolicy: true,
@@ -176,7 +176,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			nodeID:       "202",
 			wantNotFound: true,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "nfss-123abc", "fs-12345678").Return(nil, linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(nil, linodeAPIError(http.StatusNotFound))
 				return nil
 			},
 		},
@@ -285,10 +285,10 @@ func TestValidateCreateVolumeCapabilities(t *testing.T) {
 
 func TestVolumeContext(t *testing.T) {
 	filesystem := &linodego.NFSFilesystem{
-		ID:          "fs-12345678",
-		SpaceID:     "nfss-123abc",
-		Region:      "us-east",
-		MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+		ID:              456,
+		SpaceID:         123,
+		Region:          "us-east",
+		MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 	}
 
 	tests := []struct {
@@ -299,9 +299,9 @@ func TestVolumeContext(t *testing.T) {
 		{
 			name: "owned",
 			want: map[string]string{
-				volumeContextSpaceID:      "nfss-123abc",
-				volumeContextFilesystemID: "fs-12345678",
-				volumeContextMountTarget:  "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				volumeContextSpaceID:      "123",
+				volumeContextFilesystemID: "456",
+				volumeContextMountTarget:  "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
 				volumeContextRegion:       "us-east",
 			},
 		},
@@ -309,9 +309,9 @@ func TestVolumeContext(t *testing.T) {
 			name:     "with mtls mode",
 			mtlsMode: linodego.NFSMTLSModeRequired,
 			want: map[string]string{
-				volumeContextSpaceID:       "nfss-123abc",
-				volumeContextFilesystemID:  "fs-12345678",
-				volumeContextMountTarget:   "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+				volumeContextSpaceID:       "123",
+				volumeContextFilesystemID:  "456",
+				volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
 				volumeContextRegion:        "us-east",
 				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
 			},
@@ -329,14 +329,14 @@ func TestVolumeContext(t *testing.T) {
 
 func TestCSIVolume(t *testing.T) {
 	filesystem := &linodego.NFSFilesystem{
-		ID:          "fs-12345678",
-		SpaceID:     "nfss-123abc",
-		Region:      "us-east",
-		MountTarget: "nfss-123abc.nfs.us-east.linode.com:/fs-12345678",
+		ID:              456,
+		SpaceID:         123,
+		Region:          "us-east",
+		MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 	}
 
 	volume := csiVolume(filesystem, 1024, "")
-	if volume.GetVolumeId() != "nfss-123abc/fs-12345678" {
+	if volume.GetVolumeId() != "123/456" {
 		t.Fatalf("csiVolume() volume id = %q", volume.GetVolumeId())
 	}
 	if volume.GetCapacityBytes() != 1024 {
@@ -409,24 +409,24 @@ func TestPtrToBool(t *testing.T) {
 	}
 }
 
-func TestFilesystemPolicyRootSquashUpdate(t *testing.T) {
+func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 	policy := &linodego.NFSFilesystemAccessPolicy{
-		Label:      "policy-a",
-		Enabled:    false,
-		LinodeIDs:  []int{101},
-		RootSquash: linodego.NFSRootSquashModeNone,
-		Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+		Label:        "policy-a",
+		Enabled:      false,
+		LinodeACL:    []linodego.NFSFilesystemAccessPolicyLinode{{ID: 101}},
+		SquashPolicy: linodego.NFSSquashPolicyNone,
+		Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 	}
 
-	got := filesystemPolicyRootSquashUpdate(policy, linodego.NFSRootSquashModeRootSquash)
+	got := filesystemPolicySquashPolicyUpdate(policy, linodego.NFSSquashPolicyRootSquash)
 	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
-		Label:      "policy-a",
-		Enabled:    ptr.To(false),
-		LinodeIDs:  []int{101},
-		RootSquash: linodego.NFSRootSquashModeRootSquash,
-		Protocols:  []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+		Label:        ptr.To("policy-a"),
+		Enabled:      ptr.To(false),
+		LinodeIDs:    ptr.To([]int{101}),
+		SquashPolicy: ptr.To(linodego.NFSSquashPolicyRootSquash),
+		Protocols:    ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("filesystemPolicyRootSquashUpdate() = %#v, want %#v", got, want)
+		t.Fatalf("filesystemPolicySquashPolicyUpdate() = %#v, want %#v", got, want)
 	}
 }
