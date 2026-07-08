@@ -869,8 +869,6 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			name:    "deletes a snapshot successfully",
 			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
-					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
 				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil)
 			},
 		},
@@ -885,35 +883,9 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
-			name:    "get not found is idempotent success",
-			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
-			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil, linodeAPIError(http.StatusNotFound))
-			},
-		},
-		{
-			name:     "get api error",
-			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
-			wantCode: codes.Unavailable,
-			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil, linodeAPIError(http.StatusServiceUnavailable))
-			},
-		},
-		{
-			name:     "snapshot already deleting",
-			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
-			wantCode: codes.DeadlineExceeded,
-			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
-					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusDeleting}, nil)
-			},
-		},
-		{
 			name:    "delete not found is idempotent success",
 			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
-					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
 				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusNotFound))
 			},
 		},
@@ -922,8 +894,6 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
 			wantCode: codes.FailedPrecondition,
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
-					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
 				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusConflict))
 			},
 		},
@@ -932,8 +902,6 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
 			wantCode: codes.Unavailable,
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
-					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
 				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusServiceUnavailable))
 			},
 		},

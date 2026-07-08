@@ -408,17 +408,6 @@ func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSn
 		return nil, err
 	}
 
-	snapshot, err := s.client.GetNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID)
-	if err != nil {
-		if linodego.IsNotFound(err) {
-			return &csi.DeleteSnapshotResponse{}, nil
-		}
-		return nil, linodeError(err, "get NFS snapshot")
-	}
-	if snapshot.Status == linodego.NFSSnapshotStatusDeleting {
-		return nil, status.Errorf(codes.DeadlineExceeded, "NFS snapshot %s is in state %s", snapshotID, snapshot.Status)
-	}
-
 	if err := s.client.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {
 		if linodego.IsNotFound(err) {
 			return &csi.DeleteSnapshotResponse{}, nil
