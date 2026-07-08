@@ -799,7 +799,7 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			wantResponse: &csi.CreateSnapshotResponse{
 				Snapshot: &csi.Snapshot{
 					SizeBytes:      1000,
-					SnapshotId:     "789",
+					SnapshotId:     "123/456/789",
 					SourceVolumeId: testVolumeID,
 					CreationTime:   timestamppb.New(*timestamp),
 					ReadyToUse:     true,
@@ -858,6 +858,76 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 	}
 }
 
+func TestControllerServerDeleteSnapshot(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.DeleteSnapshotRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+	}{
+		{
+			name:    "deletes a snapshot successfully",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil)
+			},
+		},
+		{
+			name:     "no snapshot id",
+			request:  &csi.DeleteSnapshotRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "invalid snapshot id",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "789"},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "delete not found is idempotent success",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusNotFound))
+			},
+		},
+		{
+			name:     "delete conflict",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.FailedPrecondition,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusConflict))
+			},
+		},
+		{
+			name:     "delete unavailable",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.Unavailable,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusServiceUnavailable))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.DeleteSnapshot(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("DeleteSnapshot() code = %v, want %v (err = %v)", status.Code(err), tt.wantCode, err)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if !reflect.DeepEqual(response, &csi.DeleteSnapshotResponse{}) {
+				t.Fatalf("DeleteSnapshot() response = %#v, want empty response", response)
+			}
+		})
+	}
+}
+
 func TestControllerServerUnimplementedRPCs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -873,10 +943,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "ListVolumes", call: func(server *ControllerServer) error {
 			_, err := server.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			return err
-		}},
-		{name: "DeleteSnapshot", call: func(server *ControllerServer) error {
-			_, err := server.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{})
 			return err
 		}},
 		{name: "ListSnapshots", call: func(server *ControllerServer) error {

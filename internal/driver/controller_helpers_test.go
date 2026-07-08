@@ -113,6 +113,47 @@ func TestParseVolumeHandle(t *testing.T) {
 	}
 }
 
+func TestFormatSnapshotHandle(t *testing.T) {
+	if got := formatSnapshotHandle(123, 456, 789); got != "123/456/789" {
+		t.Fatalf("formatSnapshotHandle() = %q, want %q", got, "123/456/789")
+	}
+}
+
+func TestParseSnapshotHandle(t *testing.T) {
+	tests := []struct {
+		name       string
+		snapshotID string
+		want       snapshotHandle
+		wantCode   codes.Code
+	}{
+		{name: "valid", snapshotID: " 123/456/789 ", want: snapshotHandle{spaceID: 123, filesystemID: 456, snapshotID: 789}},
+		{name: "empty", snapshotID: "", wantCode: codes.InvalidArgument},
+		{name: "missing snapshot", snapshotID: "123/456/", wantCode: codes.InvalidArgument},
+		{name: "missing filesystem", snapshotID: "123//789", wantCode: codes.InvalidArgument},
+		{name: "missing space", snapshotID: "/456/789", wantCode: codes.InvalidArgument},
+		{name: "too few parts", snapshotID: "123/456", wantCode: codes.InvalidArgument},
+		{name: "too many parts", snapshotID: "123/456/789/extra", wantCode: codes.InvalidArgument},
+		{name: "invalid space", snapshotID: "space/456/789", wantCode: codes.InvalidArgument},
+		{name: "invalid filesystem", snapshotID: "123/fs/789", wantCode: codes.InvalidArgument},
+		{name: "invalid snapshot", snapshotID: "123/456/snap", wantCode: codes.InvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseSnapshotHandle(tt.snapshotID)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("parseSnapshotHandle() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if got != tt.want {
+				t.Fatalf("parseSnapshotHandle() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseVolumeHandleAndNodeID(t *testing.T) {
 	tests := []struct {
 		name     string

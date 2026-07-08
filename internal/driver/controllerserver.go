@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -385,7 +384,7 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 	snapshotResponse = &csi.CreateSnapshotResponse{
 		Snapshot: &csi.Snapshot{
 			SizeBytes:      snapshot.SizeBytes,
-			SnapshotId:     strconv.Itoa(snapshot.ID),
+			SnapshotId:     formatSnapshotHandle(handle.spaceID, handle.filesystemID, snapshot.ID),
 			SourceVolumeId: volumeID,
 			CreationTime:   tp,
 			ReadyToUse:     readyToUse,
@@ -399,9 +398,24 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "DeleteSnapshot")
 
-	// Future implementation will delete a previously created backend snapshot.
-	_ = req
-	return nil, errNotImplemented
+	snapshotID := req.GetSnapshotId()
+	if snapshotID == "" {
+		return nil, status.Error(codes.InvalidArgument, "snapshot id is required")
+	}
+
+	handle, err := parseSnapshotHandle(snapshotID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.client.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {
+		if linodego.IsNotFound(err) {
+			return &csi.DeleteSnapshotResponse{}, nil
+		}
+		return nil, linodeError(err, "delete NFS snapshot")
+	}
+
+	return &csi.DeleteSnapshotResponse{}, nil
 }
 
 func (s *ControllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {

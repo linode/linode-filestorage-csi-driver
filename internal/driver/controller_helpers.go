@@ -46,6 +46,12 @@ type volumeHandle struct {
 	filesystemID int
 }
 
+type snapshotHandle struct {
+	spaceID      int
+	filesystemID int
+	snapshotID   int
+}
+
 func parseCreateVolumeParameters(params map[string]string) (createVolumeParameters, error) {
 	spaceID := strings.TrimSpace(params[storageClassParamSpaceID])
 	parsed := createVolumeParameters{
@@ -111,6 +117,26 @@ func parseVolumeHandle(volumeID string) (volumeHandle, error) {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q has invalid filesystem id", volumeID)
 	}
 	return volumeHandle{spaceID: spaceID, filesystemID: filesystemID}, nil
+}
+
+func formatSnapshotHandle(spaceID, filesystemID, snapshotID int) string {
+	return fmt.Sprintf("%d/%d/%d", spaceID, filesystemID, snapshotID)
+}
+
+func parseSnapshotHandle(snapshotID string) (snapshotHandle, error) {
+	parts := strings.Split(strings.TrimSpace(snapshotID), "/")
+	if len(parts) != 3 {
+		return snapshotHandle{}, status.Errorf(codes.InvalidArgument, "snapshot id %q must have format {space_id}/{filesystem_id}/{snapshot_id}", snapshotID)
+	}
+
+	spaceID, spaceErr := strconv.Atoi(parts[0])
+	filesystemID, filesystemErr := strconv.Atoi(parts[1])
+	snapshot, snapshotErr := strconv.Atoi(parts[2])
+	if spaceErr != nil || filesystemErr != nil || snapshotErr != nil {
+		return snapshotHandle{}, status.Errorf(codes.InvalidArgument, "snapshot id %q must contain integer IDs", snapshotID)
+	}
+
+	return snapshotHandle{spaceID: spaceID, filesystemID: filesystemID, snapshotID: snapshot}, nil
 }
 
 func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, error) {
