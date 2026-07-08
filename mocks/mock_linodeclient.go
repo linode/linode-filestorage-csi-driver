@@ -42,7 +42,7 @@ func (m *MockLinodeClient) EXPECT() *MockLinodeClientMockRecorder {
 }
 
 // CloneNFSSnapshot mocks base method.
-func (m *MockLinodeClient) CloneNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID string, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) CloneNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID int, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloneNFSSnapshot", ctx, spaceID, filesystemID, snapshotID, opts)
 	ret0, _ := ret[0].(*linodego.NFSFilesystem)
@@ -57,7 +57,7 @@ func (mr *MockLinodeClientMockRecorder) CloneNFSSnapshot(ctx, spaceID, filesyste
 }
 
 // CreateNFSFilesystem mocks base method.
-func (m *MockLinodeClient) CreateNFSFilesystem(ctx context.Context, spaceID string, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) CreateNFSFilesystem(ctx context.Context, spaceID int, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateNFSFilesystem", ctx, spaceID, opts)
 	ret0, _ := ret[0].(*linodego.NFSFilesystem)
@@ -72,7 +72,7 @@ func (mr *MockLinodeClientMockRecorder) CreateNFSFilesystem(ctx, spaceID, opts a
 }
 
 // CreateNFSSnapshot mocks base method.
-func (m *MockLinodeClient) CreateNFSSnapshot(ctx context.Context, spaceID, filesystemID string, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error) {
+func (m *MockLinodeClient) CreateNFSSnapshot(ctx context.Context, spaceID, filesystemID int, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateNFSSnapshot", ctx, spaceID, filesystemID, opts)
 	ret0, _ := ret[0].(*linodego.NFSSnapshot)
@@ -87,7 +87,7 @@ func (mr *MockLinodeClientMockRecorder) CreateNFSSnapshot(ctx, spaceID, filesyst
 }
 
 // DeleteNFSFilesystem mocks base method.
-func (m *MockLinodeClient) DeleteNFSFilesystem(ctx context.Context, spaceID, filesystemID string) error {
+func (m *MockLinodeClient) DeleteNFSFilesystem(ctx context.Context, spaceID, filesystemID int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteNFSFilesystem", ctx, spaceID, filesystemID)
 	ret0, _ := ret[0].(error)
@@ -101,7 +101,7 @@ func (mr *MockLinodeClientMockRecorder) DeleteNFSFilesystem(ctx, spaceID, filesy
 }
 
 // DeleteNFSSnapshot mocks base method.
-func (m *MockLinodeClient) DeleteNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID string) error {
+func (m *MockLinodeClient) DeleteNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteNFSSnapshot", ctx, spaceID, filesystemID, snapshotID)
 	ret0, _ := ret[0].(error)
@@ -115,7 +115,7 @@ func (mr *MockLinodeClientMockRecorder) DeleteNFSSnapshot(ctx, spaceID, filesyst
 }
 
 // GetNFSFilesystem mocks base method.
-func (m *MockLinodeClient) GetNFSFilesystem(ctx context.Context, spaceID, filesystemID string) (*linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) GetNFSFilesystem(ctx context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSFilesystem", ctx, spaceID, filesystemID)
 	ret0, _ := ret[0].(*linodego.NFSFilesystem)
@@ -130,7 +130,7 @@ func (mr *MockLinodeClientMockRecorder) GetNFSFilesystem(ctx, spaceID, filesyste
 }
 
 // GetNFSFilesystemAccessPolicy mocks base method.
-func (m *MockLinodeClient) GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID string) (*linodego.NFSFilesystemAccessPolicy, error) {
+func (m *MockLinodeClient) GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSFilesystemAccessPolicy", ctx, spaceID, filesystemID)
 	ret0, _ := ret[0].(*linodego.NFSFilesystemAccessPolicy)
@@ -145,7 +145,7 @@ func (mr *MockLinodeClientMockRecorder) GetNFSFilesystemAccessPolicy(ctx, spaceI
 }
 
 // GetNFSFilesystemByID mocks base method.
-func (m *MockLinodeClient) GetNFSFilesystemByID(ctx context.Context, filesystemID string) (*linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) GetNFSFilesystemByID(ctx context.Context, filesystemID int) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSFilesystemByID", ctx, filesystemID)
 	ret0, _ := ret[0].(*linodego.NFSFilesystem)
@@ -160,7 +160,7 @@ func (mr *MockLinodeClientMockRecorder) GetNFSFilesystemByID(ctx, filesystemID a
 }
 
 // GetNFSSnapshot mocks base method.
-func (m *MockLinodeClient) GetNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID string) (*linodego.NFSSnapshot, error) {
+func (m *MockLinodeClient) GetNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID int) (*linodego.NFSSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSSnapshot", ctx, spaceID, filesystemID, snapshotID)
 	ret0, _ := ret[0].(*linodego.NFSSnapshot)
@@ -175,7 +175,7 @@ func (mr *MockLinodeClientMockRecorder) GetNFSSnapshot(ctx, spaceID, filesystemI
 }
 
 // GetNFSSpace mocks base method.
-func (m *MockLinodeClient) GetNFSSpace(ctx context.Context, spaceID string) (*linodego.NFSSpace, error) {
+func (m *MockLinodeClient) GetNFSSpace(ctx context.Context, spaceID int) (*linodego.NFSSpace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSSpace", ctx, spaceID)
 	ret0, _ := ret[0].(*linodego.NFSSpace)
@@ -190,7 +190,7 @@ func (mr *MockLinodeClientMockRecorder) GetNFSSpace(ctx, spaceID any) *gomock.Ca
 }
 
 // GetNFSSpaceAccessPolicy mocks base method.
-func (m *MockLinodeClient) GetNFSSpaceAccessPolicy(ctx context.Context, spaceID string) (*linodego.NFSSpaceAccessPolicy, error) {
+func (m *MockLinodeClient) GetNFSSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNFSSpaceAccessPolicy", ctx, spaceID)
 	ret0, _ := ret[0].(*linodego.NFSSpaceAccessPolicy)
@@ -220,7 +220,7 @@ func (mr *MockLinodeClientMockRecorder) ListInterfaces(ctx, linodeID, opts any) 
 }
 
 // ListNFSFilesystems mocks base method.
-func (m *MockLinodeClient) ListNFSFilesystems(ctx context.Context, spaceID string, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) ListNFSFilesystems(ctx context.Context, spaceID int, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNFSFilesystems", ctx, spaceID, opts)
 	ret0, _ := ret[0].([]linodego.NFSFilesystem)
@@ -235,7 +235,7 @@ func (mr *MockLinodeClientMockRecorder) ListNFSFilesystems(ctx, spaceID, opts an
 }
 
 // ListNFSSnapshots mocks base method.
-func (m *MockLinodeClient) ListNFSSnapshots(ctx context.Context, spaceID, filesystemID string, opts *linodego.ListOptions) ([]linodego.NFSSnapshot, error) {
+func (m *MockLinodeClient) ListNFSSnapshots(ctx context.Context, spaceID, filesystemID int, opts *linodego.ListOptions) ([]linodego.NFSSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNFSSnapshots", ctx, spaceID, filesystemID, opts)
 	ret0, _ := ret[0].([]linodego.NFSSnapshot)
@@ -265,7 +265,7 @@ func (mr *MockLinodeClientMockRecorder) ListNFSSpaces(ctx, opts any) *gomock.Cal
 }
 
 // UpdateNFSFilesystemAccessPolicy mocks base method.
-func (m *MockLinodeClient) UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID string, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error) {
+func (m *MockLinodeClient) UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNFSFilesystemAccessPolicy", ctx, spaceID, filesystemID, opts)
 	ret0, _ := ret[0].(*linodego.NFSFilesystemAccessPolicy)
@@ -280,7 +280,7 @@ func (mr *MockLinodeClientMockRecorder) UpdateNFSFilesystemAccessPolicy(ctx, spa
 }
 
 // UpdateNFSSpaceAccessPolicy mocks base method.
-func (m *MockLinodeClient) UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID string, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error) {
+func (m *MockLinodeClient) UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNFSSpaceAccessPolicy", ctx, spaceID, opts)
 	ret0, _ := ret[0].(*linodego.NFSSpaceAccessPolicy)
@@ -295,7 +295,7 @@ func (mr *MockLinodeClientMockRecorder) UpdateNFSSpaceAccessPolicy(ctx, spaceID,
 }
 
 // WaitForNFSFilesystemAccessPolicyStatus mocks base method.
-func (m *MockLinodeClient) WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID, filesystemID string, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error) {
+func (m *MockLinodeClient) WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID, filesystemID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WaitForNFSFilesystemAccessPolicyStatus", ctx, spaceID, filesystemID, status)
 	ret0, _ := ret[0].(*linodego.NFSFilesystemAccessPolicy)
@@ -310,7 +310,7 @@ func (mr *MockLinodeClientMockRecorder) WaitForNFSFilesystemAccessPolicyStatus(c
 }
 
 // WaitForNFSFilesystemStatus mocks base method.
-func (m *MockLinodeClient) WaitForNFSFilesystemStatus(ctx context.Context, spaceID, filesystemID string, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error) {
+func (m *MockLinodeClient) WaitForNFSFilesystemStatus(ctx context.Context, spaceID, filesystemID int, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WaitForNFSFilesystemStatus", ctx, spaceID, filesystemID, status)
 	ret0, _ := ret[0].(*linodego.NFSFilesystem)
@@ -325,7 +325,7 @@ func (mr *MockLinodeClientMockRecorder) WaitForNFSFilesystemStatus(ctx, spaceID,
 }
 
 // WaitForNFSSnapshotStatus mocks base method.
-func (m *MockLinodeClient) WaitForNFSSnapshotStatus(ctx context.Context, spaceID, filesystemID, snapshotID string, status linodego.NFSSnapshotStatus) (*linodego.NFSSnapshot, error) {
+func (m *MockLinodeClient) WaitForNFSSnapshotStatus(ctx context.Context, spaceID, filesystemID, snapshotID int, status linodego.NFSSnapshotStatus) (*linodego.NFSSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WaitForNFSSnapshotStatus", ctx, spaceID, filesystemID, snapshotID, status)
 	ret0, _ := ret[0].(*linodego.NFSSnapshot)
@@ -340,7 +340,7 @@ func (mr *MockLinodeClientMockRecorder) WaitForNFSSnapshotStatus(ctx, spaceID, f
 }
 
 // WaitForNFSSpaceAccessPolicyStatus mocks base method.
-func (m *MockLinodeClient) WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID string, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error) {
+func (m *MockLinodeClient) WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WaitForNFSSpaceAccessPolicyStatus", ctx, spaceID, status)
 	ret0, _ := ret[0].(*linodego.NFSSpaceAccessPolicy)
