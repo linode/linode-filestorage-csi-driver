@@ -1,6 +1,7 @@
 package util
 
 import (
+	"math"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -18,4 +19,9 @@ func ParseTimestamp(timestamp *time.Time) (*timestamppb.Timestamp, error) {
 		return nil, status.Errorf(codes.Internal, "failed to convert timestamp %v: %v", timestamp, err.Error())
 	}
 	return tp, nil
+}
+
+// BytesToGiB converts bytes to GiB, rounding up
+func BytesToGiB(bytes int64) int {
+	return int(math.Ceil(float64(bytes) / (1024.0 * 1024.0 * 1024.0)))
 }

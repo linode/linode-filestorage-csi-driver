@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -465,6 +466,30 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 		return linodeWaitError(err, "wait for NFS space access policy active")
 	}
 	return nil
+}
+
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, region string, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
+	handle, err := parseSnapshotHandle(req.GetVolumeContentSource().GetSnapshot().GetSnapshotId())
+	if err != nil {
+		return nil, err
+	}
+
+	cloned, err := s.client.CloneNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID, linodego.NFSSnapshotCloneOptions{
+		Label:   req.GetName(),
+		Region:  region,
+		SizeGib: ptr.To(ptr.To(util.BytesToGiB(capacityBytes))),
+	})
+	if err != nil {
+		return nil, linodeError(err, "clone snapshot failed")
+	}
+
+	waitCloneCtx, cancel := waitContext(ctx)
+	defer cancel()
+	if _, err := s.client.WaitForNFSSnapshotStatus(waitCloneCtx, handle.spaceID, handle.filesystemID, handle.snapshotID, linodego.NFSSnapshotStatusActive); err != nil {
+		return nil, linodeWaitError(err, "wait for NFS clone active")
+	}
+
+	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil
 }
 
 func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {

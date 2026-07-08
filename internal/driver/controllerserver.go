@@ -88,6 +88,17 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		if err != nil {
 			return nil, err
 		}
+
+		if req.GetVolumeContentSource() != nil {
+			if req.GetVolumeContentSource().GetVolume() != nil {
+				return nil, status.Error(codes.InvalidArgument, "Unsupported volume content source")
+			}
+
+			if req.GetVolumeContentSource().GetSnapshot() != nil {
+				return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
+			}
+		}
+
 		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
 	}
 
