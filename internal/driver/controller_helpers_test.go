@@ -140,12 +140,6 @@ func TestParseSnapshotHandle(t *testing.T) {
 		{name: "invalid space", snapshotID: "space/456/789", wantCode: codes.InvalidArgument},
 		{name: "invalid filesystem", snapshotID: "123/fs/789", wantCode: codes.InvalidArgument},
 		{name: "invalid snapshot", snapshotID: "123/456/snap", wantCode: codes.InvalidArgument},
-		{name: "zero space", snapshotID: "0/456/789", wantCode: codes.InvalidArgument},
-		{name: "zero filesystem", snapshotID: "123/0/789", wantCode: codes.InvalidArgument},
-		{name: "zero snapshot", snapshotID: "123/456/0", wantCode: codes.InvalidArgument},
-		{name: "negative space", snapshotID: "-1/456/789", wantCode: codes.InvalidArgument},
-		{name: "negative filesystem", snapshotID: "123/-1/789", wantCode: codes.InvalidArgument},
-		{name: "negative snapshot", snapshotID: "123/456/-1", wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {

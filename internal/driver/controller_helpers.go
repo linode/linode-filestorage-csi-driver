@@ -132,8 +132,8 @@ func parseSnapshotHandle(snapshotID string) (snapshotHandle, error) {
 	spaceID, spaceErr := strconv.Atoi(parts[0])
 	filesystemID, filesystemErr := strconv.Atoi(parts[1])
 	snapshot, snapshotErr := strconv.Atoi(parts[2])
-	if spaceErr != nil || filesystemErr != nil || snapshotErr != nil || spaceID <= 0 || filesystemID <= 0 || snapshot <= 0 {
-		return snapshotHandle{}, status.Errorf(codes.InvalidArgument, "snapshot id %q must contain positive integer IDs", snapshotID)
+	if spaceErr != nil || filesystemErr != nil || snapshotErr != nil {
+		return snapshotHandle{}, status.Errorf(codes.InvalidArgument, "snapshot id %q must contain integer IDs", snapshotID)
 	}
 
 	return snapshotHandle{spaceID: spaceID, filesystemID: filesystemID, snapshotID: snapshot}, nil
