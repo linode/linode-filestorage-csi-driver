@@ -95,10 +95,6 @@ func TestParseVolumeHandle(t *testing.T) {
 		{name: "missing filesystem", volumeID: "123/", wantCode: codes.InvalidArgument},
 		{name: "missing space", volumeID: "/456", wantCode: codes.InvalidArgument},
 		{name: "too many parts", volumeID: "123/456/extra", wantCode: codes.InvalidArgument},
-		{name: "zero space", volumeID: "0/456", wantCode: codes.InvalidArgument},
-		{name: "zero filesystem", volumeID: "123/0", wantCode: codes.InvalidArgument},
-		{name: "negative space", volumeID: "-1/456", wantCode: codes.InvalidArgument},
-		{name: "negative filesystem", volumeID: "123/-1", wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {

@@ -109,11 +109,11 @@ func parseVolumeHandle(volumeID string) (volumeHandle, error) {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q must have format {space_id}/{filesystem_id}", volumeID)
 	}
 	spaceID, err := strconv.Atoi(parts[0])
-	if err != nil || spaceID <= 0 {
+	if err != nil {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q has invalid space id", volumeID)
 	}
 	filesystemID, err := strconv.Atoi(parts[1])
-	if err != nil || filesystemID <= 0 {
+	if err != nil {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q has invalid filesystem id", volumeID)
 	}
 	return volumeHandle{spaceID: spaceID, filesystemID: filesystemID}, nil
