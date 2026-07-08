@@ -130,7 +130,7 @@ func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Conte
 	if err != nil {
 		return volumeHandle{}, 0, nil, err
 	}
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, strconv.Itoa(handle.spaceID), strconv.Itoa(handle.filesystemID))
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
 	if err != nil {
 		return volumeHandle{}, 0, nil, err
 	}
@@ -324,7 +324,7 @@ func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPoli
 
 func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolumeParameters) (*linodego.NFSSpace, error) {
 	if params.spaceID != 0 {
-		space, err := s.client.GetNFSSpace(ctx, strconv.Itoa(params.spaceID))
+		space, err := s.client.GetNFSSpace(ctx, params.spaceID)
 		if err != nil {
 			return nil, linodeError(err, "get NFS space")
 		}
@@ -354,7 +354,7 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID i
 	if err != nil {
 		return nil, false, err
 	}
-	filesystems, err := s.client.ListNFSFilesystems(ctx, strconv.Itoa(spaceID), options)
+	filesystems, err := s.client.ListNFSFilesystems(ctx, spaceID, options)
 	if err != nil {
 		return nil, false, linodeError(err, "list NFS filesystems")
 	}
@@ -380,7 +380,7 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 		return nil
 	}
 
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, strconv.Itoa(filesystem.SpaceID), strconv.Itoa(filesystem.ID))
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, filesystem.SpaceID, filesystem.ID)
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
@@ -391,7 +391,7 @@ func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, files
 }
 
 func (s *ControllerServer) getSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error) {
-	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, strconv.Itoa(spaceID))
+	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)
 	if err != nil {
 		return nil, linodeError(err, "get NFS space access policy")
 	}
@@ -425,7 +425,7 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 		})
 	}
 	vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
-	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, strconv.Itoa(spaceID), linodego.NFSSpaceAccessPolicyUpdateOptions{
+	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:    ptr.To(policy.Label),
 		Enabled:  ptr.To(policy.Enabled),
 		VPCs:     ptr.To(vpcs),
@@ -435,7 +435,7 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	}
 	waitCtx, cancel := waitContext(ctx)
 	defer cancel()
-	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), linodego.NFSAccessPolicyStatusActive); err != nil {
+	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, spaceID, linodego.NFSAccessPolicyStatusActive); err != nil {
 		return linodeWaitError(err, "wait for NFS space access policy active")
 	}
 	return nil
@@ -456,19 +456,19 @@ func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet
 }
 
 func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, filesystemID int, squashPolicy linodego.NFSSquashPolicy) error {
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID))
+	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID)
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
 	if policy.SquashPolicy == squashPolicy {
 		return nil
 	}
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
+	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
 		return linodeError(err, "update NFS filesystem squash policy")
 	}
 	waitCtx, cancel := waitContext(ctx)
 	defer cancel()
-	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, strconv.Itoa(spaceID), strconv.Itoa(filesystemID), linodego.NFSAccessPolicyStatusActive); err != nil {
+	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, spaceID, filesystemID, linodego.NFSAccessPolicyStatusActive); err != nil {
 		return linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 	return nil

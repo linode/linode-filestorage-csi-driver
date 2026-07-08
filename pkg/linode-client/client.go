@@ -16,28 +16,28 @@ type LinodeClient interface {
 	ListInterfaces(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.LinodeInterface, error)
 
 	ListNFSSpaces(ctx context.Context, opts *linodego.ListOptions) ([]linodego.NFSSpace, error)
-	GetNFSSpace(ctx context.Context, spaceID string) (*linodego.NFSSpace, error)
+	GetNFSSpace(ctx context.Context, spaceID int) (*linodego.NFSSpace, error)
 
-	ListNFSFilesystems(ctx context.Context, spaceID string, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error)
-	GetNFSFilesystem(ctx context.Context, spaceID string, filesystemID string) (*linodego.NFSFilesystem, error)
-	GetNFSFilesystemByID(ctx context.Context, filesystemID string) (*linodego.NFSFilesystem, error)
-	CreateNFSFilesystem(ctx context.Context, spaceID string, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error)
-	WaitForNFSFilesystemStatus(ctx context.Context, spaceID string, filesystemID string, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error)
-	DeleteNFSFilesystem(ctx context.Context, spaceID string, filesystemID string) error
+	ListNFSFilesystems(ctx context.Context, spaceID int, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error)
+	GetNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) (*linodego.NFSFilesystem, error)
+	GetNFSFilesystemByID(ctx context.Context, filesystemID int) (*linodego.NFSFilesystem, error)
+	CreateNFSFilesystem(ctx context.Context, spaceID int, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error)
+	WaitForNFSFilesystemStatus(ctx context.Context, spaceID int, filesystemID int, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error)
+	DeleteNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) error
 
-	GetNFSSpaceAccessPolicy(ctx context.Context, spaceID string) (*linodego.NFSSpaceAccessPolicy, error)
-	UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID string, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error)
-	WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID string, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error)
-	GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID string, filesystemID string) (*linodego.NFSFilesystemAccessPolicy, error)
-	UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID string, filesystemID string, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error)
-	WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID string, filesystemID string, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error)
+	GetNFSSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error)
+	UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error)
+	WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error)
+	GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID int, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error)
+	UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID int, filesystemID int, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error)
+	WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID int, filesystemID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error)
 
-	ListNFSSnapshots(ctx context.Context, spaceID string, filesystemID string, opts *linodego.ListOptions) ([]linodego.NFSSnapshot, error)
-	GetNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string) (*linodego.NFSSnapshot, error)
-	CreateNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error)
-	WaitForNFSSnapshotStatus(ctx context.Context, spaceID string, filesystemID string, snapshotID string, status linodego.NFSSnapshotStatus) (*linodego.NFSSnapshot, error)
-	DeleteNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string) error
-	CloneNFSSnapshot(ctx context.Context, spaceID string, filesystemID string, snapshotID string, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error)
+	ListNFSSnapshots(ctx context.Context, spaceID int, filesystemID int, opts *linodego.ListOptions) ([]linodego.NFSSnapshot, error)
+	GetNFSSnapshot(ctx context.Context, spaceID int, filesystemID int, snapshotID int) (*linodego.NFSSnapshot, error)
+	CreateNFSSnapshot(ctx context.Context, spaceID int, filesystemID int, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error)
+	WaitForNFSSnapshotStatus(ctx context.Context, spaceID int, filesystemID int, snapshotID int, status linodego.NFSSnapshotStatus) (*linodego.NFSSnapshot, error)
+	DeleteNFSSnapshot(ctx context.Context, spaceID int, filesystemID int, snapshotID int) error
+	CloneNFSSnapshot(ctx context.Context, spaceID int, filesystemID int, snapshotID int, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error)
 }
 
 var _ LinodeClient = (*linodego.Client)(nil)

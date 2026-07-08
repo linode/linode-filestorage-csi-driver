@@ -166,7 +166,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			wantID:     202,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
 				policy := &linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: []linodego.NFSFilesystemAccessPolicyLinode{{ID: 202}}}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
 				return policy
 			},
 			wantSamePolicy: true,
@@ -177,7 +177,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			nodeID:       "202",
 			wantNotFound: true,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(nil, linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
 				return nil
 			},
 		},
