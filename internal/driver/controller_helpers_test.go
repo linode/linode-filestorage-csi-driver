@@ -95,6 +95,10 @@ func TestParseVolumeHandle(t *testing.T) {
 		{name: "missing filesystem", volumeID: "123/", wantCode: codes.InvalidArgument},
 		{name: "missing space", volumeID: "/456", wantCode: codes.InvalidArgument},
 		{name: "too many parts", volumeID: "123/456/extra", wantCode: codes.InvalidArgument},
+		{name: "zero space", volumeID: "0/456", wantCode: codes.InvalidArgument},
+		{name: "zero filesystem", volumeID: "123/0", wantCode: codes.InvalidArgument},
+		{name: "negative space", volumeID: "-1/456", wantCode: codes.InvalidArgument},
+		{name: "negative filesystem", volumeID: "123/-1", wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {
@@ -108,6 +112,53 @@ func TestParseVolumeHandle(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Fatalf("parseVolumeHandle() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatSnapshotHandle(t *testing.T) {
+	if got := formatSnapshotHandle(123, 456, 789); got != "123/456/789" {
+		t.Fatalf("formatSnapshotHandle() = %q, want %q", got, "123/456/789")
+	}
+}
+
+func TestParseSnapshotHandle(t *testing.T) {
+	tests := []struct {
+		name       string
+		snapshotID string
+		want       snapshotHandle
+		wantCode   codes.Code
+	}{
+		{name: "valid", snapshotID: " 123/456/789 ", want: snapshotHandle{spaceID: 123, filesystemID: 456, snapshotID: 789}},
+		{name: "empty", snapshotID: "", wantCode: codes.InvalidArgument},
+		{name: "missing snapshot", snapshotID: "123/456/", wantCode: codes.InvalidArgument},
+		{name: "missing filesystem", snapshotID: "123//789", wantCode: codes.InvalidArgument},
+		{name: "missing space", snapshotID: "/456/789", wantCode: codes.InvalidArgument},
+		{name: "too few parts", snapshotID: "123/456", wantCode: codes.InvalidArgument},
+		{name: "too many parts", snapshotID: "123/456/789/extra", wantCode: codes.InvalidArgument},
+		{name: "invalid space", snapshotID: "space/456/789", wantCode: codes.InvalidArgument},
+		{name: "invalid filesystem", snapshotID: "123/fs/789", wantCode: codes.InvalidArgument},
+		{name: "invalid snapshot", snapshotID: "123/456/snap", wantCode: codes.InvalidArgument},
+		{name: "zero space", snapshotID: "0/456/789", wantCode: codes.InvalidArgument},
+		{name: "zero filesystem", snapshotID: "123/0/789", wantCode: codes.InvalidArgument},
+		{name: "zero snapshot", snapshotID: "123/456/0", wantCode: codes.InvalidArgument},
+		{name: "negative space", snapshotID: "-1/456/789", wantCode: codes.InvalidArgument},
+		{name: "negative filesystem", snapshotID: "123/-1/789", wantCode: codes.InvalidArgument},
+		{name: "negative snapshot", snapshotID: "123/456/-1", wantCode: codes.InvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseSnapshotHandle(tt.snapshotID)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("parseSnapshotHandle() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if got != tt.want {
+				t.Fatalf("parseSnapshotHandle() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
@@ -166,7 +217,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			wantID:     202,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
 				policy := &linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: []linodego.NFSFilesystemAccessPolicyLinode{{ID: 202}}}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
 				return policy
 			},
 			wantSamePolicy: true,
@@ -177,7 +228,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 			nodeID:       "202",
 			wantNotFound: true,
 			setup: func(env controllerTestEnv) *linodego.NFSFilesystemAccessPolicy {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(nil, linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
 				return nil
 			},
 		},

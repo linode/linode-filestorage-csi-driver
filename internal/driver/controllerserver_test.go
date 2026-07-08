@@ -74,11 +74,11 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				t.Helper()
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return(nil, nil)
-				expectSpaceVPCAssociation(env, "123", "space-policy", 123456, linodego.NFSMTLSModeRequired)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+				expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeRequired)
 				env.client.EXPECT().
-					CreateNFSFilesystem(gomock.Any(), "123", gomock.Eq(linodego.NFSFilesystemCreateOptions{
+					CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{
 						Label:            "pvc-abc",
 						Region:           "us-east",
 						ProtocolVersions: ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
@@ -90,10 +90,10 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						Label:   "pvc-abc",
 						Region:  "us-east",
 					}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "456", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: false, SquashPolicy: linodego.NFSSquashPolicyNone}, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "123", "456", gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Label: ptr.To(""), Enabled: ptr.To(false), LinodeIDs: ptr.To([]int(nil)), SquashPolicy: ptr.To(linodego.NFSSquashPolicyRootSquash)})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), "123", "456", linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Status: linodego.NFSAccessPolicyStatusActive}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: false, SquashPolicy: linodego.NFSSquashPolicyNone}, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Label: ptr.To(""), Enabled: ptr.To(false), LinodeIDs: ptr.To([]int(nil)), SquashPolicy: ptr.To(linodego.NFSSquashPolicyRootSquash)})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Status: linodego.NFSAccessPolicyStatusActive}, nil)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
@@ -118,8 +118,8 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
 				gomock.InOrder(
-					env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123}, nil),
-					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil),
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
 						ID:              789,
 						SpaceID:         123,
 						Label:           "pvc-abc",
@@ -128,7 +128,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 						Tags:            []string{"tag-a"},
 					}}, nil),
-					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "789", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
+					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 789, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
 						ID:              789,
 						SpaceID:         123,
 						Label:           "pvc-abc",
@@ -137,7 +137,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 						Tags:            []string{"tag-a"},
 					}, nil),
-					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), "123").Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
+					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
 				)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
@@ -167,10 +167,10 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
 				env.client.EXPECT().ListNFSSpaces(gomock.Any(), gomock.Eq(spaceOptions)).Return([]linodego.NFSSpace{{ID: 123, Label: "prod-space"}}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return(nil, nil)
-				expectSpaceVPCAssociation(env, "123", "space-policy", 123456, linodego.NFSMTLSModeDisabled)
-				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), "123", gomock.Eq(linodego.NFSFilesystemCreateOptions{Label: "pvc-abc", Region: "us-east", ProtocolVersions: ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}), Tags: ptr.To([]string{"tag-a"})})).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "456", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+				expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeDisabled)
+				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{Label: "pvc-abc", Region: "us-east", ProtocolVersions: ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}), Tags: ptr.To([]string{"tag-a"})})).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
@@ -211,11 +211,11 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				t.Helper()
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return(nil, nil)
-				expectSpaceVPCAssociation(env, "123", "space-policy", 123456, linodego.NFSMTLSModeRequired)
-				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), "123", gomock.Any()).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "456", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive}, nil)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+				expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeRequired)
+				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), 123, gomock.Any()).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive}, nil)
 			},
 			wantCode:    codes.FailedPrecondition,
 			wantMessage: "NFS filesystem 456 does not have a mount target",
@@ -231,9 +231,9 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				t.Helper()
 				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), "123").Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), "123", gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), "123", "456", linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive}, nil)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive}, nil)
 			},
 			wantCode:    codes.FailedPrecondition,
 			wantMessage: "NFS filesystem 456 does not have a mount target",
@@ -323,7 +323,7 @@ func expectSingleNodeCluster(env controllerTestEnv, vpcID int) {
 	}}, nil)
 }
 
-func expectSpaceVPCAssociation(env controllerTestEnv, spaceID, label string, vpcID int, mtlsMode linodego.NFSMTLSMode) {
+func expectSpaceVPCAssociation(env controllerTestEnv, spaceID int, label string, vpcID int, mtlsMode linodego.NFSMTLSMode) {
 	env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), spaceID).Return(&linodego.NFSSpaceAccessPolicy{
 		Label:    label,
 		Enabled:  true,
@@ -382,7 +382,7 @@ func TestDeleteVolume(t *testing.T) {
 			name:    "not found is success",
 			request: &csi.DeleteVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().DeleteNFSFilesystem(gomock.Any(), "123", "456").Return(linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().DeleteNFSFilesystem(gomock.Any(), 123, 456).Return(linodeAPIError(http.StatusNotFound))
 			},
 		},
 	}
@@ -425,9 +425,9 @@ func TestControllerPublishVolume(t *testing.T) {
 					SquashPolicy: linodego.NFSSquashPolicyNone,
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "123", "456", gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyNone))).Return(policy, nil)
-				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), "123", "456", linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyNone))).Return(policy, nil)
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
 		},
 		{
@@ -438,7 +438,7 @@ func TestControllerPublishVolume(t *testing.T) {
 				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
 			},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: testLinodeACL(101, 202)}, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: testLinodeACL(101, 202)}, nil)
 			},
 		},
 		{
@@ -457,9 +457,9 @@ func TestControllerPublishVolume(t *testing.T) {
 					SquashPolicy: linodego.NFSSquashPolicyNone,
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "123", "456", gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyNone))).Return(policy, nil)
-				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), "123", "456", linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyNone))).Return(policy, nil)
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
 		},
 		{
@@ -478,9 +478,9 @@ func TestControllerPublishVolume(t *testing.T) {
 					SquashPolicy: linodego.NFSSquashPolicyRootSquash,
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "123", "456", gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyRootSquash))).Return(policy, nil)
-				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), "123", "456", linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyRootSquash))).Return(policy, nil)
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
 		},
 		{
@@ -528,16 +528,16 @@ func TestControllerUnpublishVolume(t *testing.T) {
 					SquashPolicy: linodego.NFSSquashPolicyRootSquash,
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(policy, nil)
-				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), "123", "456", gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 303}, linodego.NFSSquashPolicyRootSquash))).Return(policy, nil)
-				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), "123", "456", linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 303}, linodego.NFSSquashPolicyRootSquash))).Return(policy, nil)
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
 		},
 		{
 			name:    "is idempotent when node is already absent",
 			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID, NodeId: "202"},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: testLinodeACL(101, 303)}, nil)
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: true, LinodeACL: testLinodeACL(101, 303)}, nil)
 			},
 		},
 		{
@@ -548,7 +548,7 @@ func TestControllerUnpublishVolume(t *testing.T) {
 			name:    "not found is success",
 			request: &csi.ControllerUnpublishVolumeRequest{VolumeId: testVolumeID, NodeId: "202"},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(nil, linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
 			},
 		},
 	}
@@ -612,7 +612,7 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
 			},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
@@ -672,13 +672,13 @@ func TestControllerGetVolume(t *testing.T) {
 			name:    "returns filesystem metadata",
 			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
 					MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 				}, nil)
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystemAccessPolicy{
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{
 					FilesystemID: 456,
 					Enabled:      true,
 					LinodeACL:    testLinodeACL(202, 303),
@@ -701,13 +701,13 @@ func TestControllerGetVolume(t *testing.T) {
 			name:    "omits published nodes when policy disabled",
 			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
 					MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 				}, nil)
-				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), "123", "456").Return(&linodego.NFSFilesystemAccessPolicy{
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{
 					FilesystemID: 456,
 					Enabled:      false,
 					LinodeACL:    testLinodeACL(202, 303),
@@ -799,21 +799,21 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			wantResponse: &csi.CreateSnapshotResponse{
 				Snapshot: &csi.Snapshot{
 					SizeBytes:      1000,
-					SnapshotId:     "789",
+					SnapshotId:     "123/456/789",
 					SourceVolumeId: testVolumeID,
 					CreationTime:   timestamppb.New(*timestamp),
 					ReadyToUse:     true,
 				},
 			},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), "123", "456", linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
 					Return(&linodego.NFSSnapshot{
 						Status:    linodego.NFSSnapshotStatusCreating,
 						Created:   timestamp,
 						ID:        789,
 						SizeBytes: 1000,
 					}, nil)
-				env.client.EXPECT().WaitForNFSSnapshotStatus(gomock.Any(), "123", "456", "789", linodego.NFSSnapshotStatusActive).
+				env.client.EXPECT().WaitForNFSSnapshotStatus(gomock.Any(), 123, 456, 789, linodego.NFSSnapshotStatusActive).
 					Return(&linodego.NFSSnapshot{
 						Status:    linodego.NFSSnapshotStatusActive,
 						Created:   timestamp,
@@ -830,7 +830,7 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 			wantErr: linodeError(&linodego.Error{Code: http.StatusBadGateway}, "create NFS snapshot"),
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), "123", "456", linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
 					Return(nil, &linodego.Error{Code: http.StatusBadGateway})
 			},
 		},
@@ -858,6 +858,108 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 	}
 }
 
+func TestControllerServerDeleteSnapshot(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *csi.DeleteSnapshotRequest
+		setup    func(controllerTestEnv)
+		wantCode codes.Code
+	}{
+		{
+			name:    "deletes a snapshot successfully",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil)
+			},
+		},
+		{
+			name:     "no snapshot id",
+			request:  &csi.DeleteSnapshotRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "invalid snapshot id",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "789"},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "get not found is idempotent success",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+		},
+		{
+			name:     "get api error",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.Unavailable,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(nil, linodeAPIError(http.StatusServiceUnavailable))
+			},
+		},
+		{
+			name:     "snapshot already deleting",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.DeadlineExceeded,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusDeleting}, nil)
+			},
+		},
+		{
+			name:    "delete not found is idempotent success",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusNotFound))
+			},
+		},
+		{
+			name:     "delete conflict",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.FailedPrecondition,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusConflict))
+			},
+		},
+		{
+			name:     "delete unavailable",
+			request:  &csi.DeleteSnapshotRequest{SnapshotId: "123/456/789"},
+			wantCode: codes.Unavailable,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(&linodego.NFSSnapshot{ID: 789, SpaceID: 123, FilesystemID: 456, Status: linodego.NFSSnapshotStatusActive}, nil)
+				env.client.EXPECT().DeleteNFSSnapshot(gomock.Any(), 123, 456, 789).Return(linodeAPIError(http.StatusServiceUnavailable))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.DeleteSnapshot(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("DeleteSnapshot() code = %v, want %v (err = %v)", status.Code(err), tt.wantCode, err)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if !reflect.DeepEqual(response, &csi.DeleteSnapshotResponse{}) {
+				t.Fatalf("DeleteSnapshot() response = %#v, want empty response", response)
+			}
+		})
+	}
+}
+
 func TestControllerServerUnimplementedRPCs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -873,10 +975,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "ListVolumes", call: func(server *ControllerServer) error {
 			_, err := server.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			return err
-		}},
-		{name: "DeleteSnapshot", call: func(server *ControllerServer) error {
-			_, err := server.DeleteSnapshot(context.Background(), &csi.DeleteSnapshotRequest{})
 			return err
 		}},
 		{name: "ListSnapshots", call: func(server *ControllerServer) error {
