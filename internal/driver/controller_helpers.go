@@ -11,11 +11,12 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
+
+	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 const waitTimeout = 5 * time.Minute
@@ -466,6 +467,37 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 		return linodeWaitError(err, "wait for NFS space access policy active")
 	}
 	return nil
+}
+
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, req *csi.CreateVolumeRequest, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
+	waitCtx, cancel := waitContext(ctx)
+	defer cancel()
+	existing, err := s.client.WaitForNFSFilesystemStatus(waitCtx, existing.SpaceID, existing.ID, linodego.NFSFilesystemStatusActive)
+	if err != nil {
+		return nil, linodeWaitError(err, "wait for NFS filesystem active")
+	}
+	if err := s.validateExistingFilesystem(ctx, existing, params); err != nil {
+		return nil, err
+	}
+	if err := validateFilesystemMountTarget(existing); err != nil {
+		return nil, err
+	}
+	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.GetVolumeContentSource() != nil {
+		if req.GetVolumeContentSource().GetVolume() != nil {
+			return nil, status.Error(codes.InvalidArgument, "Unsupported volume content source")
+		}
+
+		if req.GetVolumeContentSource().GetSnapshot() != nil {
+			return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
+		}
+	}
+
+	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
 }
 
 func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, region string, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {

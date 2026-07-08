@@ -72,34 +72,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, err
 	}
 	if found {
-		waitCtx, cancel := waitContext(ctx)
-		defer cancel()
-		existing, err = s.client.WaitForNFSFilesystemStatus(waitCtx, existing.SpaceID, existing.ID, linodego.NFSFilesystemStatusActive)
-		if err != nil {
-			return nil, linodeWaitError(err, "wait for NFS filesystem active")
-		}
-		if err := s.validateExistingFilesystem(ctx, existing, &params); err != nil {
-			return nil, err
-		}
-		if err := validateFilesystemMountTarget(existing); err != nil {
-			return nil, err
-		}
-		spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		if req.GetVolumeContentSource() != nil {
-			if req.GetVolumeContentSource().GetVolume() != nil {
-				return nil, status.Error(codes.InvalidArgument, "Unsupported volume content source")
-			}
-
-			if req.GetVolumeContentSource().GetSnapshot() != nil {
-				return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
-			}
-		}
-
-		return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
+		return s.handleExistingFilesystem(ctx, req, existing, &params, space, capacityBytes)
 	}
 
 	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
