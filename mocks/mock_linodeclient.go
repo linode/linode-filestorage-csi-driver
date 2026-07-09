@@ -144,21 +144,6 @@ func (mr *MockLinodeClientMockRecorder) GetNFSFilesystemAccessPolicy(ctx, spaceI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNFSFilesystemAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).GetNFSFilesystemAccessPolicy), ctx, spaceID, filesystemID)
 }
 
-// GetNFSFilesystemByID mocks base method.
-func (m *MockLinodeClient) GetNFSFilesystemByID(ctx context.Context, filesystemID int) (*linodego.NFSFilesystem, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNFSFilesystemByID", ctx, filesystemID)
-	ret0, _ := ret[0].(*linodego.NFSFilesystem)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNFSFilesystemByID indicates an expected call of GetNFSFilesystemByID.
-func (mr *MockLinodeClientMockRecorder) GetNFSFilesystemByID(ctx, filesystemID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNFSFilesystemByID", reflect.TypeOf((*MockLinodeClient)(nil).GetNFSFilesystemByID), ctx, filesystemID)
-}
-
 // GetNFSSnapshot mocks base method.
 func (m *MockLinodeClient) GetNFSSnapshot(ctx context.Context, spaceID, filesystemID, snapshotID int) (*linodego.NFSSnapshot, error) {
 	m.ctrl.T.Helper()

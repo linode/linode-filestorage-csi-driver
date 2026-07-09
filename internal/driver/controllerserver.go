@@ -12,6 +12,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 
+	"github.com/linode/linode-filestorage-csi-driver/pkg/cache"
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
@@ -21,6 +22,9 @@ type ControllerServer struct {
 	client      linodeclient.LinodeClient
 	volumeLocks *util.VolumeLocks
 	csi.UnimplementedControllerServer
+	spaces      *cache.Spaces
+	filesystems *cache.Filesystems
+	snapshots   *cache.Snapshots
 }
 
 func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linodeclient.LinodeClient, volumeLocks *util.VolumeLocks) (*ControllerServer, error) {
@@ -31,10 +35,15 @@ func NewControllerServer(ctx context.Context, driver *LinodeDriver, client linod
 	if client == nil {
 		return nil, errLinodeClientNotFound
 	}
+	spaces := cache.NewSpaces(client)
+	filesystems := cache.NewFilesystems(client, spaces)
 	return &ControllerServer{
 		driver:      driver,
 		client:      client,
 		volumeLocks: volumeLocks,
+		spaces:      spaces,
+		filesystems: filesystems,
+		snapshots:   cache.NewSnapshots(client, spaces, filesystems),
 	}, nil
 }
 
@@ -108,7 +117,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if params.tags != nil {
 		createOptions.Tags = ptr.To(params.tags)
 	}
-	filesystem, err := s.client.CreateNFSFilesystem(ctx, space.ID, createOptions)
+	filesystem, err := s.filesystems.CreateNFSFilesystem(ctx, space.ID, createOptions)
 	if err != nil {
 		return nil, linodeError(err, "create NFS filesystem")
 	}
@@ -143,7 +152,7 @@ func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolu
 		return nil, err
 	}
 
-	if err := s.client.DeleteNFSFilesystem(ctx, handle.spaceID, handle.filesystemID); err != nil {
+	if err := s.filesystems.DeleteNFSFilesystem(ctx, handle.spaceID, handle.filesystemID); err != nil {
 		if linodego.IsNotFound(err) {
 			return &csi.DeleteVolumeResponse{}, nil
 		}
@@ -264,7 +273,7 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 		}
 	}
 
-	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	filesystem, err := s.filesystems.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
 	}
@@ -322,7 +331,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 		return nil, err
 	}
 
-	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	filesystem, err := s.filesystems.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
 	}
@@ -361,7 +370,7 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, err
 	}
 
-	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
+	snapshot, err := s.snapshots.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
 		Label: req.GetName(),
 	})
 	if err != nil {
@@ -408,7 +417,7 @@ func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSn
 		return nil, err
 	}
 
-	if err := s.client.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {
+	if err := s.snapshots.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {
 		if linodego.IsNotFound(err) {
 			return &csi.DeleteSnapshotResponse{}, nil
 		}

@@ -350,7 +350,7 @@ func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPoli
 
 func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolumeParameters) (*linodego.NFSSpace, error) {
 	if params.spaceID != 0 {
-		space, err := s.client.GetNFSSpace(ctx, params.spaceID)
+		space, err := s.spaces.GetNFSSpace(ctx, params.spaceID)
 		if err != nil {
 			return nil, linodeError(err, "get NFS space")
 		}
@@ -361,7 +361,7 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 	if err != nil {
 		return nil, err
 	}
-	spaces, err := s.client.ListNFSSpaces(ctx, options)
+	spaces, err := s.spaces.ListAllSpaces(ctx, options)
 	if err != nil {
 		return nil, linodeError(err, "list NFS spaces")
 	}
@@ -380,7 +380,7 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID i
 	if err != nil {
 		return nil, false, err
 	}
-	filesystems, err := s.client.ListNFSFilesystems(ctx, spaceID, options)
+	filesystems, err := s.filesystems.ListSpaceFilesystems(ctx, spaceID, options)
 	if err != nil {
 		return nil, false, linodeError(err, "list NFS filesystems")
 	}
