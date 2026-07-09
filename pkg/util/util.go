@@ -9,6 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const bytesInGiB = 1024.0 * 1024.0 * 1024.0
+
 func ParseTimestamp(timestamp *time.Time) (*timestamppb.Timestamp, error) {
 	// ptypes.TimestampProto is deprecated; use timestamppb.New
 	tp := timestamppb.New(*timestamp)
@@ -23,5 +25,10 @@ func ParseTimestamp(timestamp *time.Time) (*timestamppb.Timestamp, error) {
 
 // BytesToGiB converts bytes to GiB, rounding up
 func BytesToGiB(bytes int64) int {
-	return int(math.Ceil(float64(bytes) / (1024.0 * 1024.0 * 1024.0)))
+	// use a minimum of 1 GiB
+	if bytes < bytesInGiB {
+		return 1
+	}
+
+	return int(math.Ceil(float64(bytes) / bytesInGiB))
 }

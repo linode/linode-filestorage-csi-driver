@@ -517,8 +517,9 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.Cre
 
 	waitCloneCtx, cancel := waitContext(ctx)
 	defer cancel()
-	if _, err := s.client.WaitForNFSSnapshotStatus(waitCloneCtx, handle.spaceID, handle.filesystemID, handle.snapshotID, linodego.NFSSnapshotStatusActive); err != nil {
-		return nil, linodeWaitError(err, "wait for NFS clone active")
+	cloned, err = s.client.WaitForNFSFilesystemStatus(waitCloneCtx, cloned.SpaceID, cloned.ID, linodego.NFSFilesystemStatusActive)
+	if err != nil {
+		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
 	}
 
 	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil

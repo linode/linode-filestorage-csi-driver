@@ -160,11 +160,16 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						MountTargetFQDN:  ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 						Label:            "pvc-abc",
 						Region:           "us-east",
+						Status:           linodego.NFSFilesystemStatusCreating,
 					}, nil),
-					env.client.EXPECT().WaitForNFSSnapshotStatus(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotStatusActive).Return(&linodego.NFSSnapshot{
-						ID:           890,
-						FilesystemID: 4567,
-						SpaceID:      123,
+					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 890, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
+						ID:               890,
+						SourceSnapshotID: ptr.To(4567),
+						SpaceID:          123,
+						MountTargetFQDN:  ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
+						Label:            "pvc-abc",
+						Region:           "us-east",
+						Status:           linodego.NFSFilesystemStatusActive,
 					}, nil),
 				)
 			},
@@ -493,12 +498,12 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 					}).Return(&linodego.NFSFilesystem{
 						ID:               890,
 						SourceSnapshotID: ptr.To(4567),
-						SpaceID:          123,
+						SpaceID:          1123,
 						MountTargetFQDN:  ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 						Label:            "pvc-abc",
 						Region:           "us-east",
 					}, nil),
-					env.client.EXPECT().WaitForNFSSnapshotStatus(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotStatusActive).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout}),
+					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 1123, 890, linodego.NFSFilesystemStatusActive).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout}),
 				)
 			},
 			wantCode: codes.Unavailable,
