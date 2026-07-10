@@ -106,6 +106,9 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
+	if req.GetVolumeContentSource().GetSnapshot() != nil {
+		return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
+	}
 
 	if params.squashPolicySet {
 		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
