@@ -9,6 +9,7 @@ golangci-lint = "2.11.4"
 ko = "0.18.1"
 kustomize = "5.8.1"
 just = "1.52.0"
+yq = "4.53.2"
 uv = "latest"
 "pipx:linode-cli" = "5.68.0"
 
