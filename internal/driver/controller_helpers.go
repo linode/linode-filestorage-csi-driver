@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 
+	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
@@ -119,6 +120,10 @@ func parseVolumeHandle(volumeID string) (volumeHandle, error) {
 		return volumeHandle{}, status.Errorf(codes.InvalidArgument, "volume id %q has invalid filesystem id", volumeID)
 	}
 	return volumeHandle{spaceID: spaceID, filesystemID: filesystemID}, nil
+}
+
+func formatVolumeHandle(spaceID, filesystemID int) string {
+	return fmt.Sprintf("%d/%d", spaceID, filesystemID)
 }
 
 func formatSnapshotHandle(spaceID, filesystemID, snapshotID int) string {
@@ -226,7 +231,7 @@ func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLS
 
 func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
 	return &csi.Volume{
-		VolumeId:      fmt.Sprintf("%d/%d", filesystem.SpaceID, filesystem.ID),
+		VolumeId:      formatVolumeHandle(filesystem.SpaceID, filesystem.ID),
 		CapacityBytes: capacityBytes,
 		VolumeContext: volumeContext(filesystem, mtlsMode),
 	}
@@ -550,10 +555,144 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
 		return linodeError(err, "update NFS filesystem squash policy")
 	}
+	return s.waitForFilesystemAccessPolicyActive(ctx, spaceID, filesystemID)
+}
+
+func (s *ControllerServer) waitForFilesystemAccessPolicyActive(ctx context.Context, spaceID, filesystemID int) error {
 	waitCtx, cancel := waitContext(ctx)
 	defer cancel()
 	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, spaceID, filesystemID, linodego.NFSAccessPolicyStatusActive); err != nil {
 		return linodeWaitError(err, "wait for NFS filesystem access policy active")
 	}
 	return nil
+}
+
+func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {
+	parsedSnapshot, err := parseSnapshotHandle(snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	handle := volumeHandle{spaceID: parsedSnapshot.spaceID, filesystemID: parsedSnapshot.filesystemID}
+
+	// A source volume filter that does not match this snapshot's volume (including
+	// a malformed one) cannot describe it, so treat it as "no match" and return an
+	// empty result.
+	if sourceVolumeID != "" && sourceVolumeID != formatVolumeHandle(handle.spaceID, handle.filesystemID) {
+		return &csi.ListSnapshotsResponse{}, nil
+	}
+
+	snapshot, err := s.client.GetNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, parsedSnapshot.snapshotID)
+	if err != nil {
+		if linodego.IsNotFound(err) {
+			return &csi.ListSnapshotsResponse{}, nil
+		}
+		return nil, linodeError(err, "get NFS snapshot")
+	}
+
+	entries, err := listSnapshotEntries([]linodego.NFSSnapshot{*snapshot}, handle)
+	if err != nil {
+		return nil, err
+	}
+	return &csi.ListSnapshotsResponse{Entries: entries}, nil
+}
+
+// listSnapshotsBySourceVolume fetches the full snapshot set once and slices it
+// in memory. The CSI token is an absolute offset (not a linodego page number)
+// so it can honor a max_entries that changes between calls, which a fixed page
+// cursor cannot. Refetching the whole set is fine: snapshot sets are small.
+//
+// In production this path is unlikely to run: the external-snapshotter sidecar
+// only ever calls ListSnapshots by snapshot_id, never by source volume.
+func (s *ControllerServer) listSnapshotsBySourceVolume(ctx context.Context, sourceVolumeID, startingToken string, maxEntries int) (*csi.ListSnapshotsResponse, error) {
+	offset, err := listSnapshotsStartingOffset(startingToken)
+	if err != nil {
+		return nil, err
+	}
+
+	handle, err := parseVolumeHandle(sourceVolumeID)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, handle.filesystemID, &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	})
+	if err != nil {
+		if !linodego.IsNotFound(err) {
+			return nil, linodeError(err, "list NFS snapshots")
+		}
+		snapshots = nil
+	}
+
+	// Slice to the requested page before building CSI entries so we only parse
+	// and allocate for the snapshots actually returned.
+	page, nextToken, err := paginateSnapshots(snapshots, startingToken, offset, maxEntries)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := listSnapshotEntries(page, handle)
+	if err != nil {
+		return nil, err
+	}
+	return &csi.ListSnapshotsResponse{Entries: entries, NextToken: nextToken}, nil
+}
+
+func listSnapshotEntries(snapshots []linodego.NFSSnapshot, handle volumeHandle) ([]*csi.ListSnapshotsResponse_Entry, error) {
+	entries := make([]*csi.ListSnapshotsResponse_Entry, 0, len(snapshots))
+	for i := range snapshots {
+		snapshot, err := csiSnapshot(&snapshots[i], handle)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, &csi.ListSnapshotsResponse_Entry{Snapshot: snapshot})
+	}
+	return entries, nil
+}
+
+// csiSnapshot maps a Linode NFS snapshot to the CSI representation. It is shared
+// by CreateSnapshot and ListSnapshots so both stay in sync.
+func csiSnapshot(snapshot *linodego.NFSSnapshot, handle volumeHandle) (*csi.Snapshot, error) {
+	if snapshot.Created == nil {
+		return nil, status.Errorf(codes.Internal, "NFS snapshot %d does not have a created timestamp", snapshot.ID)
+	}
+	creationTime, err := util.ParseTimestamp(snapshot.Created)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse snapshot created time: %s", err)
+	}
+
+	return &csi.Snapshot{
+		SizeBytes:      snapshot.SizeBytes,
+		SnapshotId:     formatSnapshotHandle(handle.spaceID, handle.filesystemID, snapshot.ID),
+		SourceVolumeId: formatVolumeHandle(handle.spaceID, handle.filesystemID),
+		CreationTime:   creationTime,
+		ReadyToUse:     snapshot.Status == linodego.NFSSnapshotStatusActive,
+	}, nil
+}
+
+// listSnapshotsStartingOffset decodes the CSI starting_token into an offset. An
+// invalid token returns codes.Aborted so the caller restarts from the beginning.
+func listSnapshotsStartingOffset(startingToken string) (int, error) {
+	if startingToken == "" {
+		return 0, nil
+	}
+	offset, err := strconv.Atoi(startingToken)
+	if err != nil || offset < 0 {
+		return 0, status.Errorf(codes.Aborted, "invalid starting token %q", startingToken)
+	}
+	return offset, nil
+}
+
+func paginateSnapshots(snapshots []linodego.NFSSnapshot, startingToken string, offset, maxEntries int) ([]linodego.NFSSnapshot, string, error) {
+	if startingToken != "" && offset >= len(snapshots) {
+		return nil, "", status.Errorf(codes.Aborted, "starting token %q is out of range", startingToken)
+	}
+	end := len(snapshots)
+	nextToken := ""
+	if maxEntries > 0 && maxEntries < len(snapshots)-offset {
+		end = offset + maxEntries
+		nextToken = strconv.Itoa(end)
+	}
+
+	return snapshots[offset:end], nextToken, nil
 }
