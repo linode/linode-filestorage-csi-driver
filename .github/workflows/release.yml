@@ -24,7 +24,7 @@ jobs:
       - name: Set up Mise
         uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
-          install_args: go helm ko kustomize
+          install_args: go helm ko kustomize just yq
       - name: Create Release Artifacts
         run: mise run release
         env:
@@ -59,3 +59,16 @@ jobs:
           IMAGE_TAGS: ${{ github.ref_name }},latest
           KO_DOCKER_REPO: ghcr.io/${{ github.repository }}
         run: mise run ko-publish
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Publish Helm chart
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CR_RELEASE_NAME_TEMPLATE: "helm-{{ .Version }}"
+        with:
+          charts_dir: release/charts
+          skip_existing: true
+          mark_as_latest: false

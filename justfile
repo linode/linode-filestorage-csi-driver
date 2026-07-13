@@ -61,13 +61,13 @@ ko-publish:
 helm-lint:
     helm lint charts/linode-nfs-csi-driver
 
-# Package the Helm chart and Kustomize manifests
+# Package a versioned Helm chart and Kustomize manifests for release
 release:
     rm -rf {{ RELEASE_DIR }}
-    mkdir -p {{ RELEASE_DIR }}
-    helm package charts/linode-nfs-csi-driver \
-        --version "{{ helm_version }}" \
-        --app-version "{{ IMAGE_VERSION }}" \
+    mkdir -p "{{ RELEASE_DIR }}/charts"
+    cp -R charts/linode-nfs-csi-driver "{{ RELEASE_DIR }}/charts/"
+    yq -i '.version = "{{ helm_version }}" | .appVersion = "{{ IMAGE_VERSION }}"' "{{ RELEASE_DIR }}/charts/linode-nfs-csi-driver/Chart.yaml"
+    helm package "{{ RELEASE_DIR }}/charts/linode-nfs-csi-driver" \
         --destination "{{ RELEASE_DIR }}" >/dev/null
     mv "{{ RELEASE_DIR }}/linode-nfs-csi-driver-{{ helm_version }}.tgz" "{{ RELEASE_DIR }}/helm-chart-{{ IMAGE_VERSION }}.tgz"
     kustomize build deploy/kubernetes/base \
