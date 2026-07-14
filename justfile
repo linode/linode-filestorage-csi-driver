@@ -51,11 +51,11 @@ build:
 
 # Build container locally with ko
 ko-build:
-    ko build --local --bare --tags {{ IMAGE_TAGS }} .
+    IMAGE_VERSION={{ IMAGE_VERSION }} ko build --local --bare --tags {{ IMAGE_TAGS }} .
 
 # Publish container with ko
 ko-publish:
-    KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build --bare --tags {{ IMAGE_TAGS }} .
+    IMAGE_VERSION={{ IMAGE_VERSION }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build --bare --tags {{ IMAGE_TAGS }} .
 
 # Lint the Helm chart
 helm-lint:

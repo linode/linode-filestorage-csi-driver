@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/linode/linodego/v2"
@@ -56,6 +57,7 @@ type Config struct {
 	LinodeToken         string
 	BaseURL             string
 	UserAgent           string
+	DriverVersion       string
 	RootCertificatePath string
 	Timeout             time.Duration
 
@@ -64,11 +66,38 @@ type Config struct {
 	NodeName    string
 }
 
+const defaultUserAgentProduct = "LinodeFileStorageCSI"
+
+func (config *Config) userAgent() (string, error) {
+	if config.DriverVersion == "" {
+		return "", errors.New("driver version cannot be empty")
+	}
+
+	if config.UserAgent == "" {
+		return fmt.Sprintf("%s/%s", defaultUserAgentProduct, config.DriverVersion), nil
+	}
+
+	if !strings.Contains(config.UserAgent, config.DriverVersion) {
+		return "", fmt.Errorf("user agent %q must include driver version %q", config.UserAgent, config.DriverVersion)
+	}
+
+	return config.UserAgent, nil
+}
+
 // NewLinodeClient mirrors the block storage driver setup and returns a
 // configured linodego client.
 func NewLinodeClient(config *Config, opts ...Option) (*linodego.Client, error) {
+	if config == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+
 	if config.LinodeToken == "" {
 		return nil, errors.New("token cannot be empty")
+	}
+
+	userAgent, err := config.userAgent()
+	if err != nil {
+		return nil, err
 	}
 
 	// Use system cert pool if root CA cert was not provided explicitly for this client.
@@ -110,7 +139,7 @@ func NewLinodeClient(config *Config, opts ...Option) (*linodego.Client, error) {
 		}
 	}
 
-	newClient.SetUserAgent(config.UserAgent)
+	newClient.SetUserAgent(userAgent)
 
 	for _, opt := range opts {
 		opt.set(&newClient)

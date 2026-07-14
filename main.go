@@ -37,7 +37,7 @@ func loadConfig() linodeclient.Config {
 	return linodeclient.Config{
 		LinodeToken:         os.Getenv("LINODE_TOKEN"),
 		BaseURL:             envOrDefault("LINODE_URL", fmt.Sprintf("%s://%s", linodego.APIProto, linodego.APIHost)),
-		UserAgent:           fmt.Sprintf("LinodeFileStorageCSI/%s", vendorVersion),
+		DriverVersion:       vendorVersion,
 		RootCertificatePath: os.Getenv("LINODE_CA"),
 		Timeout:             timeout,
 
