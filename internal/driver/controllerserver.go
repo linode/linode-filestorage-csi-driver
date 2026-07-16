@@ -165,25 +165,15 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		if policy.Enabled {
 			return &csi.ControllerPublishVolumeResponse{}, nil
 		}
-		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, linodeIDs)); err != nil {
-			return nil, linodeError(err, "update NFS filesystem access policy")
-		}
-		waitCtx, cancel := waitContext(ctx)
-		defer cancel()
-		if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, handle.spaceID, handle.filesystemID, linodego.NFSAccessPolicyStatusActive); err != nil {
-			return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
-		}
-		return &csi.ControllerPublishVolumeResponse{}, nil
+	} else {
+		linodeIDs = append(linodeIDs, linodeID)
 	}
 
-	linodeIDs = append(linodeIDs, linodeID)
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, linodeIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
 	}
-	waitCtx, cancel := waitContext(ctx)
-	defer cancel()
-	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, handle.spaceID, handle.filesystemID, linodego.NFSAccessPolicyStatusActive); err != nil {
-		return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
+	if err := s.waitForFilesystemAccessPolicyActive(ctx, handle.spaceID, handle.filesystemID); err != nil {
+		return nil, err
 	}
 
 	return &csi.ControllerPublishVolumeResponse{}, nil
@@ -221,10 +211,8 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, policy.Enabled, updatedIDs)); err != nil {
 		return nil, linodeError(err, "update NFS filesystem access policy")
 	}
-	waitCtx, cancel := waitContext(ctx)
-	defer cancel()
-	if _, err := s.client.WaitForNFSFilesystemAccessPolicyStatus(waitCtx, handle.spaceID, handle.filesystemID, linodego.NFSAccessPolicyStatusActive); err != nil {
-		return nil, linodeWaitError(err, "wait for NFS filesystem access policy active")
+	if err := s.waitForFilesystemAccessPolicyActive(ctx, handle.spaceID, handle.filesystemID); err != nil {
+		return nil, err
 	}
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
@@ -341,8 +329,6 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 	}
 	defer s.volumeLocks.Release(volumeID)
 
-	var snapshotResponse *csi.CreateSnapshotResponse
-
 	handle, err := parseVolumeHandle(volumeID)
 	if err != nil {
 		return nil, err
@@ -361,25 +347,13 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, linodeWaitError(err, "wait for NFS snapshot active")
 	}
 
-	readyToUse := snapshot.Status == linodego.NFSSnapshotStatusActive
-
-	tp, err := util.ParseTimestamp(snapshot.Created)
+	snapshotProto, err := csiSnapshot(snapshot, handle)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to parse snapshot created time: %s", err)
-	}
-
-	snapshotResponse = &csi.CreateSnapshotResponse{
-		Snapshot: &csi.Snapshot{
-			SizeBytes:      snapshot.SizeBytes,
-			SnapshotId:     formatSnapshotHandle(handle.spaceID, handle.filesystemID, snapshot.ID),
-			SourceVolumeId: volumeID,
-			CreationTime:   tp,
-			ReadyToUse:     readyToUse,
-		},
+		return nil, err
 	}
 	klog.V(4).Infof("CreateSnapshot succeeded for volume %v, Backup ID: %v", volumeID, snapshot.ID)
 
-	return snapshotResponse, nil
+	return &csi.CreateSnapshotResponse{Snapshot: snapshotProto}, nil
 }
 
 func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
@@ -408,7 +382,19 @@ func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSn
 func (s *ControllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ListSnapshots")
 
-	// Future implementation will list backend snapshots or filter a single snapshot by ID.
-	_ = req
-	return nil, errNotImplemented
+	snapshotID := req.GetSnapshotId()
+	sourceVolumeID := req.GetSourceVolumeId()
+	maxEntries := int(req.GetMaxEntries())
+	if maxEntries < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "max entries must not be negative: %d", maxEntries)
+	}
+	if snapshotID == "" && sourceVolumeID == "" {
+		// external-snapshotter v8.2.0 only calls ListSnapshots with snapshot_id.
+		// Supporting an unfiltered request would require account-wide traversal.
+		return nil, status.Error(codes.InvalidArgument, "snapshot id or source volume id is required")
+	}
+	if snapshotID != "" {
+		return s.listSnapshotByID(ctx, snapshotID, sourceVolumeID)
+	}
+	return s.listSnapshotsBySourceVolume(ctx, sourceVolumeID, req.GetStartingToken(), maxEntries)
 }

@@ -13,11 +13,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
+	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
@@ -1166,6 +1168,227 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 	}
 }
 
+func TestControllerServerListSnapshots(t *testing.T) {
+	created := timestamp
+	pageOptions := &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	}
+	snapshot789 := linodego.NFSSnapshot{
+		ID:           789,
+		FilesystemID: 456,
+		SpaceID:      123,
+		Status:       linodego.NFSSnapshotStatusActive,
+		Created:      created,
+		SizeBytes:    1000,
+	}
+	snapshot790 := linodego.NFSSnapshot{
+		ID:           790,
+		FilesystemID: 456,
+		SpaceID:      123,
+		Status:       linodego.NFSSnapshotStatusCreating,
+		Created:      created,
+		SizeBytes:    2000,
+	}
+	tests := []struct {
+		name         string
+		request      *csi.ListSnapshotsRequest
+		setup        func(controllerTestEnv)
+		wantCode     codes.Code
+		wantResponse *csi.ListSnapshotsResponse
+	}{
+		{
+			name:    "snapshot id hit",
+			request: &csi.ListSnapshotsRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(&snapshot789, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(1000, "123/456/789", testVolumeID, true),
+			),
+		},
+		{
+			name:    "snapshot id not found returns empty",
+			request: &csi.ListSnapshotsRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+			wantResponse: emptyListSnapshotsResponse(),
+		},
+		{
+			name:     "invalid snapshot id",
+			request:  &csi.ListSnapshotsRequest{SnapshotId: "789"},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "source volume id listing",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(1000, "123/456/789", testVolumeID, true),
+				csiSnapshotForTest(2000, "123/456/790", testVolumeID, false),
+			),
+		},
+		{
+			name:    "max entries larger than result returns all entries",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, MaxEntries: 3},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(1000, "123/456/789", testVolumeID, true),
+				csiSnapshotForTest(2000, "123/456/790", testVolumeID, false),
+			),
+		},
+		{
+			name:    "source volume id not found returns empty",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+			wantResponse: emptyListSnapshotsResponse(),
+		},
+		{
+			name:     "invalid source volume id",
+			request:  &csi.ListSnapshotsRequest{SourceVolumeId: "456"},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "snapshot and source filters match",
+			request: &csi.ListSnapshotsRequest{SnapshotId: "123/456/789", SourceVolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).Return(&snapshot789, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(1000, "123/456/789", testVolumeID, true),
+			),
+		},
+		{
+			name:         "snapshot and source filters mismatch",
+			request:      &csi.ListSnapshotsRequest{SnapshotId: "123/456/789", SourceVolumeId: "321/654"},
+			wantResponse: emptyListSnapshotsResponse(),
+		},
+		{
+			name:     "unfiltered listing is rejected",
+			request:  &csi.ListSnapshotsRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "negative max entries is rejected",
+			request:  &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, MaxEntries: -1},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "malformed starting token is rejected",
+			request:  &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, StartingToken: "invalid"},
+			wantCode: codes.Aborted,
+		},
+		{
+			name:     "negative starting token is rejected",
+			request:  &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, StartingToken: "-1"},
+			wantCode: codes.Aborted,
+		},
+		{
+			name:    "first page returns next token",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, MaxEntries: 1},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantResponse: listSnapshotsResponseWithToken(
+				"1",
+				csiSnapshotForTest(1000, "123/456/789", testVolumeID, true),
+			),
+		},
+		{
+			name:    "starting token with zero max returns all remaining entries",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, StartingToken: "1"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(2000, "123/456/790", testVolumeID, false),
+			),
+		},
+		{
+			name:    "final limited page omits next token",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, StartingToken: "1", MaxEntries: 1},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantResponse: listSnapshotsResponse(
+				csiSnapshotForTest(2000, "123/456/790", testVolumeID, false),
+			),
+		},
+		{
+			name:    "out of range starting token is rejected",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID, StartingToken: "2"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot789, snapshot790}, nil)
+			},
+			wantCode: codes.Aborted,
+		},
+		{
+			name:    "missing creation timestamp is rejected",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				snapshot := snapshot789
+				snapshot.Created = nil
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return([]linodego.NFSSnapshot{snapshot}, nil)
+			},
+			wantCode: codes.Internal,
+		},
+		{
+			name:    "get backend error maps to grpc code",
+			request: &csi.ListSnapshotsRequest{SnapshotId: "123/456/789"},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSSnapshot(gomock.Any(), 123, 456, 789).
+					Return(nil, linodeAPIError(http.StatusServiceUnavailable))
+			},
+			wantCode: codes.Unavailable,
+		},
+		{
+			name:    "list backend error maps to grpc code",
+			request: &csi.ListSnapshotsRequest{SourceVolumeId: testVolumeID},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(pageOptions)).
+					Return(nil, linodeAPIError(http.StatusServiceUnavailable))
+			},
+			wantCode: codes.Unavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.ListSnapshots(context.Background(), tt.request)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("ListSnapshots() code = %v, want %v (err = %v)", status.Code(err), tt.wantCode, err)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if !proto.Equal(response, tt.wantResponse) {
+				t.Fatalf("ListSnapshots() response = %#v, want %#v", response, tt.wantResponse)
+			}
+		})
+	}
+}
+
 func TestControllerServerUnimplementedRPCs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1181,10 +1404,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		}},
 		{name: "ListVolumes", call: func(server *ControllerServer) error {
 			_, err := server.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			return err
-		}},
-		{name: "ListSnapshots", call: func(server *ControllerServer) error {
-			_, err := server.ListSnapshots(context.Background(), &csi.ListSnapshotsRequest{})
 			return err
 		}},
 	}
@@ -1205,6 +1424,32 @@ func mountCapability(mode csi.VolumeCapability_AccessMode_Mode) *csi.VolumeCapab
 	return &csi.VolumeCapability{
 		AccessType: &csi.VolumeCapability_Mount{Mount: &csi.VolumeCapability_MountVolume{}},
 		AccessMode: &csi.VolumeCapability_AccessMode{Mode: mode},
+	}
+}
+
+func listSnapshotsResponse(snapshots ...*csi.Snapshot) *csi.ListSnapshotsResponse {
+	return listSnapshotsResponseWithToken("", snapshots...)
+}
+
+func listSnapshotsResponseWithToken(nextToken string, snapshots ...*csi.Snapshot) *csi.ListSnapshotsResponse {
+	entries := make([]*csi.ListSnapshotsResponse_Entry, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		entries = append(entries, &csi.ListSnapshotsResponse_Entry{Snapshot: snapshot})
+	}
+	return &csi.ListSnapshotsResponse{Entries: entries, NextToken: nextToken}
+}
+
+func emptyListSnapshotsResponse() *csi.ListSnapshotsResponse {
+	return &csi.ListSnapshotsResponse{Entries: []*csi.ListSnapshotsResponse_Entry{}}
+}
+
+func csiSnapshotForTest(sizeBytes int64, snapshotID, sourceVolumeID string, ready bool) *csi.Snapshot {
+	return &csi.Snapshot{
+		SizeBytes:      sizeBytes,
+		SnapshotId:     snapshotID,
+		SourceVolumeId: sourceVolumeID,
+		CreationTime:   timestamppb.New(*timestamp),
+		ReadyToUse:     ready,
 	}
 }
 

@@ -13,6 +13,8 @@ import (
 	"github.com/linode/linodego/v2"
 )
 
+const DefaultListPageSize = 500
+
 type LinodeClient interface {
 	ListInterfaces(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.LinodeInterface, error)
 
