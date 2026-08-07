@@ -57,7 +57,6 @@ type Config struct {
 	// same host-mounted socket path when multiple CSI drivers are deployed on a
 	// node, otherwise socket and registration paths can contend with each other.
 	LinodeToken         string
-	BaseURL             string
 	UserAgent           string
 	DriverVersion       string
 	RootCertificatePath string
@@ -131,13 +130,6 @@ func NewLinodeClient(config *Config, opts ...Option) (*linodego.Client, error) {
 		err := newClient.SetRootCertificate(config.RootCertificatePath)
 		if err != nil {
 			return nil, err
-		}
-	}
-
-	if config.BaseURL != "" {
-		_, err := newClient.UseURL(config.BaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set base URL: %w", err)
 		}
 	}
 
