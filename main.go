@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/linode/linodego/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 	"k8s.io/klog/v2"
 
@@ -36,7 +35,6 @@ func loadConfig() linodeclient.Config {
 
 	return linodeclient.Config{
 		LinodeToken:         os.Getenv("LINODE_TOKEN"),
-		BaseURL:             envOrDefault("LINODE_URL", fmt.Sprintf("%s://%s", linodego.APIProto, linodego.APIHost)),
 		DriverVersion:       vendorVersion,
 		RootCertificatePath: os.Getenv("LINODE_CA"),
 		Timeout:             timeout,

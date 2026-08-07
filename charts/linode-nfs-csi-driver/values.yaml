@@ -7,6 +7,12 @@ namespace: kube-system
 # kubeletPath can be overridden for alternate Kubernetes distros.
 kubeletPath: /var/lib/kubelet
 
+# Linode API base URL used by the controller plugin.
+linodeURL: https://api.linode.com
+
+# Linode API version used by the controller plugin.
+linodeAPIVersion: v4beta
+
 # secretRef:
 #   name: linode-api-token
 #   apiTokenRef: token

@@ -25,6 +25,10 @@ spec:
                 secretKeyRef:
                   name: linode-api-token
                   key: token
+            - name: LINODE_URL
+              value: https://api.linode.com
+            - name: LINODE_API_VERSION
+              value: v4beta
             # Keep the controller plugin on its own pod-local socket path so it
             # does not overlap with node plugin socket locations when multiple
             # CSI drivers are installed.
