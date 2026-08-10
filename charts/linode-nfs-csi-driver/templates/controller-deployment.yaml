@@ -56,6 +56,10 @@ spec:
                 secretKeyRef:
                   name: {{ if .Values.secretRef }}{{ .Values.secretRef.name }}{{ else }}linode-api-token{{ end }}
                   key: {{ if .Values.secretRef }}{{ default "token" .Values.secretRef.apiTokenRef }}{{ else }}token{{ end }}
+            - name: LINODE_URL
+              value: {{ .Values.linodeURL | quote }}
+            - name: LINODE_API_VERSION
+              value: {{ .Values.linodeAPIVersion | quote }}
             {{- with .Values.image.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -40,7 +40,6 @@ func defaultClientHelper(t *testing.T) *linodego.Client {
 
 	config := &linodeclient.Config{
 		LinodeToken:   "token",
-		BaseURL:       "https://api.linode.com",
 		DriverVersion: "dev",
 	}
 	client, err := linodeclient.NewLinodeClient(config)
