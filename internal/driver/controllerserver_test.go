@@ -1068,6 +1068,18 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 		},
 		{
+			name: "source filesystem not found",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           testVolumeID,
+			},
+			wantErr: linodeError(linodeAPIError(http.StatusNotFound), "list NFS snapshots"),
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).
+					Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+		},
+		{
 			name: "returns an existing same-source snapshot",
 			request: &csi.CreateSnapshotRequest{
 				SourceVolumeId: testVolumeID,

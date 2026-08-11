@@ -340,11 +340,11 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, err
 	}
 
-	existingSnapshot, found, err := s.findSnapshotByLabel(ctx, handle, name)
+	existingSnapshot, err := s.findSnapshotByLabel(ctx, handle, name)
 	if err != nil {
-		return nil, err
+		return nil, linodeError(err, "list NFS snapshots")
 	}
-	if found {
+	if existingSnapshot != nil {
 		return csiCreateSnapshotResponse(existingSnapshot, handle)
 	}
 
@@ -352,8 +352,8 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		Label: name,
 	})
 	if err != nil && linodego.ErrHasStatus(err, http.StatusConflict) {
-		existingSnapshot, found, lookupErr := s.findSnapshotByLabel(ctx, handle, name)
-		if lookupErr == nil && found {
+		existingSnapshot, lookupErr := s.findSnapshotByLabel(ctx, handle, name)
+		if lookupErr == nil && existingSnapshot != nil {
 			return csiCreateSnapshotResponse(existingSnapshot, handle)
 		}
 	}

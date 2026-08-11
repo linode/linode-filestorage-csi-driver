@@ -567,23 +567,20 @@ func (s *ControllerServer) waitForFilesystemAccessPolicyActive(ctx context.Conte
 	return nil
 }
 
-func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volumeHandle, label string) (*linodego.NFSSnapshot, bool, error) {
+func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volumeHandle, label string) (*linodego.NFSSnapshot, error) {
 	snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, handle.filesystemID, &linodego.ListOptions{
 		PageOptions: &linodego.PageOptions{},
 		PageSize:    linodeclient.DefaultListPageSize,
 	})
 	if err != nil {
-		if linodego.IsNotFound(err) {
-			return nil, false, nil
-		}
-		return nil, false, linodeError(err, "list NFS snapshots")
+		return nil, err
 	}
 	for i := range snapshots {
 		if snapshots[i].Label == label {
-			return &snapshots[i], true, nil
+			return &snapshots[i], nil
 		}
 	}
-	return nil, false, nil
+	return nil, nil //nolint:nilnil // Snapshot absence is the expected create path.
 }
 
 func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {
