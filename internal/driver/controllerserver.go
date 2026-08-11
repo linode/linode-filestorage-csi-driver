@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"errors"
+	"net/http"
 	"slices"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -319,6 +320,11 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateSnapshot")
 
+	name := req.GetName()
+	if name == "" {
+		return nil, errNoSnapshotName
+	}
+
 	volumeID := req.GetSourceVolumeId()
 	if volumeID == "" {
 		return nil, errNoVolumeID
@@ -334,9 +340,23 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, err
 	}
 
+	existingSnapshot, found, err := s.findSnapshotByLabel(ctx, handle, name)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return csiCreateSnapshotResponse(existingSnapshot, handle)
+	}
+
 	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
-		Label: req.GetName(),
+		Label: name,
 	})
+	if err != nil && linodego.ErrHasStatus(err, http.StatusConflict) {
+		existingSnapshot, found, lookupErr := s.findSnapshotByLabel(ctx, handle, name)
+		if lookupErr == nil && found {
+			return csiCreateSnapshotResponse(existingSnapshot, handle)
+		}
+	}
 	if err != nil {
 		return nil, linodeError(err, "create NFS snapshot")
 	}
@@ -347,13 +367,13 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, linodeWaitError(err, "wait for NFS snapshot active")
 	}
 
-	snapshotProto, err := csiSnapshot(snapshot, handle)
+	response, err := csiCreateSnapshotResponse(snapshot, handle)
 	if err != nil {
 		return nil, err
 	}
 	klog.V(4).Infof("CreateSnapshot succeeded for volume %v, Backup ID: %v", volumeID, snapshot.ID)
 
-	return &csi.CreateSnapshotResponse{Snapshot: snapshotProto}, nil
+	return response, nil
 }
 
 func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {

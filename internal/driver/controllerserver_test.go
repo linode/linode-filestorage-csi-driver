@@ -1023,6 +1023,10 @@ func TestControllerGetCapabilities(t *testing.T) {
 }
 
 func TestControllerServerCreateSnapshot(t *testing.T) {
+	snapshotListOptions := &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	}
 	tests := []struct {
 		name         string
 		request      *csi.CreateSnapshotRequest
@@ -1046,6 +1050,7 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 				},
 			},
 			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
 				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
 					Return(&linodego.NFSSnapshot{
 						Status:    linodego.NFSSnapshotStatusCreating,
@@ -1063,6 +1068,71 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 		},
 		{
+			name: "returns an existing same-source snapshot",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           "snapshot-abc",
+			},
+			wantResponse: &csi.CreateSnapshotResponse{
+				Snapshot: &csi.Snapshot{
+					SizeBytes:      2000,
+					SnapshotId:     "123/456/790",
+					SourceVolumeId: testVolumeID,
+					CreationTime:   timestamppb.New(*timestamp),
+					ReadyToUse:     true,
+				},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).
+					Return([]linodego.NFSSnapshot{
+						{ID: 789, Label: "another-snapshot", Status: linodego.NFSSnapshotStatusActive, Created: timestamp, SizeBytes: 1000},
+						{ID: 790, Label: "snapshot-abc", Status: linodego.NFSSnapshotStatusActive, Created: timestamp, SizeBytes: 2000},
+					}, nil)
+			},
+		},
+		{
+			name: "reconciles provider conflict with existing snapshot",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           "snapshot-abc",
+			},
+			wantResponse: &csi.CreateSnapshotResponse{
+				Snapshot: &csi.Snapshot{
+					SizeBytes:      2000,
+					SnapshotId:     "123/456/790",
+					SourceVolumeId: testVolumeID,
+					CreationTime:   timestamppb.New(*timestamp),
+					ReadyToUse:     true,
+				},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: "snapshot-abc"}).
+					Return(nil, linodeAPIError(http.StatusConflict))
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).
+					Return([]linodego.NFSSnapshot{
+						{ID: 790, Label: "snapshot-abc", Status: linodego.NFSSnapshotStatusActive, Created: timestamp, SizeBytes: 2000},
+					}, nil)
+			},
+		},
+		{
+			name: "maps provider conflict when no matching snapshot exists",
+			request: &csi.CreateSnapshotRequest{
+				SourceVolumeId: testVolumeID,
+				Name:           "snapshot-abc",
+			},
+			wantErr: linodeError(linodeAPIError(http.StatusConflict), "create NFS snapshot"),
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: "snapshot-abc"}).
+					Return(nil, linodeAPIError(http.StatusConflict))
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).
+					Return([]linodego.NFSSnapshot{
+						{ID: 790, Label: "another-snapshot", Status: linodego.NFSSnapshotStatusActive, Created: timestamp, SizeBytes: 2000},
+					}, nil)
+			},
+		},
+		{
 			name: "api error on snapshot creation",
 			request: &csi.CreateSnapshotRequest{
 				SourceVolumeId: testVolumeID,
@@ -1070,13 +1140,19 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 			wantErr: linodeError(&linodego.Error{Code: http.StatusBadGateway}, "create NFS snapshot"),
 			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
 				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: testVolumeID}).
 					Return(nil, &linodego.Error{Code: http.StatusBadGateway})
 			},
 		},
 		{
+			name:    "no snapshot name",
+			request: &csi.CreateSnapshotRequest{SourceVolumeId: testVolumeID},
+			wantErr: errNoSnapshotName,
+		},
+		{
 			name:    "no source volume",
-			request: &csi.CreateSnapshotRequest{},
+			request: &csi.CreateSnapshotRequest{Name: "snapshot-abc"},
 			wantErr: errNoVolumeID,
 		},
 	}
