@@ -13,6 +13,7 @@ var (
 	errNilDriver                  = status.Error(codes.Internal, "nil driver")
 	errNilMounter                 = status.Error(codes.Internal, "nil mounter")
 	errNoVolumeName               = status.Error(codes.InvalidArgument, "volume name is required")
+	errNoSnapshotName             = status.Error(codes.InvalidArgument, "snapshot name is required")
 	errNoVolumeCapabilities       = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability         = status.Error(codes.InvalidArgument, "no volume capability set")
 	errNoMountVolumeCapability    = status.Error(codes.InvalidArgument, "no mount volume capability set")

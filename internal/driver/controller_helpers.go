@@ -603,6 +603,22 @@ func (s *ControllerServer) waitForFilesystemAccessPolicyActive(ctx context.Conte
 	return nil
 }
 
+func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volumeHandle, label string) (*linodego.NFSSnapshot, error) {
+	snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, handle.filesystemID, &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range snapshots {
+		if snapshots[i].Label == label {
+			return &snapshots[i], nil
+		}
+	}
+	return nil, nil //nolint:nilnil // Snapshot absence is the expected create path.
+}
+
 func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {
 	parsedSnapshot, err := parseSnapshotHandle(snapshotID)
 	if err != nil {
@@ -704,6 +720,14 @@ func csiSnapshot(snapshot *linodego.NFSSnapshot, handle volumeHandle) (*csi.Snap
 		CreationTime:   creationTime,
 		ReadyToUse:     snapshot.Status == linodego.NFSSnapshotStatusActive,
 	}, nil
+}
+
+func csiCreateSnapshotResponse(snapshot *linodego.NFSSnapshot, handle volumeHandle) (*csi.CreateSnapshotResponse, error) {
+	snapshotProto, err := csiSnapshot(snapshot, handle)
+	if err != nil {
+		return nil, err
+	}
+	return &csi.CreateSnapshotResponse{Snapshot: snapshotProto}, nil
 }
 
 // listSnapshotsStartingOffset decodes the CSI starting_token into an offset. An
