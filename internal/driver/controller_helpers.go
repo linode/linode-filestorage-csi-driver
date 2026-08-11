@@ -146,6 +146,21 @@ func parseSnapshotHandle(snapshotID string) (snapshotHandle, error) {
 	return snapshotHandle{spaceID: spaceID, filesystemID: filesystemID, snapshotID: snapshot}, nil
 }
 
+func parseSnapshotContentSource(source *csi.VolumeContentSource) (snapshotHandle, bool, error) {
+	if source == nil {
+		return snapshotHandle{}, false, nil
+	}
+	if source.GetVolume() != nil || source.GetSnapshot() == nil {
+		return snapshotHandle{}, false, status.Error(codes.InvalidArgument, "unsupported volume content source")
+	}
+
+	handle, err := parseSnapshotHandle(source.GetSnapshot().GetSnapshotId())
+	if err != nil {
+		return snapshotHandle{}, false, err
+	}
+	return handle, true, nil
+}
+
 func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, error) {
 	handle, err := parseVolumeHandle(volumeID)
 	if err != nil {
@@ -405,6 +420,16 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID i
 	}
 }
 
+func validateExistingSnapshotClone(filesystem *linodego.NFSFilesystem, source snapshotHandle, region string) error {
+	if filesystem.SourceSnapshotID == nil || *filesystem.SourceSnapshotID != source.snapshotID {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists from a different snapshot", filesystem.Label)
+	}
+	if filesystem.Region != region {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists in incompatible region %q", filesystem.Label, filesystem.Region)
+	}
+	return nil
+}
+
 func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
 	if !slices.Equal(filesystem.Tags, params.tags) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
@@ -474,12 +499,23 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	return nil
 }
 
-func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, req *csi.CreateVolumeRequest, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source snapshotHandle, hasSnapshot bool) (*csi.CreateVolumeResponse, error) {
+	if hasSnapshot {
+		if err := validateExistingSnapshotClone(existing, source, params.region); err != nil {
+			return nil, err
+		}
+	}
+
 	waitCtx, cancel := waitContext(ctx)
 	defer cancel()
 	existing, err := s.client.WaitForNFSFilesystemStatus(waitCtx, existing.SpaceID, existing.ID, linodego.NFSFilesystemStatusActive)
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
+	}
+	if hasSnapshot {
+		if err := validateExistingSnapshotClone(existing, source, params.region); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.validateExistingFilesystem(ctx, existing, params); err != nil {
 		return nil, err
@@ -492,30 +528,19 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, req *cs
 		return nil, err
 	}
 
-	if req.GetVolumeContentSource() != nil {
-		if req.GetVolumeContentSource().GetVolume() != nil {
-			return nil, status.Error(codes.InvalidArgument, "Unsupported volume content source")
-		}
-
-		if req.GetVolumeContentSource().GetSnapshot() != nil {
-			return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
-		}
-	}
-
 	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
 }
 
-func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, region string, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
-	handle, err := parseSnapshotHandle(req.GetVolumeContentSource().GetSnapshot().GetSnapshotId())
-	if err != nil {
-		return nil, err
-	}
-
-	cloned, err := s.client.CloneNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID, linodego.NFSSnapshotCloneOptions{
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
+	options := linodego.NFSSnapshotCloneOptions{
 		Label:   req.GetName(),
-		Region:  region,
-		SizeGib: ptr.To(ptr.To(util.BytesToGiB(capacityBytes))),
-	})
+		Region:  params.region,
+		SpaceID: ptr.To(ptr.To(spaceID)),
+	}
+	if params.tags != nil {
+		options.Tags = ptr.To(params.tags)
+	}
+	cloned, err := s.client.CloneNFSSnapshot(ctx, source.spaceID, source.filesystemID, source.snapshotID, options)
 	if err != nil {
 		return nil, linodeError(err, "clone snapshot failed")
 	}
@@ -525,6 +550,14 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.Cre
 	cloned, err = s.client.WaitForNFSFilesystemStatus(waitCloneCtx, cloned.SpaceID, cloned.ID, linodego.NFSFilesystemStatusActive)
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
+	}
+	if err := validateFilesystemMountTarget(cloned); err != nil {
+		return nil, err
+	}
+	if params.squashPolicySet {
+		if err := s.setInitialSquashPolicy(ctx, cloned.SpaceID, cloned.ID, params.squashPolicy); err != nil {
+			return nil, err
+		}
 	}
 
 	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil

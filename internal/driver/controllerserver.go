@@ -47,6 +47,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err := validateCreateVolumeCapabilities(req.GetVolumeCapabilities()); err != nil {
 		return nil, err
 	}
+	snapshot, hasSnapshot, err := parseSnapshotContentSource(req.GetVolumeContentSource())
+	if err != nil {
+		return nil, err
+	}
 
 	params, err := parseCreateVolumeParameters(req.GetParameters())
 	if err != nil {
@@ -66,13 +70,14 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, err
 	}
 
-	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 	existing, found, err := s.findExistingFilesystem(ctx, space.ID, req.GetName(), params.region)
 	if err != nil {
 		return nil, err
 	}
+	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
+
 	if found {
-		return s.handleExistingFilesystem(ctx, req, existing, &params, space, capacityBytes)
+		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot, hasSnapshot)
 	}
 
 	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
@@ -82,6 +87,12 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 
 	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
 		return nil, err
+	}
+
+	if hasSnapshot {
+		// Snapshot restores target the cluster's region. Source-region validation is
+		// deferred until cross-region CSI behavior is explicitly defined.
+		return s.restoreFromSnapshot(ctx, req, snapshot, space.ID, &params, capacityBytes, spacePolicy)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
@@ -106,10 +117,6 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
-	if req.GetVolumeContentSource().GetSnapshot() != nil {
-		return s.restoreFromSnapshot(ctx, req, params.region, capacityBytes, spacePolicy)
-	}
-
 	if params.squashPolicySet {
 		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
 			return nil, err
