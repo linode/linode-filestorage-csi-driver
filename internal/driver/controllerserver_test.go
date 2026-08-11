@@ -502,6 +502,21 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 		}, codes.AlreadyExists, nil, "")
 	})
 
+	t.Run("rejects an existing filesystem without a source snapshot", func(t *testing.T) {
+		filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+		runCreateVolumeTest(t, newRequest(), func(t *testing.T, env controllerTestEnv) {
+			t.Helper()
+			expectSingleNodeCluster(env, 123456)
+			env.client.EXPECT().GetNFSSpace(gomock.Any(), 1123).Return(&linodego.NFSSpace{ID: 1123}, nil)
+			env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 1123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
+				ID:      891,
+				SpaceID: 1123,
+				Label:   "pvc-abc",
+				Region:  "us-east",
+			}}, nil)
+		}, codes.AlreadyExists, nil, `NFS filesystem 891 ("pvc-abc") does not identify a source snapshot; requested snapshot 890`)
+	})
+
 	t.Run("rejects an existing clone with incompatible tags", func(t *testing.T) {
 		filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
 		runCreateVolumeTest(t, newRequest(), func(t *testing.T, env controllerTestEnv) {

@@ -146,19 +146,19 @@ func parseSnapshotHandle(snapshotID string) (snapshotHandle, error) {
 	return snapshotHandle{spaceID: spaceID, filesystemID: filesystemID, snapshotID: snapshot}, nil
 }
 
-func parseSnapshotContentSource(source *csi.VolumeContentSource) (snapshotHandle, bool, error) {
+func parseSnapshotContentSource(source *csi.VolumeContentSource) (*snapshotHandle, error) {
 	if source == nil {
-		return snapshotHandle{}, false, nil
+		return nil, nil //nolint:nilnil // A missing source represents regular provisioning.
 	}
 	if source.GetVolume() != nil || source.GetSnapshot() == nil {
-		return snapshotHandle{}, false, status.Error(codes.InvalidArgument, "unsupported volume content source")
+		return nil, status.Error(codes.InvalidArgument, "unsupported volume content source")
 	}
 
 	handle, err := parseSnapshotHandle(source.GetSnapshot().GetSnapshotId())
 	if err != nil {
-		return snapshotHandle{}, false, err
+		return nil, err
 	}
-	return handle, true, nil
+	return &handle, nil
 }
 
 func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, error) {
@@ -420,9 +420,12 @@ func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID i
 	}
 }
 
-func validateExistingSnapshotClone(filesystem *linodego.NFSFilesystem, source snapshotHandle, region string) error {
-	if filesystem.SourceSnapshotID == nil || *filesystem.SourceSnapshotID != source.snapshotID {
-		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists from a different snapshot", filesystem.Label)
+func validateExistingSnapshotClone(filesystem *linodego.NFSFilesystem, sourceSnapshotID int, region string) error {
+	if filesystem.SourceSnapshotID == nil {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %d (%q) does not identify a source snapshot; requested snapshot %d", filesystem.ID, filesystem.Label, sourceSnapshotID)
+	}
+	if *filesystem.SourceSnapshotID != sourceSnapshotID {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %d (%q) was cloned from snapshot %d, requested snapshot %d", filesystem.ID, filesystem.Label, *filesystem.SourceSnapshotID, sourceSnapshotID)
 	}
 	if filesystem.Region != region {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists in incompatible region %q", filesystem.Label, filesystem.Region)
@@ -499,9 +502,9 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	return nil
 }
 
-func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source snapshotHandle, hasSnapshot bool) (*csi.CreateVolumeResponse, error) {
-	if hasSnapshot {
-		if err := validateExistingSnapshotClone(existing, source, params.region); err != nil {
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
+	if source != nil {
+		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
 		}
 	}
@@ -512,8 +515,8 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
-	if hasSnapshot {
-		if err := validateExistingSnapshotClone(existing, source, params.region); err != nil {
+	if source != nil {
+		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
 		}
 	}

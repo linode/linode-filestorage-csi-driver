@@ -47,7 +47,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err := validateCreateVolumeCapabilities(req.GetVolumeCapabilities()); err != nil {
 		return nil, err
 	}
-	snapshot, hasSnapshot, err := parseSnapshotContentSource(req.GetVolumeContentSource())
+	snapshot, err := parseSnapshotContentSource(req.GetVolumeContentSource())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
-		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot, hasSnapshot)
+		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot)
 	}
 
 	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
@@ -89,10 +89,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, err
 	}
 
-	if hasSnapshot {
+	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
 		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, req, snapshot, space.ID, &params, capacityBytes, spacePolicy)
+		return s.restoreFromSnapshot(ctx, req, *snapshot, space.ID, &params, capacityBytes, spacePolicy)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
