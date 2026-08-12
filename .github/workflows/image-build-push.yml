@@ -50,7 +50,7 @@ jobs:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ secrets.DOCKERHUB_OIDC_CONNECTIONID }}
         with:
           registry: docker.io
-          username: ${{ secrets.DOCKERHUB_ORG }}
+          username: ${{ github.repository_owner }}
       - name: Publish image with ko
         env:
           KO_DOCKER_REPO: docker.io/linode/linode-filestorage-csi-driver
