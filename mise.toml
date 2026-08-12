@@ -2,14 +2,14 @@
 minimum_release_age = "7d"  # only install versions released more than 7 days ago - https://mise.en.dev/security.html#minimum-release-age
 
 [tools]
-go = "1.26.2"
-kubectl = "1.35.5"
-helm = "3.19.5"
-golangci-lint = "2.11.4"
-ko = "0.18.1"
+go = "1.26.5"
+kubectl = "1.36.3"
+helm = "4.2.3"
+golangci-lint = "2.12.2"
+ko = "0.19.1"
 kustomize = "5.8.1"
-just = "1.52.0"
-yq = "4.53.2"
+just = "1.58.0"
+yq = "4.53.3"
 uv = "latest"
 "pipx:linode-cli" = "5.68.0"
 
