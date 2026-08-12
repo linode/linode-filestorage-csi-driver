@@ -33,6 +33,15 @@ const (
 	volumeContextMountTarget   = "mount-target"
 	volumeContextRegion        = "region"
 	volumeContextSpaceMTLSMode = "mtls-mode"
+
+	// Accepted values for the mtls-mode volume context key.
+	mtlsModeRequired = "required"
+	mtlsModeOptional = "optional"
+	mtlsModeDisabled = "disabled"
+
+	// Linode API filter fields used when listing NFS resources.
+	filterFieldLabel  = "label"
+	filterFieldRegion = "region"
 )
 
 type createVolumeParameters struct {
@@ -379,7 +388,7 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 		return space, nil
 	}
 
-	options, err := listOptionsForExactFields(map[string]string{"label": params.spaceLabel})
+	options, err := listOptionsForExactFields(map[string]string{filterFieldLabel: params.spaceLabel})
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +407,7 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 }
 
 func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID int, label, region string) (*linodego.NFSFilesystem, bool, error) {
-	options, err := listOptionsForExactFields(map[string]string{"label": label, "region": region})
+	options, err := listOptionsForExactFields(map[string]string{filterFieldLabel: label, filterFieldRegion: region})
 	if err != nil {
 		return nil, false, err
 	}

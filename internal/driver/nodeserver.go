@@ -30,6 +30,7 @@ var _ csi.NodeServer = &NodeServer{}
 const (
 	bindMountOption   = "bind"
 	nfsFilesystemType = "nfs4"
+	mtlsMountOption   = "xprtsec=mtls"
 )
 
 func NewNodeServer(ctx context.Context, driver *LinodeDriver, mounter *mountmanager.SafeFormatAndMount, volumeLocks *util.VolumeLocks) (*NodeServer, error) {
@@ -88,10 +89,10 @@ func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolu
 	if req.GetVolumeCapability().GetMount() == nil {
 		return nil, errNoMountVolumeCapability
 	}
-	if req.GetVolumeContext()["mount-target"] == "" {
+	if req.GetVolumeContext()[volumeContextMountTarget] == "" {
 		return nil, errNoVolumeContextMountTarget
 	}
-	if req.GetVolumeContext()["mtls-mode"] != "" && !allowedMTLSMode(req.GetVolumeContext()["mtls-mode"]) {
+	if mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]; mtlsMode != "" && !allowedMTLSMode(mtlsMode) {
 		return nil, errInvalidMTLSMode
 	}
 
