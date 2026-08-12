@@ -69,14 +69,14 @@ func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.Node
 
 	klog.V(4).InfoS("Staging volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
 
-	source := req.GetVolumeContext()["mount-target"]
-	mtlsMode := req.GetVolumeContext()["mtls-mode"]
+	source := req.GetVolumeContext()[volumeContextMountTarget]
+	mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]
 	options := req.GetVolumeCapability().GetMount().GetMountFlags()
 	switch mtlsMode {
-	case "required":
-		options = append(options, "xprtsec=mtls")
-	case "optional":
-		mtlsOptions := append(append([]string{}, options...), "xprtsec=mtls")
+	case mtlsModeRequired:
+		options = append(options, mtlsMountOption)
+	case mtlsModeOptional:
+		mtlsOptions := append(append([]string{}, options...), mtlsMountOption)
 		// TODO(moshevayner): Once the NFS service is ready, add a check for the error type to determine if the error is due to mTLS being required and failing, or if it's a different error. This would allow us to differentiate between a failed mTLS mount and other mount errors.
 		if err := s.mounter.Mount(source, stagingTargetPath, nfsFilesystemType, mtlsOptions); err == nil {
 			klog.V(4).InfoS("Successfully staged with mTLS", "volumeID", volumeID)
@@ -95,7 +95,7 @@ func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.Node
 
 func allowedMTLSMode(mode string) bool {
 	switch mode {
-	case "required", "optional", "disabled":
+	case mtlsModeRequired, mtlsModeOptional, mtlsModeDisabled:
 		return true
 	default:
 		return false

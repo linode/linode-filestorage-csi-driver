@@ -722,10 +722,6 @@ func TestNodeGetVolumeStats(t *testing.T) {
 						Unit:      csi.VolumeUsage_INODES,
 					},
 				},
-				VolumeCondition: &csi.VolumeCondition{
-					Abnormal: false,
-					Message:  "healthy",
-				},
 			},
 		},
 		{
@@ -746,13 +742,8 @@ func TestNodeGetVolumeStats(t *testing.T) {
 			name:        "Filesystem not mounted",
 			volumeID:    "not-mounted-volume",
 			volumePath:  "/not/mounted",
-			expectedErr: nil,
-			expectedRes: &csi.NodeGetVolumeStatsResponse{
-				VolumeCondition: &csi.VolumeCondition{
-					Abnormal: true,
-					Message:  "failed to get stats: input/output error",
-				},
-			},
+			expectedErr: errInternal("failed to get stats: input/output error"),
+			expectedRes: nil,
 		},
 		{
 			name:        "Volume path does not exist",
