@@ -140,6 +140,7 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
 	if len(driver.controllerCaps) != len(wantControllerCaps) {
 		t.Fatalf("unexpected controller cap count: %d", len(driver.controllerCaps))

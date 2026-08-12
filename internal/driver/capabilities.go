@@ -32,12 +32,12 @@ func controllerServiceCapabilities() []*csi.ControllerServiceCapability {
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
 
 	// Future post-v1 capabilities once core filesystem lifecycle is complete.
 	// capabilities = append(capabilities,
 	// 	csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-	// 	csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	// 	csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 	// 	csi.ControllerServiceCapability_RPC_CLONE_VOLUME,
 	// )
