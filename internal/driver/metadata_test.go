@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 )
@@ -107,17 +108,49 @@ func TestMetadataServiceCluster(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "region and VPC",
+			name: "region and VPC via linode interfaces",
 			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
 				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
 					*newTestNode("worker-b", "us-east", "10.0.0.11", "linode://12"),
 				}}, nil)
+				linodeClient.EXPECT().GetInstance(gomock.Any(), 11).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLinode}, nil)
 				linodeClient.EXPECT().ListInterfaces(gomock.Any(), 11, gomock.Nil()).Return([]linodego.LinodeInterface{
 					{VPC: &linodego.VPCInterface{VPCID: 123456}},
 				}, nil)
 			},
 			want: ClusterMetadata{Region: "us-east", VPCID: 123456},
+		},
+		{
+			name: "region and VPC via legacy config interfaces",
+			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
+				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
+					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
+				}}, nil)
+				linodeClient.EXPECT().GetInstance(gomock.Any(), 11).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLegacyConfig}, nil)
+				linodeClient.EXPECT().ListInstanceConfigs(gomock.Any(), 11, gomock.Nil()).Return([]linodego.InstanceConfig{
+					{Interfaces: []linodego.InstanceConfigInterface{
+						{Purpose: linodego.InterfacePurposePublic, Active: true},
+						{Purpose: linodego.InterfacePurposeVPC, Active: true, VPCID: ptr.To(654321)},
+					}},
+				}, nil)
+			},
+			want: ClusterMetadata{Region: "us-east", VPCID: 654321},
+		},
+		{
+			name: "ignores inactive legacy config VPC interfaces",
+			setup: func(kubeClient *mocks.MockKubeNodeClient, linodeClient *mocks.MockLinodeClient) {
+				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
+					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
+				}}, nil)
+				linodeClient.EXPECT().GetInstance(gomock.Any(), 11).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLegacyConfig}, nil)
+				linodeClient.EXPECT().ListInstanceConfigs(gomock.Any(), 11, gomock.Nil()).Return([]linodego.InstanceConfig{
+					{Interfaces: []linodego.InstanceConfigInterface{
+						{Purpose: linodego.InterfacePurposeVPC, Active: false, VPCID: ptr.To(654321)},
+					}},
+				}, nil)
+			},
+			wantErr: true,
 		},
 		{
 			name: "rejects mixed regions",
@@ -135,6 +168,7 @@ func TestMetadataServiceCluster(t *testing.T) {
 				kubeClient.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 					*newTestNode("worker-a", "us-east", "10.0.0.10", "linode://11"),
 				}}, nil)
+				linodeClient.EXPECT().GetInstance(gomock.Any(), 11).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLinode}, nil)
 				linodeClient.EXPECT().ListInterfaces(gomock.Any(), 11, gomock.Nil()).Return([]linodego.LinodeInterface{{Public: &linodego.PublicInterface{}}}, nil)
 			},
 			wantErr: true,

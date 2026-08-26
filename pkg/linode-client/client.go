@@ -16,7 +16,9 @@ import (
 const DefaultListPageSize = 500
 
 type LinodeClient interface {
+	GetInstance(ctx context.Context, linodeID int) (*linodego.Instance, error)
 	ListInterfaces(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.LinodeInterface, error)
+	ListInstanceConfigs(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.InstanceConfig, error)
 
 	ListNFSSpaces(ctx context.Context, opts *linodego.ListOptions) ([]linodego.NFSSpace, error)
 	GetNFSSpace(ctx context.Context, spaceID int) (*linodego.NFSSpace, error)

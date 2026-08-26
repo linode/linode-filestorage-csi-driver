@@ -327,6 +327,7 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				env.kube.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 					*newTestNode("worker-a", "us-east", "10.0.0.20", "linode://202"),
 				}}, nil)
+				env.client.EXPECT().GetInstance(gomock.Any(), 202).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLinode}, nil)
 				env.client.EXPECT().ListInterfaces(gomock.Any(), 202, gomock.Nil()).Return(nil, nil)
 			},
 			wantCode:    codes.FailedPrecondition,
@@ -613,6 +614,7 @@ func expectSingleNodeCluster(env controllerTestEnv, vpcID int) {
 	env.kube.EXPECT().ListNodes(gomock.Any()).Return(&corev1.NodeList{Items: []corev1.Node{
 		*newTestNode("worker-a", "us-east", "10.0.0.20", "linode://202"),
 	}}, nil)
+	env.client.EXPECT().GetInstance(gomock.Any(), 202).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLinode}, nil)
 	env.client.EXPECT().ListInterfaces(gomock.Any(), 202, gomock.Nil()).Return([]linodego.LinodeInterface{{
 		VPC: &linodego.VPCInterface{VPCID: vpcID},
 	}}, nil)
