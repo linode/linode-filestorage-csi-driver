@@ -85,8 +85,8 @@ sidecars:
         cpu: 250m
         memory: 256Mi
   snapshotter:
-    # Driver advertises CREATE_DELETE_SNAPSHOT; ship the sidecar by default.
-    enabled: true
+    # Enable after snapshot APIs and driver snapshot RPCs are ready.
+    enabled: false
     # CSI snapshotter sidecar image.
     repository: registry.k8s.io/sig-storage/csi-snapshotter
     tag: v8.2.0

@@ -91,22 +91,6 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
-        - name: csi-snapshotter
-          image: "registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0"
-          imagePullPolicy: IfNotPresent
-          args:
-            - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
-            - --leader-election
-          resources:
-            limits:
-              cpu: 250m
-              memory: 256Mi
-            requests:
-              cpu: 25m
-              memory: 64Mi
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: liveness-probe
           image: "registry.k8s.io/sig-storage/livenessprobe:v2.15.0"
           imagePullPolicy: IfNotPresent
