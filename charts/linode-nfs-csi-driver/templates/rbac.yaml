@@ -5,7 +5,10 @@ metadata:
   name: csi-linode-nfs-controller
 rules:
   - apiGroups: [""]
-    resources: ["persistentvolumes", "persistentvolumeclaims", "nodes", "events", "secrets"]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "nodes", "events", "secrets"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["csinodes"]
