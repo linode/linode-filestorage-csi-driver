@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/ptr"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
@@ -99,10 +98,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	createOptions := linodego.NFSFilesystemCreateOptions{
 		Label:            req.GetName(),
 		Region:           params.region,
-		ProtocolVersions: ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
+		ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
 	if params.tags != nil {
-		createOptions.Tags = ptr.To(params.tags)
+		createOptions.Tags = new(params.tags)
 	}
 	filesystem, err := s.client.CreateNFSFilesystem(ctx, space.ID, createOptions)
 	if err != nil {

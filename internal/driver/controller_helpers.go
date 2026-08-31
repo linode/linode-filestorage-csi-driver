@@ -14,7 +14,6 @@ import (
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/utils/ptr"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
@@ -362,20 +361,20 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 
 func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled bool, linodeIDs []int) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	options := linodego.NFSFilesystemAccessPolicyUpdateOptions{
-		Label:        ptr.To(policy.Label),
-		Enabled:      ptr.To(enabled),
-		LinodeIDs:    ptr.To(linodeIDs),
-		SquashPolicy: ptr.To(policy.SquashPolicy),
+		Label:        new(policy.Label),
+		Enabled:      new(enabled),
+		LinodeIDs:    new(linodeIDs),
+		SquashPolicy: new(policy.SquashPolicy),
 	}
 	if policy.Protocols != nil {
-		options.Protocols = ptr.To(policy.Protocols)
+		options.Protocols = new(policy.Protocols)
 	}
 	return options
 }
 
 func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, squashPolicy linodego.NFSSquashPolicy) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	options := filesystemPolicyUpdate(policy, policy.Enabled, filesystemPolicyLinodeIDs(policy))
-	options.SquashPolicy = ptr.To(squashPolicy)
+	options.SquashPolicy = new(squashPolicy)
 	return options
 }
 
@@ -496,10 +495,10 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	}
 	vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
 	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
-		Label:    ptr.To(policy.Label),
-		Enabled:  ptr.To(policy.Enabled),
-		VPCs:     ptr.To(vpcs),
-		MTLSMode: ptr.To(policy.MTLSMode),
+		Label:    new(policy.Label),
+		Enabled:  new(policy.Enabled),
+		VPCs:     new(vpcs),
+		MTLSMode: new(policy.MTLSMode),
 	}); err != nil {
 		return linodeError(err, "update NFS space access policy")
 	}
@@ -547,10 +546,10 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.Cre
 	options := linodego.NFSSnapshotCloneOptions{
 		Label:   req.GetName(),
 		Region:  params.region,
-		SpaceID: ptr.To(ptr.To(spaceID)),
+		SpaceID: new(new(spaceID)),
 	}
 	if params.tags != nil {
-		options.Tags = ptr.To(params.tags)
+		options.Tags = new(params.tags)
 	}
 	cloned, err := s.client.CloneNFSSnapshot(ctx, source.spaceID, source.filesystemID, source.snapshotID, options)
 	if err != nil {
