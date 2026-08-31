@@ -11,7 +11,6 @@ import (
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 )
@@ -131,7 +130,7 @@ func TestMetadataServiceCluster(t *testing.T) {
 				linodeClient.EXPECT().ListInstanceConfigs(gomock.Any(), 11, gomock.Nil()).Return([]linodego.InstanceConfig{
 					{Interfaces: []linodego.InstanceConfigInterface{
 						{Purpose: linodego.InterfacePurposePublic, Active: true},
-						{Purpose: linodego.InterfacePurposeVPC, Active: true, VPCID: ptr.To(654321)},
+						{Purpose: linodego.InterfacePurposeVPC, Active: true, VPCID: new(654321)},
 					}},
 				}, nil)
 			},
@@ -146,7 +145,7 @@ func TestMetadataServiceCluster(t *testing.T) {
 				linodeClient.EXPECT().GetInstance(gomock.Any(), 11).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLegacyConfig}, nil)
 				linodeClient.EXPECT().ListInstanceConfigs(gomock.Any(), 11, gomock.Nil()).Return([]linodego.InstanceConfig{
 					{Interfaces: []linodego.InstanceConfigInterface{
-						{Purpose: linodego.InterfacePurposeVPC, Active: false, VPCID: ptr.To(654321)},
+						{Purpose: linodego.InterfacePurposeVPC, Active: false, VPCID: new(654321)},
 					}},
 				}, nil)
 			},
