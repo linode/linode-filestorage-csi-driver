@@ -30,6 +30,7 @@ jobs:
             mise.jdx.dev:443
             mise-versions.jdx.dev:443
             pkg.actions.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
 
