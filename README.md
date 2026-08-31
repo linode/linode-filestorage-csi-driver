@@ -25,8 +25,8 @@ Install the repo toolchain once with `mise install`, then run tasks with `mise r
 - `mise run lint`
 - `mise run test`
 - `mise run build`
-- `mise run ko-build`
-- `KO_DOCKER_REPO=docker.io/<org>/linode-filestorage-csi-driver IMAGE_VERSION=<tag> mise run ko-publish`
+- `mise run image-build`
+- `IMAGE_REPO=docker.io/<org>/linode-filestorage-csi-driver IMAGE_VERSION=<tag> mise run image-push`
 
 ## Install Notes
 

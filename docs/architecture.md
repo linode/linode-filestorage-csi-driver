@@ -7,7 +7,7 @@ This repository is the initial scaffold for a Linode-managed NFS CSI driver.
 ```text
 .
 ├── .github/workflows/
-├── .ko.yaml
+├── Dockerfile
 ├── charts/linode-nfs-csi-driver/
 ├── deploy/kubernetes/
 ├── docs/
@@ -51,14 +51,13 @@ For allowlisting, the metadata service currently prefers the Kubernetes `Interna
 VPC identity is intentionally out of scope for this slice. `go-metadata` does not expose VPC identity today, and VPC-aware lookup through `linodego` requires separate instance-config and VPC API work.
 
 ## Image Build Shape
+Container images are built with a multi-stage Dockerfile, not ko.
 
-Container images are built with `ko`, not a Dockerfile.
+- `Dockerfile` builds a static Go binary and copies it onto `alpine:3.23.3` with `ca-certificates` and `nfs-utils` so the node plugin can exec `mount` / `mount.nfs4`.
+- `mise run image-build` builds `linux/amd64` locally (`PLATFORM` default).
+- `IMAGE_REPO=... IMAGE_VERSION=... mise run image-push` publishes that amd64 image.
 
-- `.ko.yaml` defines the default distroless base image and target platforms.
-- `mise run ko-build` builds the root Go package into the local container runtime.
-- `mise run ko-publish` publishes a multi-platform image to `KO_DOCKER_REPO`.
-
-This follows the same basic direction as the Linode Karpenter provider: keep image construction centered on Go build output and a small `.ko.yaml` instead of maintaining a separate Dockerfile path. 'ko' is a good fit and also a lot more efficient than traditional Dockerfiles for multi-platform builds, so this shape should be efficient and maintainable for our needs.
+Controller and node share one image; `DRIVER_ROLE` selects the process. Distroless is not viable for the node plugin because `k8s.io/utils/mount` shells out to `mount`.
 
 ## CSI Surface In This Scaffold
 

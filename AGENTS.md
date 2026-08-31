@@ -38,9 +38,8 @@
 - Controller manifests already include `csi-resizer` and `csi-snapshotter`, but the driver does not advertise expansion or snapshot capabilities yet.
 
 ## Packaging And Deploy
-
-- Images are built with `ko`, not a Dockerfile. Use `mise run ko-build` for local images and `KO_DOCKER_REPO=<repo> IMAGE_VERSION=<tag> mise run ko-publish` for publishing.
-- `.ko.yaml` builds multi-arch images for `linux/amd64` and `linux/arm64` from `gcr.io/distroless/static:nonroot`.
+- Images are built with Docker, not ko. Use `mise run image-build` for local images and `IMAGE_REPO=<repo> IMAGE_VERSION=<tag> mise run image-push` for publishing.
+- Images are `linux/amd64` only. Akamai/LKE is amd64. `PLATFORM` defaults to `linux/amd64` so ARM Macs still produce LKE-runnable images.
 - Controller and node socket paths are intentionally different. Keep controller at `unix:///var/lib/csi/sockets/pluginproxy/csi.sock`; keep node at `unix:///csi/csi.sock` with kubelet registration at `/var/lib/kubelet/plugins/linodefs.csi.linode.com/csi.sock`.
 - Equivalent Kubernetes wiring exists in both `deploy/kubernetes/base` and `charts/linode-nfs-csi-driver/templates`; when changing sidecars, env vars, mounts, RBAC, or socket paths, check both.
 - Raw Kustomize manifests expect a pre-created `linode-api-token` Secret in `kube-system` with key `token`.
