@@ -114,6 +114,21 @@ func (mr *MockLinodeClientMockRecorder) DeleteNFSSnapshot(ctx, spaceID, filesyst
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNFSSnapshot", reflect.TypeOf((*MockLinodeClient)(nil).DeleteNFSSnapshot), ctx, spaceID, filesystemID, snapshotID)
 }
 
+// GetInstance mocks base method.
+func (m *MockLinodeClient) GetInstance(ctx context.Context, linodeID int) (*linodego.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInstance", ctx, linodeID)
+	ret0, _ := ret[0].(*linodego.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInstance indicates an expected call of GetInstance.
+func (mr *MockLinodeClientMockRecorder) GetInstance(ctx, linodeID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstance", reflect.TypeOf((*MockLinodeClient)(nil).GetInstance), ctx, linodeID)
+}
+
 // GetNFSFilesystem mocks base method.
 func (m *MockLinodeClient) GetNFSFilesystem(ctx context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystem, error) {
 	m.ctrl.T.Helper()
@@ -202,6 +217,21 @@ func (m *MockLinodeClient) GetNFSSpaceAccessPolicy(ctx context.Context, spaceID 
 func (mr *MockLinodeClientMockRecorder) GetNFSSpaceAccessPolicy(ctx, spaceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNFSSpaceAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).GetNFSSpaceAccessPolicy), ctx, spaceID)
+}
+
+// ListInstanceConfigs mocks base method.
+func (m *MockLinodeClient) ListInstanceConfigs(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.InstanceConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListInstanceConfigs", ctx, linodeID, opts)
+	ret0, _ := ret[0].([]linodego.InstanceConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListInstanceConfigs indicates an expected call of ListInstanceConfigs.
+func (mr *MockLinodeClientMockRecorder) ListInstanceConfigs(ctx, linodeID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListInstanceConfigs", reflect.TypeOf((*MockLinodeClient)(nil).ListInstanceConfigs), ctx, linodeID, opts)
 }
 
 // ListInterfaces mocks base method.

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	metadataapi "github.com/linode/go-metadata"
+	"github.com/linode/linodego/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -229,7 +230,24 @@ func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) 
 	return ClusterMetadata{Region: region, VPCID: vpcID}, nil
 }
 
+// nodeVPCID resolves the VPC a Linode is attached to. Linodes provisioned with
+// the newer "linode" interface generation expose VPC attachment via
+// ListInterfaces, but most existing Linodes (including LKE/CAPI-provisioned
+// nodes) still use the legacy config-profile interfaces, where VPC attachment
+// is a purpose="vpc" entry on the active InstanceConfig instead.
 func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, error) {
+	instance, err := s.linodeClient.GetInstance(ctx, linodeID)
+	if err != nil {
+		return 0, fmt.Errorf("get Linode instance %d: %w", linodeID, err)
+	}
+
+	if instance.InterfaceGeneration == linodego.GenerationLegacyConfig {
+		return s.nodeVPCIDFromConfigs(ctx, linodeID)
+	}
+	return s.nodeVPCIDFromInterfaces(ctx, linodeID)
+}
+
+func (s *metadataService) nodeVPCIDFromInterfaces(ctx context.Context, linodeID int) (int, error) {
 	interfaces, err := s.linodeClient.ListInterfaces(ctx, linodeID, nil)
 	if err != nil {
 		return 0, fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
@@ -241,13 +259,8 @@ func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, err
 		if iface.VPC == nil || iface.VPC.VPCID == 0 {
 			continue
 		}
-
-		if vpcID == 0 {
-			vpcID = iface.VPC.VPCID
-			continue
-		}
-		if iface.VPC.VPCID != vpcID {
-			return 0, fmt.Errorf("linode %d has multiple VPCs: %d and %d", linodeID, vpcID, iface.VPC.VPCID)
+		if err := mergeVPCID(&vpcID, iface.VPC.VPCID, linodeID); err != nil {
+			return 0, err
 		}
 	}
 	if vpcID == 0 {
@@ -255,6 +268,44 @@ func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, err
 	}
 
 	return vpcID, nil
+}
+
+func (s *metadataService) nodeVPCIDFromConfigs(ctx context.Context, linodeID int) (int, error) {
+	configs, err := s.linodeClient.ListInstanceConfigs(ctx, linodeID, nil)
+	if err != nil {
+		return 0, fmt.Errorf("list Linode instance configs for %d: %w", linodeID, err)
+	}
+
+	vpcID := 0
+	for i := range configs {
+		for j := range configs[i].Interfaces {
+			iface := &configs[i].Interfaces[j]
+			if !iface.Active || iface.Purpose != linodego.InterfacePurposeVPC || iface.VPCID == nil || *iface.VPCID == 0 {
+				continue
+			}
+			if err := mergeVPCID(&vpcID, *iface.VPCID, linodeID); err != nil {
+				return 0, err
+			}
+		}
+	}
+	if vpcID == 0 {
+		return 0, errClusterVPCNotFound
+	}
+
+	return vpcID, nil
+}
+
+// mergeVPCID records candidate as the resolved VPC ID, or errors if a
+// different VPC ID was already recorded for the same Linode.
+func mergeVPCID(vpcID *int, candidate, linodeID int) error {
+	if *vpcID == 0 {
+		*vpcID = candidate
+		return nil
+	}
+	if *vpcID != candidate {
+		return fmt.Errorf("linode %d has multiple VPCs: %d and %d", linodeID, *vpcID, candidate)
+	}
+	return nil
 }
 
 func (s *metadataService) currentNodeFromMetadata(ctx context.Context) (NodeMetadata, error) {
