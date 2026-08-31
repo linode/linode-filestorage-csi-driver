@@ -56,6 +56,14 @@ run = "just docker-publish"
 description = "Lint Helm charts"
 run = "just helm-lint"
 
+[tasks.update-kustomize]
+description = "Render kustomize base from Helm chart"
+run = "just update-kustomize"
+
+[tasks.verify-kustomize]
+description = "Fail if kustomize base is stale"
+run = "just verify-kustomize"
+
 [tasks.release]
 description = "Create release artifacts"
 run = "just release"

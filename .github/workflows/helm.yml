@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - charts/**
+      - deploy/kubernetes/**
+      - hack/update-kustomize.sh
+      - hack/verify-kustomize.sh
   workflow_dispatch:
 
 permissions:
@@ -31,3 +34,6 @@ jobs:
 
       - name: Lint chart
         run: helm lint charts/linode-nfs-csi-driver
+
+      - name: Verify kustomize base is generated from the chart
+        run: ./hack/verify-kustomize.sh

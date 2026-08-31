@@ -1,8 +1,9 @@
+---
+# Source: linode-nfs-csi-driver/templates/controller-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: csi-linode-nfs-controller
-  namespace: kube-system
 spec:
   replicas: 1
   selector:
@@ -12,55 +13,52 @@ spec:
     metadata:
       labels:
         app: csi-linode-nfs-controller
+        role: csi-linode
     spec:
+      hostNetwork: false
+      dnsPolicy: Default
       serviceAccountName: csi-linode-nfs-controller
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
       containers:
         - name: plugin
-          image: docker.io/linode/linode-filestorage-csi-driver:dev
+          image: "docker.io/linode/linode-filestorage-csi-driver:dev"
+          imagePullPolicy: IfNotPresent
           env:
             - name: DRIVER_ROLE
               value: controller
+            # Keep the controller plugin on its own pod-local socket path so it
+            # does not overlap with node plugin socket locations when multiple
+            # CSI drivers are installed.
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
             - name: LINODE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: linode-api-token
                   key: token
             - name: LINODE_URL
-              value: https://api.linode.com
+              value: "https://api.linode.com"
             - name: LINODE_API_VERSION
-              value: v4beta
-            # Keep the controller plugin on its own pod-local socket path so it
-            # does not overlap with node plugin socket locations when multiple
-            # CSI drivers are installed.
-            - name: CSI_ENDPOINT
-              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+              value: "v4beta"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: csi-provisioner
-          image: registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+          image: "registry.k8s.io/sig-storage/csi-provisioner:v6.2.0"
+          imagePullPolicy: IfNotPresent
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: csi-attacher
-          image: registry.k8s.io/sig-storage/csi-attacher:v4.12.0
+          image: "registry.k8s.io/sig-storage/csi-attacher:v4.12.0"
+          imagePullPolicy: IfNotPresent
           args:
             - --v=2
             - --csi-address=$(ADDRESS)
@@ -69,60 +67,18 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /var/lib/csi/sockets/pluginproxy/
-        - name: csi-resizer
-          image: registry.k8s.io/sig-storage/csi-resizer:v1.13.0
-          args:
-            - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
-            - --leader-election
-          resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /var/lib/csi/sockets/pluginproxy/
-        - name: csi-snapshotter
-          image: registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0
-          args:
-            - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
-            - --leader-election
-          resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: liveness-probe
-          image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+          image: "registry.k8s.io/sig-storage/livenessprobe:v2.15.0"
+          imagePullPolicy: IfNotPresent
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
       volumes:
         - name: socket-dir
           emptyDir: {}
+
