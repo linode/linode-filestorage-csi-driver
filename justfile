@@ -1,6 +1,7 @@
 IMAGE_VERSION := env("IMAGE_VERSION", "dev")
 IMAGE_TAGS := env("IMAGE_TAGS", IMAGE_VERSION)
-KO_DOCKER_REPO := env("KO_DOCKER_REPO", "docker.io/linode/linode-filestorage-csi-driver")
+IMAGE_REPO := env("IMAGE_REPO", "docker.io/linode/linode-filestorage-csi-driver")
+PLATFORM := env("PLATFORM", "linux/amd64")
 RELEASE_IMAGE_REPO := env("RELEASE_IMAGE_REPO", "docker.io/linode/linode-filestorage-csi-driver")
 RELEASE_DIR := env("RELEASE_DIR", "release")
 
@@ -49,13 +50,13 @@ cover:
 build:
     go build -ldflags "-X main.vendorVersion={{ IMAGE_VERSION }}" ./...
 
-# Build container locally with ko
-ko-build:
-    IMAGE_VERSION={{ IMAGE_VERSION }} ko build --local --bare --tags {{ IMAGE_TAGS }} .
+# Build a local image. Default linux/amd64 (Akamai/LKE).
+docker-build:
+    docker build --platform={{ PLATFORM }} --build-arg REV={{ IMAGE_VERSION }} -t {{ IMAGE_REPO }}:{{ IMAGE_TAGS }} .
 
-# Publish container with ko
-ko-publish:
-    IMAGE_VERSION={{ IMAGE_VERSION }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build --bare --tags {{ IMAGE_TAGS }} .
+# Publish the PLATFORM image (default linux/amd64).
+docker-publish:
+    docker buildx build --platform={{ PLATFORM }} --build-arg REV={{ IMAGE_VERSION }} -t {{ IMAGE_REPO }}:{{ IMAGE_TAGS }} --push .
 
 # Lint the Helm chart
 helm-lint:
@@ -85,7 +86,8 @@ ci: fmt gen-mock vet lint test build
 helm-install:
     @if [ -z "$LINODE_TOKEN" ]; then echo "Error: LINODE_TOKEN environment variable is not set."; exit 1; fi
     helm upgrade --install --namespace kube-system --create-namespace linode-nfs-csi-driver charts/linode-nfs-csi-driver \
-        --set controller.image.repository={{ KO_DOCKER_REPO }} \
+        --set image.repository={{ IMAGE_REPO }} \
+        --set image.tag={{ IMAGE_VERSION }} \
         --set apiToken=$LINODE_TOKEN
 
 # Create an LKE test cluster

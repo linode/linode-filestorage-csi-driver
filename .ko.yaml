@@ -1,6 +1,0 @@
-defaultBaseImage: gcr.io/distroless/static:nonroot
-defaultPlatforms:
-  - linux/arm64
-  - linux/amd64
-defaultLdflags:
-  - -X main.vendorVersion={{.Env.IMAGE_VERSION}}
