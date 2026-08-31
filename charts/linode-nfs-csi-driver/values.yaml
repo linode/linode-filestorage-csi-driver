@@ -37,7 +37,13 @@ image:
   # Extra volume mounts added to both controller and node plugin containers.
   volumeMounts: []
   # Resource requests and limits for the plugin container.
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 sidecars:
   provisioner:
@@ -45,11 +51,25 @@ sidecars:
     repository: registry.k8s.io/sig-storage/csi-provisioner
     tag: v6.2.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
   attacher:
     # CSI attacher sidecar image.
     repository: registry.k8s.io/sig-storage/csi-attacher
     tag: v4.12.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
   resizer:
     # Enable once the driver advertises volume expansion support.
     enabled: false
@@ -57,18 +77,39 @@ sidecars:
     repository: registry.k8s.io/sig-storage/csi-resizer
     tag: v2.1.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
   snapshotter:
-    # Enable after deploying the matching csi-snapshotter sidecar.
-    enabled: false
+    # Driver advertises CREATE_DELETE_SNAPSHOT; ship the sidecar by default.
+    enabled: true
     # CSI snapshotter sidecar image.
     repository: registry.k8s.io/sig-storage/csi-snapshotter
     tag: v8.2.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
   livenessProbe:
     # Liveness probe sidecar image.
     repository: registry.k8s.io/sig-storage/livenessprobe
     tag: v2.15.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
 controller:
   # Deploy the controller Deployment.
@@ -125,6 +166,13 @@ node:
     repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
     tag: v2.16.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
     # Extra env vars for the registrar container.
     env: []
     # Extra volume mounts for the registrar container.
@@ -134,6 +182,13 @@ node:
     repository: registry.k8s.io/sig-storage/livenessprobe
     tag: v2.15.0
     pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
 # Extra pod annotations applied to controller and node pods.
 podAnnotations: {}

@@ -35,7 +35,7 @@
 - This repo is still scaffold-level. Identity and capability/info RPCs return real data, but most controller and node lifecycle RPCs still return gRPC `Unimplemented`.
 - `VolumeContext` semantics are not finalized yet; do not assume NFS server or export-path keys already exist in the scaffold.
 - Advertised capabilities are intentionally narrow: plugin `CONTROLLER_SERVICE`, controller `CREATE_DELETE_VOLUME`, node `STAGE_UNSTAGE_VOLUME` and `GET_VOLUME_STATS`.
-- Helm defaults leave `csi-resizer` and `csi-snapshotter` off (`sidecars.*.enabled: false`). Generated kustomize matches that. Enable the chart values and re-render to ship them.
+- Helm defaults ship `csi-snapshotter` (`CREATE_DELETE_SNAPSHOT`) and leave `csi-resizer` off until expansion is advertised. Generated kustomize matches that.
 
 ## Packaging And Deploy
 - Images are built with Docker, not ko. Use `mise run image-build` for local images and `IMAGE_REPO=<repo> IMAGE_VERSION=<tag> mise run image-push` for publishing.
