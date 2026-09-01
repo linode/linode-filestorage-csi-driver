@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
@@ -80,14 +79,22 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot)
 	}
 
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-	if err != nil {
-		return nil, err
-	}
+	// TEMP-DISABLED(access-policy): NFS Access Policy endpoints are not yet
+	// implemented on the beta NFSaaS backend, so space/filesystem access-policy
+	// calls are disabled below until support lands. Restore the commented code
+	// to re-enable.
+	var spacePolicy *linodego.NFSSpaceAccessPolicy
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		spacePolicy, err = s.getSpaceAccessPolicy(ctx, space.ID)
+		if err != nil {
+			return nil, err
+		}
 
-	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
-		return nil, err
-	}
+		if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
+			return nil, err
+		}
+	*/
 
 	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
@@ -117,13 +124,18 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
-	if params.squashPolicySet {
-		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
-			return nil, err
+	// TEMP-DISABLED(access-policy): root-squash configuration requires the
+	// filesystem access-policy API. Restore the commented code to re-enable.
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		if params.squashPolicySet {
+			if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
+				return nil, err
+			}
 		}
-	}
+	*/
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, spaceMTLSMode(spacePolicy))}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -150,79 +162,25 @@ func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolu
 func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerPublishVolume")
 
-	if req.GetVolumeId() == "" {
-		return nil, errNoVolumeID
-	}
-	if req.GetNodeId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "node id is required")
-	}
-	if supported, message := volumeCapabilitySupported(req.GetVolumeCapability()); !supported {
-		return nil, status.Error(codes.InvalidArgument, message)
-	}
-
-	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
-	if err != nil {
-		if status.Code(err) == codes.InvalidArgument {
-			return nil, err
-		}
-		return nil, linodeError(err, "get NFS filesystem access policy")
-	}
-	linodeIDs := filesystemPolicyLinodeIDs(policy)
-	if slices.Contains(linodeIDs, linodeID) {
-		if policy.Enabled {
-			return &csi.ControllerPublishVolumeResponse{}, nil
-		}
-	} else {
-		linodeIDs = append(linodeIDs, linodeID)
-	}
-
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, true, linodeIDs)); err != nil {
-		return nil, linodeError(err, "update NFS filesystem access policy")
-	}
-	if err := s.waitForFilesystemAccessPolicyActive(ctx, handle.spaceID, handle.filesystemID); err != nil {
-		return nil, err
-	}
-
-	return &csi.ControllerPublishVolumeResponse{}, nil
+	// TEMP-DISABLED(access-policy): depends on the filesystem access-policy API,
+	// not yet implemented on the beta NFSaaS backend. Not advertising
+	// PUBLISH_UNPUBLISH_VOLUME (capabilities.go) means the CO won't call this.
+	// Restore the full implementation (see git history) once Access Policy
+	// support lands.
+	_ = req
+	return nil, errNotImplemented
 }
 
 func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerUnpublishVolume")
 
-	if req.GetVolumeId() == "" {
-		return nil, errNoVolumeID
-	}
-	if req.GetNodeId() == "" {
-		return &csi.ControllerUnpublishVolumeResponse{}, nil
-	}
-
-	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
-	if err != nil {
-		if linodego.IsNotFound(err) {
-			return &csi.ControllerUnpublishVolumeResponse{}, nil
-		}
-		if status.Code(err) == codes.InvalidArgument {
-			return nil, err
-		}
-		return nil, linodeError(err, "get NFS filesystem access policy")
-	}
-
-	linodeIDs := filesystemPolicyLinodeIDs(policy)
-	if !slices.Contains(linodeIDs, linodeID) {
-		return &csi.ControllerUnpublishVolumeResponse{}, nil
-	}
-
-	updatedIDs := slices.DeleteFunc(linodeIDs, func(existing int) bool {
-		return existing == linodeID
-	})
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID, filesystemPolicyUpdate(policy, policy.Enabled, updatedIDs)); err != nil {
-		return nil, linodeError(err, "update NFS filesystem access policy")
-	}
-	if err := s.waitForFilesystemAccessPolicyActive(ctx, handle.spaceID, handle.filesystemID); err != nil {
-		return nil, err
-	}
-
-	return &csi.ControllerUnpublishVolumeResponse{}, nil
+	// TEMP-DISABLED(access-policy): depends on the filesystem access-policy API,
+	// not yet implemented on the beta NFSaaS backend. Not advertising
+	// PUBLISH_UNPUBLISH_VOLUME (capabilities.go) means the CO won't call this.
+	// Restore the full implementation (see git history) once Access Policy
+	// support lands.
+	_ = req
+	return nil, errNotImplemented
 }
 
 func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
@@ -312,14 +270,20 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 		return nil, err
 	}
 
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
-	if err != nil {
-		return nil, linodeError(err, "get NFS filesystem access policy")
-	}
+	// TEMP-DISABLED(access-policy): published-node status depends on the
+	// filesystem access-policy API, not yet implemented on the beta NFSaaS
+	// backend. Restore the commented code to re-enable.
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, handle.spaceID, handle.filesystemID)
+		if err != nil {
+			return nil, linodeError(err, "get NFS filesystem access policy")
+		}
+	*/
 
 	return &csi.ControllerGetVolumeResponse{
 		Volume: csiVolume(filesystem, 0, ""),
-		Status: csiControllerVolumeStatus(policy),
+		Status: &csi.ControllerGetVolumeResponse_VolumeStatus{},
 	}, nil
 }
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -153,6 +152,10 @@ func TestParseSnapshotHandle(t *testing.T) {
 	}
 }
 
+// TEMP-DISABLED(access-policy): parseVolumeHandleAndNodeID and
+// getFilesystemPolicyForVolumeAndNode are unused (see controller_helpers.go).
+// Restore the commented code to re-enable.
+/*
 func TestParseVolumeHandleAndNodeID(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -253,6 +256,7 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 		})
 	}
 }
+*/
 
 func TestRequestedCapacityBytes(t *testing.T) {
 	tests := []struct {
@@ -461,6 +465,9 @@ func TestListOptionsForExactFields(t *testing.T) {
 	}
 }
 
+// TEMP-DISABLED(access-policy): filesystemPolicySquashPolicyUpdate is unused
+// (see controller_helpers.go). Restore the commented code to re-enable.
+/*
 func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 	policy := &linodego.NFSFilesystemAccessPolicy{
 		Label:        "policy-a",
@@ -482,3 +489,4 @@ func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 		t.Fatalf("filesystemPolicySquashPolicyUpdate() = %#v, want %#v", got, want)
 	}
 }
+*/

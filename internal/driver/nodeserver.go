@@ -29,7 +29,9 @@ var _ csi.NodeServer = &NodeServer{}
 
 const (
 	bindMountOption   = "bind"
-	nfsFilesystemType = "nfs4"
+	nfsFilesystemType = "nfs"
+	nfsVersOption     = "vers=4.1"
+	nfsProtoOption    = "proto=tcp6"
 	mtlsMountOption   = "xprtsec=mtls"
 )
 

@@ -30,10 +30,16 @@ func pluginCapabilities(role Role) []*csi.PluginCapability {
 func controllerServiceCapabilities() []*csi.ControllerServiceCapability {
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
+
+	// TEMP-DISABLED(access-policy): PUBLISH_UNPUBLISH_VOLUME exists solely to
+	// manage the filesystem access-policy ACL, not yet implemented on the beta
+	// NFSaaS backend, so there's nothing left for ControllerPublishVolume/
+	// ControllerUnpublishVolume to do. Not advertising it means the CO/sidecars
+	// won't call them at all. Restore once Access Policy support lands.
+	// capabilities = append(capabilities, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
 
 	// Future post-v1 capabilities once core filesystem lifecycle is complete.
 	// capabilities = append(capabilities,

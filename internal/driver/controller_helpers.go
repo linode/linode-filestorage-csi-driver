@@ -169,6 +169,12 @@ func parseSnapshotContentSource(source *csi.VolumeContentSource) (*snapshotHandl
 	return &handle, nil
 }
 
+// TEMP-DISABLED(access-policy): parseVolumeHandleAndNodeID and
+// getFilesystemPolicyForVolumeAndNode are unused now that
+// ControllerPublishVolume/ControllerUnpublishVolume don't advertise
+// PUBLISH_UNPUBLISH_VOLUME (see capabilities.go). Restore the commented code
+// to re-enable.
+/*
 func parseVolumeHandleAndNodeID(volumeID, nodeID string) (volumeHandle, int, error) {
 	handle, err := parseVolumeHandle(volumeID)
 	if err != nil {
@@ -192,6 +198,7 @@ func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Conte
 	}
 	return handle, linodeID, policy, nil
 }
+*/
 
 func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
 	if capacityRange == nil {
@@ -267,19 +274,17 @@ func validateFilesystemMountTarget(filesystem *linodego.NFSFilesystem) error {
 	return nil
 }
 
+// TEMP-DISABLED(access-policy): csiControllerVolumeStatus, filesystemPolicyLinodeIDs,
+// and publishedNodeIDs are unused while filesystem access-policy calls are disabled
+// (see controllerserver.go ControllerGetVolume/ControllerPublishVolume/ControllerUnpublishVolume).
+// Restore the commented code to re-enable.
+/*
 func csiControllerVolumeStatus(policy *linodego.NFSFilesystemAccessPolicy) *csi.ControllerGetVolumeResponse_VolumeStatus {
 	if !policy.Enabled {
 		return &csi.ControllerGetVolumeResponse_VolumeStatus{}
 	}
 
 	return &csi.ControllerGetVolumeResponse_VolumeStatus{PublishedNodeIds: publishedNodeIDs(filesystemPolicyLinodeIDs(policy))}
-}
-
-func filesystemMountTarget(filesystem *linodego.NFSFilesystem) string {
-	if filesystem == nil || filesystem.MountTargetFQDN == nil {
-		return ""
-	}
-	return *filesystem.MountTargetFQDN
 }
 
 func filesystemPolicyLinodeIDs(policy *linodego.NFSFilesystemAccessPolicy) []int {
@@ -306,6 +311,28 @@ func publishedNodeIDs(linodeIDs []int) []string {
 		nodeIDs = append(nodeIDs, strconv.Itoa(linodeID))
 	}
 	return nodeIDs
+}
+*/
+
+func filesystemMountTarget(filesystem *linodego.NFSFilesystem) string {
+	if filesystem == nil || filesystem.MountTargetFQDN == nil {
+		return ""
+	}
+	return *filesystem.MountTargetFQDN
+}
+
+// spaceMTLSMode reads the space access-policy's MTLS mode, returning "" when
+// policy is nil.
+//
+// TEMP-DISABLED(access-policy): space access-policy calls are disabled (see
+// controllerserver.go CreateVolume and handleExistingFilesystem below), so
+// policy is always nil right now and this always returns "". Remove this
+// helper's nil guard and inline policy.MTLSMode again once re-enabled.
+func spaceMTLSMode(policy *linodego.NFSSpaceAccessPolicy) linodego.NFSMTLSMode {
+	if policy == nil {
+		return ""
+	}
+	return policy.MTLSMode
 }
 
 func linodeError(err error, message string) error {
@@ -359,6 +386,12 @@ func listOptionsForExactFields(fields map[string]string) (*linodego.ListOptions,
 	return linodego.NewListOptions(0, string(filterBytes)), nil
 }
 
+// TEMP-DISABLED(access-policy): filesystemPolicyUpdate and
+// filesystemPolicySquashPolicyUpdate are unused while filesystem access-policy
+// calls are disabled (see controllerserver.go ControllerPublishVolume/
+// ControllerUnpublishVolume and setInitialSquashPolicy below). Restore the
+// commented code to re-enable.
+/*
 func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled bool, linodeIDs []int) linodego.NFSFilesystemAccessPolicyUpdateOptions {
 	options := linodego.NFSFilesystemAccessPolicyUpdateOptions{
 		Label:        new(policy.Label),
@@ -377,6 +410,7 @@ func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPoli
 	options.SquashPolicy = new(squashPolicy)
 	return options
 }
+*/
 
 func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolumeParameters) (*linodego.NFSSpace, error) {
 	if params.spaceID != 0 {
@@ -441,24 +475,37 @@ func validateExistingSnapshotClone(filesystem *linodego.NFSFilesystem, sourceSna
 	return nil
 }
 
+//nolint:unparam // ctx will be used again once the commented Access Policy call below is restored
 func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
 	if !slices.Equal(filesystem.Tags, params.tags) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
 	}
-	if !params.squashPolicySet {
-		return nil
-	}
 
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, filesystem.SpaceID, filesystem.ID)
-	if err != nil {
-		return linodeError(err, "get NFS filesystem access policy")
-	}
-	if policy.SquashPolicy != params.squashPolicy {
-		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible root squash policy", filesystem.Label)
-	}
+	// TEMP-DISABLED(access-policy): root-squash compatibility validation
+	// requires the filesystem access-policy API, not yet implemented on the
+	// beta NFSaaS backend. Restore the commented code to re-enable.
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		if !params.squashPolicySet {
+			return nil
+		}
+
+		policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, filesystem.SpaceID, filesystem.ID)
+		if err != nil {
+			return linodeError(err, "get NFS filesystem access policy")
+		}
+		if policy.SquashPolicy != params.squashPolicy {
+			return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible root squash policy", filesystem.Label)
+		}
+	*/
 	return nil
 }
 
+// TEMP-DISABLED(access-policy): getSpaceAccessPolicy, ensureSpaceVPC, and
+// spaceAccessPolicySubnetIDs are unused while space access-policy calls are
+// disabled (see controllerserver.go CreateVolume and handleExistingFilesystem
+// below). Restore the commented code to re-enable.
+/*
 func (s *ControllerServer) getSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error) {
 	policy, err := s.client.GetNFSSpaceAccessPolicy(ctx, spaceID)
 	if err != nil {
@@ -510,6 +557,22 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	return nil
 }
 
+func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
+	if len(subnets) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(subnets))
+	for i := range subnets {
+		subnet := &subnets[i]
+		if subnet.ID != 0 {
+			ids = append(ids, subnet.ID)
+		}
+	}
+	return ids
+}
+*/
+
+//nolint:unparam // space will be used again once the commented Access Policy call below is restored
 func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
@@ -534,12 +597,19 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err := validateFilesystemMountTarget(existing); err != nil {
 		return nil, err
 	}
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-	if err != nil {
-		return nil, err
-	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
+	// TEMP-DISABLED(access-policy): space access-policy is not yet implemented
+	// on the beta NFSaaS backend. Restore the commented code to re-enable.
+	var spacePolicy *linodego.NFSSpaceAccessPolicy
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		spacePolicy, err = s.getSpaceAccessPolicy(ctx, space.ID)
+		if err != nil {
+			return nil, err
+		}
+	*/
+
+	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spaceMTLSMode(spacePolicy))}, nil
 }
 
 func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
@@ -565,29 +635,24 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.Cre
 	if err := validateFilesystemMountTarget(cloned); err != nil {
 		return nil, err
 	}
-	if params.squashPolicySet {
-		if err := s.setInitialSquashPolicy(ctx, cloned.SpaceID, cloned.ID, params.squashPolicy); err != nil {
-			return nil, err
+	// TEMP-DISABLED(access-policy): root-squash configuration requires the
+	// filesystem access-policy API. Restore the commented code to re-enable.
+	//nolint:gocritic // intentionally preserved, not dead code, for restoring once Access Policy support lands
+	/*
+		if params.squashPolicySet {
+			if err := s.setInitialSquashPolicy(ctx, cloned.SpaceID, cloned.ID, params.squashPolicy); err != nil {
+				return nil, err
+			}
 		}
-	}
+	*/
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spaceMTLSMode(spacePolicy))}, nil
 }
 
-func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
-	if len(subnets) == 0 {
-		return nil
-	}
-	ids := make([]int, 0, len(subnets))
-	for i := range subnets {
-		subnet := &subnets[i]
-		if subnet.ID != 0 {
-			ids = append(ids, subnet.ID)
-		}
-	}
-	return ids
-}
-
+// TEMP-DISABLED(access-policy): setInitialSquashPolicy and
+// waitForFilesystemAccessPolicyActive are unused while filesystem
+// access-policy calls are disabled. Restore the commented code to re-enable.
+/*
 func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, filesystemID int, squashPolicy linodego.NFSSquashPolicy) error {
 	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID)
 	if err != nil {
@@ -610,6 +675,7 @@ func (s *ControllerServer) waitForFilesystemAccessPolicyActive(ctx context.Conte
 	}
 	return nil
 }
+*/
 
 func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volumeHandle, label string) (*linodego.NFSSnapshot, error) {
 	snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, handle.filesystemID, &linodego.ListOptions{

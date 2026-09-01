@@ -63,6 +63,11 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
+func nfsStageMountOptions(flags []string) []string {
+	options := []string{nfsVersOption, nfsProtoOption}
+	return append(options, flags...)
+}
+
 func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	stagingTargetPath := req.GetStagingTargetPath()
 	volumeID := req.GetVolumeId()
@@ -71,7 +76,7 @@ func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.Node
 
 	source := req.GetVolumeContext()[volumeContextMountTarget]
 	mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]
-	options := req.GetVolumeCapability().GetMount().GetMountFlags()
+	options := nfsStageMountOptions(req.GetVolumeCapability().GetMount().GetMountFlags())
 	switch mtlsMode {
 	case mtlsModeRequired:
 		options = append(options, mtlsMountOption)

@@ -278,7 +278,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "nconnect=8"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard", "nconnect=8"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -297,8 +297,8 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -317,7 +317,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard", "xprtsec=mtls"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -336,8 +336,8 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard"}).Return(errors.New("plain mount failed")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard", "xprtsec=mtls"}).Return(errors.New("mtls unavailable")),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard"}).Return(errors.New("plain mount failed")),
 				)
 			},
 			wantCode: codes.Internal,
@@ -356,7 +356,7 @@ func TestNodeStageVolume(t *testing.T) {
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "xprtsec=mtls"}).Return(nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6", "hard", "xprtsec=mtls"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
