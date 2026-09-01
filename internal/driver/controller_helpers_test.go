@@ -13,7 +13,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/utils/ptr"
 )
 
 func TestParseCreateVolumeParameters(t *testing.T) {
@@ -330,7 +329,7 @@ func TestVolumeContext(t *testing.T) {
 		ID:              456,
 		SpaceID:         123,
 		Region:          "us-east",
-		MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
+		MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 	}
 
 	tests := []struct {
@@ -374,7 +373,7 @@ func TestCSIVolume(t *testing.T) {
 		ID:              456,
 		SpaceID:         123,
 		Region:          "us-east",
-		MountTargetFQDN: ptr.To("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
+		MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 	}
 
 	volume := csiVolume(filesystem, 1024, "")
@@ -462,17 +461,6 @@ func TestListOptionsForExactFields(t *testing.T) {
 	}
 }
 
-func TestPtrToBool(t *testing.T) {
-	for _, value := range []bool{false, true} {
-		t.Run(http.StatusText(http.StatusOK), func(t *testing.T) {
-			got := ptr.To(value)
-			if got == nil || *got != value {
-				t.Fatalf("ptr.To() = %v, want %v", got, value)
-			}
-		})
-	}
-}
-
 func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 	policy := &linodego.NFSFilesystemAccessPolicy{
 		Label:        "policy-a",
@@ -484,11 +472,11 @@ func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
 
 	got := filesystemPolicySquashPolicyUpdate(policy, linodego.NFSSquashPolicyRootSquash)
 	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
-		Label:        ptr.To("policy-a"),
-		Enabled:      ptr.To(false),
-		LinodeIDs:    ptr.To([]int{101}),
-		SquashPolicy: ptr.To(linodego.NFSSquashPolicyRootSquash),
-		Protocols:    ptr.To([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
+		Label:        new("policy-a"),
+		Enabled:      new(false),
+		LinodeIDs:    new([]int{101}),
+		SquashPolicy: new(linodego.NFSSquashPolicyRootSquash),
+		Protocols:    new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("filesystemPolicySquashPolicyUpdate() = %#v, want %#v", got, want)
