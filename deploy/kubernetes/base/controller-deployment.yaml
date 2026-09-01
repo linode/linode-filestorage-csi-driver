@@ -45,9 +45,6 @@ spec:
             - name: LINODE_API_VERSION
               value: "v4beta"
           resources:
-            limits:
-              cpu: 500m
-              memory: 512Mi
             requests:
               cpu: 100m
               memory: 128Mi
@@ -61,9 +58,6 @@ spec:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
           resources:
-            limits:
-              cpu: 250m
-              memory: 256Mi
             requests:
               cpu: 50m
               memory: 64Mi
@@ -82,9 +76,6 @@ spec:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
           resources:
-            limits:
-              cpu: 250m
-              memory: 256Mi
             requests:
               cpu: 25m
               memory: 64Mi
@@ -97,9 +88,6 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
           resources:
-            limits:
-              cpu: 100m
-              memory: 128Mi
             requests:
               cpu: 10m
               memory: 32Mi

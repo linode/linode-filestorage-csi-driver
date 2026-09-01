@@ -36,14 +36,11 @@ image:
   volumes: []
   # Extra volume mounts added to both controller and node plugin containers.
   volumeMounts: []
-  # Resource requests and limits for the plugin container.
+  # Resource requests for the plugin container.
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
 
 sidecars:
   provisioner:
@@ -55,9 +52,6 @@ sidecars:
       requests:
         cpu: 50m
         memory: 64Mi
-      limits:
-        cpu: 250m
-        memory: 256Mi
   attacher:
     # CSI attacher sidecar image.
     repository: registry.k8s.io/sig-storage/csi-attacher
@@ -67,9 +61,6 @@ sidecars:
       requests:
         cpu: 25m
         memory: 64Mi
-      limits:
-        cpu: 250m
-        memory: 256Mi
   resizer:
     # Enable once the driver advertises volume expansion support.
     enabled: false
@@ -81,9 +72,6 @@ sidecars:
       requests:
         cpu: 25m
         memory: 64Mi
-      limits:
-        cpu: 250m
-        memory: 256Mi
   snapshotter:
     # Enable after snapshot APIs and driver snapshot RPCs are ready.
     enabled: false
@@ -95,9 +83,6 @@ sidecars:
       requests:
         cpu: 25m
         memory: 64Mi
-      limits:
-        cpu: 250m
-        memory: 256Mi
   livenessProbe:
     # Liveness probe sidecar image.
     repository: registry.k8s.io/sig-storage/livenessprobe
@@ -107,9 +92,6 @@ sidecars:
       requests:
         cpu: 10m
         memory: 32Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
 
 controller:
   # Deploy the controller Deployment.
@@ -170,9 +152,6 @@ node:
       requests:
         cpu: 10m
         memory: 32Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
     # Extra env vars for the registrar container.
     env: []
     # Extra volume mounts for the registrar container.
@@ -186,9 +165,6 @@ node:
       requests:
         cpu: 10m
         memory: 32Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
 
 # Extra pod annotations applied to controller and node pods.
 podAnnotations: {}

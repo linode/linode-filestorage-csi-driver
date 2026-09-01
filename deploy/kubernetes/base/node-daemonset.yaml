@@ -37,9 +37,6 @@ spec:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
           resources:
-            limits:
-              cpu: 500m
-              memory: 512Mi
             requests:
               cpu: 100m
               memory: 128Mi
@@ -56,9 +53,6 @@ spec:
             - --csi-address=/csi/csi.sock
             - --kubelet-registration-path=/var/lib/kubelet/plugins/linodefs.csi.linode.com/csi.sock
           resources:
-            limits:
-              cpu: 100m
-              memory: 128Mi
             requests:
               cpu: 10m
               memory: 32Mi
@@ -73,9 +67,6 @@ spec:
           args:
             - --csi-address=/csi/csi.sock
           resources:
-            limits:
-              cpu: 100m
-              memory: 128Mi
             requests:
               cpu: 10m
               memory: 32Mi
