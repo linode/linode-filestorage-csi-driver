@@ -91,6 +91,10 @@ spec:
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
               {{- end }}
             {{- end }}
+          {{- with .Values.sidecars.provisioner.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -117,6 +121,10 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .Values.sidecars.attacher.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -139,6 +147,10 @@ spec:
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
               {{- end }}
             {{- end }}
+          {{- with .Values.sidecars.resizer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -162,6 +174,10 @@ spec:
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
               {{- end }}
             {{- end }}
+          {{- with .Values.sidecars.snapshotter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -178,6 +194,10 @@ spec:
           imagePullPolicy: {{ .Values.sidecars.livenessProbe.pullPolicy }}
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- with .Values.sidecars.livenessProbe.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/

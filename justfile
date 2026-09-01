@@ -62,6 +62,14 @@ docker-publish:
 helm-lint:
     helm lint charts/linode-nfs-csi-driver
 
+# Render deploy/kubernetes/base from the Helm chart
+update-kustomize:
+    ./hack/update-kustomize.sh
+
+# Fail if Helm chart and kustomize base are out of sync
+verify-kustomize:
+    ./hack/verify-kustomize.sh
+
 # Package a versioned Helm chart and Kustomize manifests for release
 release:
     rm -rf {{ RELEASE_DIR }}

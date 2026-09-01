@@ -71,6 +71,10 @@ spec:
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.node.registrar.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
@@ -84,6 +88,10 @@ spec:
           imagePullPolicy: {{ .Values.node.livenessProbe.pullPolicy }}
           args:
             - --csi-address=/csi/csi.sock
+          {{- with .Values.node.livenessProbe.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi

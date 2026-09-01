@@ -1,8 +1,9 @@
+---
+# Source: linode-nfs-csi-driver/templates/node-daemonset.yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: csi-linode-nfs-node
-  namespace: kube-system
 spec:
   selector:
     matchLabels:
@@ -11,16 +12,18 @@ spec:
     metadata:
       labels:
         app: csi-linode-nfs-node
+        role: csi-linode
     spec:
       serviceAccountName: csi-linode-nfs-node
       hostNetwork: true
       containers:
         - name: plugin
-          image: docker.io/linode/linode-filestorage-csi-driver:dev
+          image: "docker.io/linode/linode-filestorage-csi-driver:dev"
+          imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
-            runAsUser: 0
             runAsGroup: 0
+            runAsUser: 0
           env:
             - name: DRIVER_ROLE
               value: node
@@ -28,26 +31,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            # The node plugin keeps its in-container socket under /csi, while the
-            # kubelet registration path remains unique per driver under the kubelet
-            # plugins directory to avoid host-side contention with other CSI drivers.
+            # The node plugin socket stays under /csi in the container, while the
+            # kubelet registration path remains unique per driver under kubeletPath
+            # to avoid host-side contention with other CSI drivers.
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
           resources:
             requests:
               cpu: 100m
               memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
-            - name: kubelet-dir
+            - name: pods-mount-dir
               mountPath: /var/lib/kubelet
               mountPropagation: Bidirectional
         - name: node-driver-registrar
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+          image: "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.16.0"
+          imagePullPolicy: IfNotPresent
           args:
             - --csi-address=/csi/csi.sock
             - --kubelet-registration-path=/var/lib/kubelet/plugins/linodefs.csi.linode.com/csi.sock
@@ -55,25 +56,20 @@ spec:
             requests:
               cpu: 10m
               memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
             - name: registration-dir
               mountPath: /registration
         - name: liveness-probe
-          image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+          image: "registry.k8s.io/sig-storage/livenessprobe:v2.15.0"
+          imagePullPolicy: IfNotPresent
           args:
             - --csi-address=/csi/csi.sock
           resources:
             requests:
               cpu: 10m
               memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
@@ -84,9 +80,10 @@ spec:
             type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
-            path: /var/lib/kubelet/plugins_registry
-            type: Directory
-        - name: kubelet-dir
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
           hostPath:
             path: /var/lib/kubelet
             type: Directory
+
