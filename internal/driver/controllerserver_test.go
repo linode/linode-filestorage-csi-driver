@@ -675,10 +675,31 @@ func TestDeleteVolume(t *testing.T) {
 		wantCode codes.Code
 	}{
 		{
+			name:    "malformed non-empty volume id is success",
+			request: &csi.DeleteVolumeRequest{VolumeId: "not-a-volume-handle"},
+		},
+		{
+			name:     "empty volume id",
+			request:  &csi.DeleteVolumeRequest{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:    "whitespace volume id is success",
+			request: &csi.DeleteVolumeRequest{VolumeId: " \t "},
+		},
+		{
 			name:    "not found is success",
 			request: &csi.DeleteVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
 				env.client.EXPECT().DeleteNFSFilesystem(gomock.Any(), 123, 456).Return(linodeAPIError(http.StatusNotFound))
+			},
+		},
+		{
+			name:     "non-not-found error is preserved",
+			request:  &csi.DeleteVolumeRequest{VolumeId: testVolumeID},
+			wantCode: codes.FailedPrecondition,
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().DeleteNFSFilesystem(gomock.Any(), 123, 456).Return(linodeAPIError(http.StatusConflict))
 			},
 		},
 	}
@@ -690,9 +711,15 @@ func TestDeleteVolume(t *testing.T) {
 				tt.setup(env)
 			}
 
-			_, err := env.server.DeleteVolume(context.Background(), tt.request)
+			response, err := env.server.DeleteVolume(context.Background(), tt.request)
 			if status.Code(err) != tt.wantCode {
-				t.Fatalf("DeleteVolume() code = %v, want %v", status.Code(err), tt.wantCode)
+				t.Fatalf("DeleteVolume() code = %v, want %v (err = %v)", status.Code(err), tt.wantCode, err)
+			}
+			if tt.wantCode != codes.OK {
+				return
+			}
+			if !reflect.DeepEqual(response, &csi.DeleteVolumeResponse{}) {
+				t.Fatalf("DeleteVolume() response = %#v, want empty response", response)
 			}
 		})
 	}
