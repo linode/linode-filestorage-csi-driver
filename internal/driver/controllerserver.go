@@ -231,13 +231,12 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 	if req.GetVolumeId() == "" {
 		return nil, errNoVolumeID
 	}
-	if len(req.GetVolumeCapabilities()) == 0 {
-		return nil, errNoVolumeCapabilities
-	}
-
 	handle, err := parseVolumeHandle(req.GetVolumeId())
 	if err != nil {
-		return nil, err
+		return nil, errNotFound("volume not found")
+	}
+	if len(req.GetVolumeCapabilities()) == 0 {
+		return nil, errNoVolumeCapabilities
 	}
 
 	for _, capability := range req.GetVolumeCapabilities() {

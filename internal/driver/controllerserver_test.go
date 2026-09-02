@@ -873,9 +873,22 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 		assert   func(t *testing.T, response *csi.ValidateVolumeCapabilitiesResponse)
 	}{
 		{
-			name:     "requires volume id",
+			name:     "empty volume id is invalid argument",
 			request:  &csi.ValidateVolumeCapabilitiesRequest{},
 			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "malformed volume id is not found without API call",
+			request:  &csi.ValidateVolumeCapabilitiesRequest{VolumeId: "not-a-volume-handle"},
+			wantCode: codes.NotFound,
+		},
+		{
+			name: "whitespace volume id is not found without API call",
+			request: &csi.ValidateVolumeCapabilitiesRequest{
+				VolumeId:           " ",
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			wantCode: codes.NotFound,
 		},
 		{
 			name:     "requires capabilities",
@@ -900,6 +913,17 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 					t.Fatal("expected validation message")
 				}
 			},
+		},
+		{
+			name: "missing volume is not found",
+			request: &csi.ValidateVolumeCapabilitiesRequest{
+				VolumeId:           testVolumeID,
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+			wantCode: codes.NotFound,
 		},
 		{
 			name: "confirms supported mount",
