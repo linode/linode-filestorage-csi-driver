@@ -66,8 +66,8 @@ github.com/jarcoal/httpmock v1.4.1 h1:0Ju+VCFuARfFlhVXFc2HxlcQkfB+Xq12/EotHko+x2
 github.com/jarcoal/httpmock v1.4.1/go.mod h1:ftW1xULwo+j0R0JJkJIIi7UKigZUXCLLanykgjwBXL0=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/komer3/linodego/v2 v2.0.0-20260831181147-fb2008c8401f h1:23gdN0gSfHNP3973KXXhtkp3pMtexIVwN7ZPHCg9fUo=
-github.com/komer3/linodego/v2 v2.0.0-20260831181147-fb2008c8401f/go.mod h1:rsITrtsKFKBi+pEnznDbbF9ZGBou9S8UccCm1yHLbpI=
+github.com/komer3/linodego/v2 v2.0.0-20260902002507-9671b409db32 h1:jxdMbceLcOOnxau/ubxbSwHdhxyZhiZlTEVX8god3Jg=
+github.com/komer3/linodego/v2 v2.0.0-20260902002507-9671b409db32/go.mod h1:rsITrtsKFKBi+pEnznDbbF9ZGBou9S8UccCm1yHLbpI=
 github.com/linode/go-metadata v0.3.0 h1:tWShLi5MOUCG/ifA3jphK26A2y0veQoWwUEMJziRzUQ=
 github.com/linode/go-metadata v0.3.0/go.mod h1:uc58+eNK4Y44wvounLIsx92zaMax32pWz+bQHerKvcs=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
