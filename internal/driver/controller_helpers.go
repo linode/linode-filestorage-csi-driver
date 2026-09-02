@@ -405,6 +405,12 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 	}
 }
 
+// normalizeLabel lowercases labels sent to the NFS backend while preserving all
+// other characters unchanged.
+func normalizeLabel(name string) string {
+	return strings.ToLower(name)
+}
+
 func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID int, label, region string) (*linodego.NFSFilesystem, bool, error) {
 	options, err := listOptionsForExactFields(map[string]string{filterFieldLabel: label, filterFieldRegion: region})
 	if err != nil {
@@ -542,9 +548,9 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
 }
 
-func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
 	options := linodego.NFSSnapshotCloneOptions{
-		Label:   req.GetName(),
+		Label:   label,
 		Region:  params.region,
 		SpaceID: new(new(spaceID)),
 	}

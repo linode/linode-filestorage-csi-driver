@@ -445,6 +445,13 @@ func TestLinodeWaitError(t *testing.T) {
 	}
 }
 
+func TestNormalizeLabel(t *testing.T) {
+	got := normalizeLabel("Sanity_TEST.42")
+	if want := "sanity_test.42"; got != want {
+		t.Fatalf("normalizeLabel() = %q, want %q", got, want)
+	}
+}
+
 func TestListOptionsForExactFields(t *testing.T) {
 	options, err := listOptionsForExactFields(map[string]string{"label": "pvc-abc", "region": "us-east"})
 	if err != nil {
