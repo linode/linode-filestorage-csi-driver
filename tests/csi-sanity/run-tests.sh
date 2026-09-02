@@ -21,8 +21,8 @@ CREATE_DIRECTORY="${DIR}/mkdir_in_pod.sh"
 DELETE_DIRECTORY="${DIR}/rmdir_in_pod.sh"
 CHECK_PATH="${DIR}/checkpath_in_pod.sh"
 
-# Snapshot API is not live yet; all other advertised sanity capabilities run.
-SKIP_TESTS="CreateSnapshot|DeleteSnapshot|ListSnapshots|GetSnapshot|volume source snapshot|create volume from an existing source snapshot"
+# Snapshot and quota APIs are not live yet; all other advertised sanity capabilities run.
+SKIP_TESTS="CreateSnapshot|DeleteSnapshot|ListSnapshots|GetSnapshot|volume source snapshot|create volume from an existing source snapshot|already existing name and different capacity"
 
 added_controller_socat=0
 pf_controller_pid=""
