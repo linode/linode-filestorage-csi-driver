@@ -135,7 +135,9 @@ func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolu
 	}
 	handle, err := parseVolumeHandle(req.GetVolumeId())
 	if err != nil {
-		return nil, err
+		// CSI requires deletion of an unknown volume to succeed.
+		//nolint:nilerr // A malformed non-empty handle is an unknown volume.
+		return &csi.DeleteVolumeResponse{}, nil
 	}
 
 	if err := s.client.DeleteNFSFilesystem(ctx, handle.spaceID, handle.filesystemID); err != nil {
