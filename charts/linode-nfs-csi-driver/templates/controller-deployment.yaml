@@ -86,6 +86,7 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
+            - --volume-name-uuid-length=32
             {{- with .Values.controller.kubeconfig }}
               {{- if and .mountDir .secretName .secretKey }}
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}

@@ -57,6 +57,7 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
+            - --volume-name-uuid-length=32
           resources:
             requests:
               cpu: 50m
