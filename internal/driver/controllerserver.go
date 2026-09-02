@@ -69,7 +69,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
-	label := normalizeLabel(req.GetName())
+	label := truncateNFSLabelToMaxBytes(normalizeLabel(req.GetName()))
 
 	existing, found, err := s.findExistingFilesystem(ctx, space.ID, label, params.region)
 	if err != nil {
@@ -328,8 +328,8 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateSnapshot")
 
-	name := normalizeLabel(req.GetName())
-	if name == "" {
+	label := truncateNFSLabelToMaxBytes(normalizeLabel(req.GetName()))
+	if label == "" {
 		return nil, errNoSnapshotName
 	}
 
@@ -348,7 +348,7 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return nil, err
 	}
 
-	existingSnapshot, err := s.findSnapshotByLabel(ctx, handle, name)
+	existingSnapshot, err := s.findSnapshotByLabel(ctx, handle, label)
 	if err != nil {
 		return nil, linodeError(err, "list NFS snapshots")
 	}
@@ -357,10 +357,10 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 	}
 
 	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
-		Label: name,
+		Label: label,
 	})
 	if err != nil && linodego.ErrHasStatus(err, http.StatusConflict) {
-		existingSnapshot, lookupErr := s.findSnapshotByLabel(ctx, handle, name)
+		existingSnapshot, lookupErr := s.findSnapshotByLabel(ctx, handle, label)
 		if lookupErr == nil && existingSnapshot != nil {
 			return csiCreateSnapshotResponse(existingSnapshot, handle)
 		}
