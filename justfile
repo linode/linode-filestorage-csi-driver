@@ -98,6 +98,11 @@ helm-install:
         --set image.tag={{ IMAGE_VERSION }} \
         --set apiToken=$LINODE_TOKEN
 
+# Run destructive CSI sanity using standard KUBECONFIG and NFS_CSI_SANITY_SPACE_ID.
+# CSI_SANITY_ARTIFACT_DIR is optional and defaults to artifacts/csi-sanity.
+csi-sanity-test:
+    ./tests/csi-sanity/run-tests.sh
+
 # Create an LKE test cluster
 create-lke-cluster:
     #!/usr/bin/env bash

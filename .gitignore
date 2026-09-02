@@ -2,6 +2,7 @@ bin/
 dist/
 release/
 coverage.out
+artifacts/
 
 
 # Local Development Environment sub dirs

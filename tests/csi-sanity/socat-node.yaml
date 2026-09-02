@@ -1,0 +1,27 @@
+# Node-side unix→TCP proxy for CSI sanity. The runner creates this generated
+# Pod on the selected node and deletes the exact name returned by the API.
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: csi-sanity-node-
+  labels:
+    app: csi-sanity-node
+spec:
+  nodeName: __NODE_NAME__
+  containers:
+    - name: socat
+      image: __SOCAT_IMAGE__
+      args:
+        - tcp-listen:10001,bind=127.0.0.1,fork,reuseaddr
+        - unix-connect:/csi/csi.sock
+      ports:
+        - name: csi-socat
+          containerPort: 10001
+      volumeMounts:
+        - name: plugin-dir
+          mountPath: /csi
+  volumes:
+    - name: plugin-dir
+      hostPath:
+        path: /var/lib/kubelet/plugins/linodefs.csi.linode.com
+        type: Directory
