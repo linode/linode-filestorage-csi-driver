@@ -69,8 +69,9 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
+	label := normalizeLabel(req.GetName())
 
-	existing, found, err := s.findExistingFilesystem(ctx, space.ID, req.GetName(), params.region)
+	existing, found, err := s.findExistingFilesystem(ctx, space.ID, label, params.region)
 	if err != nil {
 		return nil, err
 	}
@@ -92,11 +93,11 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
 		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, req, *snapshot, space.ID, &params, capacityBytes, spacePolicy)
+		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, &params, capacityBytes, spacePolicy)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
-		Label:            req.GetName(),
+		Label:            label,
 		Region:           params.region,
 		ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
@@ -326,7 +327,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateSnapshot")
 
-	name := req.GetName()
+	name := normalizeLabel(req.GetName())
 	if name == "" {
 		return nil, errNoSnapshotName
 	}
