@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,6 +43,13 @@ const (
 	filterFieldLabel  = "label"
 	filterFieldRegion = "region"
 )
+
+// nfsLabelMaxBytes is the maximum length accepted by the NFS OpenAPI.
+const nfsLabelMaxBytes = 63
+
+// trailingHyphens matches one or more hyphens at the end of a string, used
+// to strip a dangling hyphen run left behind by truncating a label.
+var trailingHyphens = regexp.MustCompile(`-+$`)
 
 type createVolumeParameters struct {
 	region          string
@@ -409,6 +417,16 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 // other characters unchanged.
 func normalizeLabel(name string) string {
 	return strings.ToLower(name)
+}
+
+// truncateNFSLabelToMaxBytes truncates a label to the NFS OpenAPI's maximum
+// length, trimming any trailing hyphens left dangling by the cut.
+func truncateNFSLabelToMaxBytes(label string) string {
+	if len(label) <= nfsLabelMaxBytes {
+		return label
+	}
+
+	return trailingHyphens.ReplaceAllString(label[:nfsLabelMaxBytes], "")
 }
 
 func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID int, label, region string) (*linodego.NFSFilesystem, bool, error) {
