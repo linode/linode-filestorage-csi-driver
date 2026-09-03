@@ -289,7 +289,13 @@ func (s *ControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacity
 func (s *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ListVolumes")
 
-	// Future implementation will enumerate filesystems visible to the driver.
+	// ListVolumes is intentionally left unimplemented. CSI makes this optional
+	// even when CREATE_DELETE_VOLUME is supported, and it is not part of the
+	// normal Kubernetes provisioning or mount lifecycle. The NFS API only lists
+	// filesystems per space, with no global ownership or scope query, so a
+	// correct implementation would require an expensive, ambiguous account-wide
+	// scan without a user-facing benefit. CreateVolume idempotency/retry remains
+	// the recovery path; LIST_VOLUMES is consequently not advertised.
 	_ = req
 	return nil, errNotImplemented
 }
