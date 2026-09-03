@@ -19,7 +19,7 @@ linodeAPIVersion: v4beta
 
 driver:
   # CSI driver name advertised to Kubernetes.
-  name: linodefs.csi.linode.com
+  name: linodenfs.csi.linode.com
 
 image:
   # Driver image repository.
