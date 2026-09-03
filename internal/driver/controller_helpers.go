@@ -23,10 +23,14 @@ import (
 const waitTimeout = 5 * time.Minute
 
 const (
-	storageClassParamSpaceID    = "space-id"
-	storageClassParamSpaceLabel = "space-label"
-	storageClassParamRootSquash = "filesystem-root-squash"
-	storageClassParamTags       = "tags"
+	// storageClassParamNamespace is the driver-qualified namespace for
+	// StorageClass parameters.
+	storageClassParamNamespace = Name + "/"
+
+	storageClassParamSpaceID    = storageClassParamNamespace + "space-id"
+	storageClassParamSpaceLabel = storageClassParamNamespace + "space-label"
+	storageClassParamRootSquash = storageClassParamNamespace + "filesystem-root-squash"
+	storageClassParamTags       = storageClassParamNamespace + "tags"
 
 	volumeContextSpaceID       = "space-id"
 	volumeContextFilesystemID  = "filesystem-id"
@@ -80,16 +84,16 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 	if spaceID != "" {
 		id, err := strconv.Atoi(spaceID)
 		if err != nil || id <= 0 {
-			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameter space-id %q must be a positive integer", spaceID)
+			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameter %s %q must be a positive integer", storageClassParamSpaceID, spaceID)
 		}
 		parsed.spaceID = id
 	}
 
 	if parsed.spaceID == 0 && parsed.spaceLabel == "" {
-		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass must set either space-id or space-label for a pre-created NFS Storage Space")
+		return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass must set either %s or %s for a pre-created NFS Storage Space", storageClassParamSpaceID, storageClassParamSpaceLabel)
 	}
 	if parsed.spaceID != 0 && parsed.spaceLabel != "" {
-		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass parameters space-id and space-label are mutually exclusive")
+		return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameters %s and %s are mutually exclusive", storageClassParamSpaceID, storageClassParamSpaceLabel)
 	}
 
 	if value := strings.TrimSpace(params[storageClassParamRootSquash]); value != "" {
@@ -99,7 +103,7 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 			parsed.squashPolicy = mode
 			parsed.squashPolicySet = true
 		default:
-			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "unsupported filesystem-root-squash value %q", value)
+			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "unsupported %s value %q", storageClassParamRootSquash, value)
 		}
 	}
 
