@@ -13,7 +13,7 @@ import (
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
-const Name = "linodefs.csi.linode.com"
+const Name = "linodenfs.csi.linode.com"
 
 type Role string
 

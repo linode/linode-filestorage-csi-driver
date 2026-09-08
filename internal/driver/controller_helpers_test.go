@@ -50,6 +50,13 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
+			name: "unqualified parameters are ignored",
+			params: map[string]string{
+				"space-id": "123",
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
 			name: "mutually exclusive space selectors",
 			params: map[string]string{
 				storageClassParamSpaceID:    "123",
