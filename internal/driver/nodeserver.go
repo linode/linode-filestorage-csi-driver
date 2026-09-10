@@ -52,7 +52,7 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
-	if !s.driver.metadata.configured(RoleNode) {
+	if s.driver.metadata == nil {
 		return nil, status.Error(codes.Internal, "metadata service is not configured")
 	}
 

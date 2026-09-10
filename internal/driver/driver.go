@@ -36,7 +36,7 @@ type LinodeDriver struct {
 
 	readyMu  sync.Mutex
 	ready    bool
-	metadata metadataService
+	metadata MetadataProvider
 	client   linodeclient.LinodeClient
 }
 

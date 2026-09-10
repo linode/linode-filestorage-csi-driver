@@ -46,6 +46,14 @@ type ClusterMetadata struct {
 	VPCID  int
 }
 
+// MetadataProvider supplies the cluster and node facts consumed by CSI services.
+type MetadataProvider interface {
+	CurrentNode(context.Context) (NodeMetadata, error)
+	Cluster(context.Context) (ClusterMetadata, error)
+}
+
+var _ MetadataProvider = (*metadataService)(nil)
+
 type InstanceMetadataClient interface {
 	GetInstance(ctx context.Context) (*metadataapi.InstanceData, error)
 	GetNetwork(ctx context.Context) (*metadataapi.NetworkData, error)
@@ -105,15 +113,24 @@ func newMetadataService(ctx context.Context, nodeName string, linodeClient linod
 		instanceClient = nil
 	}
 
+	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient, linodeClient), nil
+}
+
+func newMetadataServiceWithClients(
+	nodeName string,
+	instanceClient InstanceMetadataClient,
+	kubeClient KubeNodeClient,
+	linodeClient linodeclient.LinodeClient,
+) metadataService {
 	return metadataService{
 		nodeName:       nodeName,
 		instanceClient: instanceClient,
 		kubeClient:     kubeClient,
 		linodeClient:   linodeClient,
-	}, nil
+	}
 }
 
-func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error) {
+func (s metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error) {
 	if s.nodeName == "" {
 		return NodeMetadata{}, errMetadataNodeNameRequired
 	}
@@ -130,7 +147,7 @@ func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error)
 	return s.NodeByName(ctx, s.nodeName)
 }
 
-func (s *metadataService) configured(role Role) bool {
+func (s metadataService) configured(role Role) bool {
 	switch role {
 	case RoleController:
 		return s.kubeClient != nil && s.linodeClient != nil
@@ -141,7 +158,7 @@ func (s *metadataService) configured(role Role) bool {
 	}
 }
 
-func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
+func (s metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
 	if name == "" {
 		return NodeMetadata{}, errMetadataNodeNameRequired
 	}
@@ -174,7 +191,7 @@ func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMeta
 	}, nil
 }
 
-func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]NodeMetadata, error) {
+func (s metadataService) NodesByName(ctx context.Context, names []string) ([]NodeMetadata, error) {
 	results := make([]NodeMetadata, 0, len(names))
 	for _, name := range names {
 		node, err := s.NodeByName(ctx, name)
@@ -186,7 +203,7 @@ func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]No
 	return results, nil
 }
 
-func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
+func (s metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
 	if s.linodeClient == nil {
 		return ClusterMetadata{}, errLinodeClientNotFound
 	}
@@ -235,7 +252,7 @@ func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) 
 // ListInterfaces, but most existing Linodes (including LKE/CAPI-provisioned
 // nodes) still use the legacy config-profile interfaces, where VPC attachment
 // is a purpose="vpc" entry on the active InstanceConfig instead.
-func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, error) {
+func (s metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, error) {
 	instance, err := s.linodeClient.GetInstance(ctx, linodeID)
 	if err != nil {
 		return 0, fmt.Errorf("get Linode instance %d: %w", linodeID, err)
@@ -247,7 +264,7 @@ func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, err
 	return s.nodeVPCIDFromInterfaces(ctx, linodeID)
 }
 
-func (s *metadataService) nodeVPCIDFromInterfaces(ctx context.Context, linodeID int) (int, error) {
+func (s metadataService) nodeVPCIDFromInterfaces(ctx context.Context, linodeID int) (int, error) {
 	interfaces, err := s.linodeClient.ListInterfaces(ctx, linodeID, nil)
 	if err != nil {
 		return 0, fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
@@ -270,7 +287,7 @@ func (s *metadataService) nodeVPCIDFromInterfaces(ctx context.Context, linodeID 
 	return vpcID, nil
 }
 
-func (s *metadataService) nodeVPCIDFromConfigs(ctx context.Context, linodeID int) (int, error) {
+func (s metadataService) nodeVPCIDFromConfigs(ctx context.Context, linodeID int) (int, error) {
 	configs, err := s.linodeClient.ListInstanceConfigs(ctx, linodeID, nil)
 	if err != nil {
 		return 0, fmt.Errorf("list Linode instance configs for %d: %w", linodeID, err)
@@ -308,7 +325,7 @@ func mergeVPCID(vpcID *int, candidate, linodeID int) error {
 	return nil
 }
 
-func (s *metadataService) currentNodeFromMetadata(ctx context.Context) (NodeMetadata, error) {
+func (s metadataService) currentNodeFromMetadata(ctx context.Context) (NodeMetadata, error) {
 	instance, err := s.instanceClient.GetInstance(ctx)
 	if err != nil {
 		return NodeMetadata{}, fmt.Errorf("get instance metadata: %w", err)
