@@ -540,14 +540,6 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 				SourceSnapshotID: new(890),
 				Tags:             []string{"tag-a"},
 			}}, nil)
-			env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 1123).Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil)
-			env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), 1123, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
-				Label:    new(""),
-				Enabled:  new(true),
-				VPCs:     new([]linodego.NFSSpaceAccessPolicyVPCOptions{{ID: 123456}}),
-				MTLSMode: new(linodego.NFSMTLSModeOptional),
-			})).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
-			env.client.EXPECT().WaitForNFSSpaceAccessPolicyStatus(gomock.Any(), 1123, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
 			env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 1123, 890, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
 				ID:               890,
 				SpaceID:          1123,
