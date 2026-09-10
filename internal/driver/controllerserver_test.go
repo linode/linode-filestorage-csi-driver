@@ -422,13 +422,55 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				VolumeContentSource: &csi.VolumeContentSource{
 					Type: &csi.VolumeContentSource_Snapshot{
 						Snapshot: &csi.VolumeContentSource_SnapshotSource{
-							SnapshotId: "foobar",
+							SnapshotId: "non-existing-snapshot-id",
 						},
 					},
 				},
 			},
 			wantCode:    codes.NotFound,
-			wantMessage: "snapshot id \"foobar\" was not found",
+			wantMessage: `snapshot id "non-existing-snapshot-id" was not found`,
+		},
+		{
+			name: "rejects an empty snapshot source",
+			request: &csi.CreateVolumeRequest{
+				Name:               "pvc-abc",
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+				VolumeContentSource: &csi.VolumeContentSource{
+					Type: &csi.VolumeContentSource_Snapshot{
+						Snapshot: &csi.VolumeContentSource_SnapshotSource{},
+					},
+				},
+			},
+			wantCode:    codes.InvalidArgument,
+			wantMessage: "snapshot id is required",
+		},
+		{
+			name: "returns not found for an unknown structured snapshot source",
+			request: &csi.CreateVolumeRequest{
+				Name:          "pvc-abc",
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
+				Parameters: map[string]string{
+					storageClassParamSpaceID: "123",
+					storageClassParamTags:    "tag-a",
+				},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+				VolumeContentSource: &csi.VolumeContentSource{
+					Type: &csi.VolumeContentSource_Snapshot{
+						Snapshot: &csi.VolumeContentSource_SnapshotSource{SnapshotId: "123/4567/890"},
+					},
+				},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+				expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeOptional)
+				env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, gomock.Any()).Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+			wantCode: codes.NotFound,
 		},
 		{
 			name: "Gateway timeout while cloning",
@@ -1321,17 +1363,17 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 		},
 		{
-			name: "maps provider conflict to already exists when no matching snapshot exists",
+			name: "rejects a snapshot name that belongs to another source volume",
 			request: &csi.CreateSnapshotRequest{
-				SourceVolumeId: testVolumeID,
+				SourceVolumeId: "321/654",
 				Name:           "snapshot-abc",
 			},
 			wantErr: status.Error(codes.AlreadyExists, `NFS snapshot "snapshot-abc" already exists with a different source volume`),
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
-				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: "snapshot-abc"}).
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 321, 654, gomock.Eq(snapshotListOptions)).Return(nil, nil)
+				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 321, 654, linodego.NFSSnapshotCreateOptions{Label: "snapshot-abc"}).
 					Return(nil, linodeAPIError(http.StatusConflict))
-				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).
+				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 321, 654, gomock.Eq(snapshotListOptions)).
 					Return([]linodego.NFSSnapshot{
 						{ID: 790, Label: "another-snapshot", Status: linodego.NFSSnapshotStatusActive, Created: timestamp, SizeBytes: 2000},
 					}, nil)
@@ -1399,9 +1441,8 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
-			name:     "invalid snapshot id is idempotent",
-			request:  &csi.DeleteSnapshotRequest{SnapshotId: "789"},
-			wantCode: codes.OK,
+			name:    "malformed nonempty snapshot id is idempotent success",
+			request: &csi.DeleteSnapshotRequest{SnapshotId: "reallyfakesnapshotid"},
 		},
 		{
 			name:    "delete not found is idempotent success",
