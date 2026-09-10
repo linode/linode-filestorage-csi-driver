@@ -148,6 +148,7 @@ func (c *fakeSanityLinodeClient) ListNFSFilesystems(_ context.Context, spaceID i
 		}
 		result = append(result, cloneSanityFilesystem(&filesystem))
 	}
+	// Keep list results deterministic for repeatable CSI sanity assertions.
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result, nil
 }
@@ -163,17 +164,12 @@ func (c *fakeSanityLinodeClient) GetNFSFilesystem(_ context.Context, spaceID, fi
 	return &result, nil
 }
 
-func (c *fakeSanityLinodeClient) GetNFSFilesystemByID(_ context.Context, filesystemID int) (*linodego.NFSFilesystem, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	filesystem, ok := c.filesystems[filesystemID]
-	if !ok {
-		return nil, fakeSanityNotFound("NFS filesystem", filesystemID)
-	}
-	result := cloneSanityFilesystem(&filesystem)
-	return &result, nil
-}
-
+// CreateNFSFilesystem models the API's create idempotency contract: retries
+// with the same space, label, and parameters return the existing filesystem;
+// incompatible parameters return a conflict.
+//
+// The API creates filesystems asynchronously. The create response remains
+// non-mountable until WaitForNFSFilesystemStatus observes Active.
 func (c *fakeSanityLinodeClient) CreateNFSFilesystem(_ context.Context, spaceID int, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -248,6 +244,8 @@ func (c *fakeSanityLinodeClient) GetNFSSpaceAccessPolicy(_ context.Context, spac
 	return &policy, nil
 }
 
+// Access-policy updates are asynchronous in the API; expose Updating until the
+// corresponding wait operation observes Active.
 func (c *fakeSanityLinodeClient) UpdateNFSSpaceAccessPolicy(_ context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -315,6 +313,8 @@ func (c *fakeSanityLinodeClient) GetNFSFilesystemAccessPolicy(_ context.Context,
 	return &result, nil
 }
 
+// Filesystem policy updates follow the same asynchronous update contract as
+// space policy updates.
 func (c *fakeSanityLinodeClient) UpdateNFSFilesystemAccessPolicy(_ context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -408,6 +408,8 @@ func (c *fakeSanityLinodeClient) GetNFSSnapshot(_ context.Context, spaceID, file
 	return &result, nil
 }
 
+// Snapshot creation is asynchronous: creation returns Creating and the waiter
+// transitions the snapshot to Active with its reported size.
 func (c *fakeSanityLinodeClient) CreateNFSSnapshot(_ context.Context, spaceID, filesystemID int, opts linodego.NFSSnapshotCreateOptions) (*linodego.NFSSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -478,6 +480,8 @@ func (c *fakeSanityLinodeClient) DeleteNFSSnapshot(_ context.Context, spaceID, f
 	return nil
 }
 
+// Snapshot clone retries use the target parameters as the idempotency key:
+// matching retries return the existing filesystem and mismatches conflict.
 func (c *fakeSanityLinodeClient) CloneNFSSnapshot(_ context.Context, spaceID, filesystemID, snapshotID int, opts linodego.NFSSnapshotCloneOptions) (*linodego.NFSFilesystem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -554,6 +558,8 @@ func (c *fakeSanityLinodeClient) snapshotLocked(spaceID, filesystemID, snapshotI
 	return snapshot, nil
 }
 
+// These checks mirror the API's currently supported filesystem-create values so
+// the fake rejects requests production would reject.
 func validateSanityFilesystemCreate(opts linodego.NFSFilesystemCreateOptions) error {
 	if opts.Label == "" {
 		return fakeSanityInvalid("NFS filesystem label is required")
@@ -567,6 +573,8 @@ func validateSanityFilesystemCreate(opts linodego.NFSFilesystemCreateOptions) er
 	return nil
 }
 
+// Keep API enum and uniqueness validation in the fake so invalid policy updates
+// do not silently mutate stored state.
 func validateSanitySpacePolicy(opts linodego.NFSSpaceAccessPolicyUpdateOptions) error {
 	if opts.MTLSMode != nil {
 		switch *opts.MTLSMode {
@@ -700,6 +708,8 @@ func fakeSanityInvalid(format string, args ...any) *linodego.Error {
 	return &linodego.Error{Code: http.StatusBadRequest, Message: fmt.Sprintf(format, args...)}
 }
 
+// Return detached response values so callers cannot mutate backend state by
+// changing slices or pointer fields on a response.
 func cloneSanitySpace(space *linodego.NFSSpace) linodego.NFSSpace {
 	result := *space
 	result.Description = cloneSanityString(space.Description)
