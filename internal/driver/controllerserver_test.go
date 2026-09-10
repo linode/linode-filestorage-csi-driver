@@ -375,7 +375,7 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 			wantMessage: "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found",
 		},
 		{
-			name: "fails when the snapshot handle can't be parsed",
+			name: "returns not found for an opaque snapshot handle",
 			request: &csi.CreateVolumeRequest{
 				Name:          "pvc-abc",
 				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
@@ -392,8 +392,8 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 					},
 				},
 			},
-			wantCode:    codes.InvalidArgument,
-			wantMessage: "snapshot id \"foobar\" must have format {space_id}/{filesystem_id}/{snapshot_id}",
+			wantCode:    codes.NotFound,
+			wantMessage: "snapshot id \"foobar\" was not found",
 		},
 		{
 			name: "Gateway timeout while cloning",
@@ -1279,12 +1279,12 @@ func TestControllerServerCreateSnapshot(t *testing.T) {
 			},
 		},
 		{
-			name: "maps provider conflict when no matching snapshot exists",
+			name: "maps provider conflict to already exists when no matching snapshot exists",
 			request: &csi.CreateSnapshotRequest{
 				SourceVolumeId: testVolumeID,
 				Name:           "snapshot-abc",
 			},
-			wantErr: linodeError(linodeAPIError(http.StatusConflict), "create NFS snapshot"),
+			wantErr: status.Error(codes.AlreadyExists, `NFS snapshot "snapshot-abc" already exists with a different source volume`),
 			setup: func(env controllerTestEnv) {
 				env.client.EXPECT().ListNFSSnapshots(gomock.Any(), 123, 456, gomock.Eq(snapshotListOptions)).Return(nil, nil)
 				env.client.EXPECT().CreateNFSSnapshot(gomock.Any(), 123, 456, linodego.NFSSnapshotCreateOptions{Label: "snapshot-abc"}).
@@ -1357,9 +1357,9 @@ func TestControllerServerDeleteSnapshot(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
-			name:     "invalid snapshot id",
+			name:     "invalid snapshot id is idempotent",
 			request:  &csi.DeleteSnapshotRequest{SnapshotId: "789"},
-			wantCode: codes.InvalidArgument,
+			wantCode: codes.OK,
 		},
 		{
 			name:    "delete not found is idempotent success",
