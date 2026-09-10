@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.8
 
 require (
-	github.com/container-storage-interface/spec v1.13.0
+	github.com/container-storage-interface/spec v1.12.0
 	github.com/kubernetes-csi/csi-test/v5 v5.5.0
 	github.com/linode/go-metadata v0.3.0
 	github.com/linode/linodego/v2 v2.0.0-20260706173454-70f8a82f6bbd
