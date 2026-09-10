@@ -696,7 +696,8 @@ func (s *ControllerServer) snapshotLabelExistsInOtherFilesystem(ctx context.Cont
 		return false, err
 	}
 
-	for _, filesystem := range filesystems {
+	for filesystemIndex := range filesystems {
+		filesystem := &filesystems[filesystemIndex]
 		if filesystem.ID == handle.filesystemID {
 			continue
 		}
@@ -707,8 +708,8 @@ func (s *ControllerServer) snapshotLabelExistsInOtherFilesystem(ctx context.Cont
 		if err != nil {
 			return false, err
 		}
-		for _, snapshot := range snapshots {
-			if snapshot.Label == label {
+		for snapshotIndex := range snapshots {
+			if snapshots[snapshotIndex].Label == label {
 				return true, nil
 			}
 		}
