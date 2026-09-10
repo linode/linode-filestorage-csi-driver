@@ -40,7 +40,7 @@ func newControllerTestEnv(t *testing.T) controllerTestEnv {
 	ctrl := gomock.NewController(t)
 	client := mocks.NewMockLinodeClient(ctrl)
 	kubeClient := mocks.NewMockKubeNodeClient(ctrl)
-	metadataSvc := metadataService{kubeClient: kubeClient, linodeClient: client}
+	metadataSvc := &metadataService{kubeClient: kubeClient, linodeClient: client}
 	return controllerTestEnv{
 		client: client,
 		kube:   kubeClient,
