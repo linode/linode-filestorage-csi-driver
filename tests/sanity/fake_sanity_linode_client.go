@@ -34,10 +34,6 @@ type fakeSanityLinodeClient struct {
 	filesystemByName map[string]int
 	filesystemPolicy map[int]linodego.NFSFilesystemAccessPolicy
 	snapshots        map[int]linodego.NFSSnapshot
-	// CSI sanity expects same-name snapshots from different source volumes to
-	// return AlreadyExists; the current NFS OpenAPI documents per-filesystem
-	// uniqueness. Keep this index global until that contract is resolved.
-	snapshotByName   map[string]int
 	nextFilesystemID int
 	nextSnapshotID   int
 }
@@ -66,7 +62,6 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 		filesystemByName: make(map[string]int),
 		filesystemPolicy: make(map[int]linodego.NFSFilesystemAccessPolicy),
 		snapshots:        make(map[int]linodego.NFSSnapshot),
-		snapshotByName:   make(map[string]int),
 		nextFilesystemID: fakeSanityFilesystemStartID,
 		nextSnapshotID:   fakeSanitySnapshotStartID,
 	}
@@ -228,7 +223,6 @@ func (c *fakeSanityLinodeClient) DeleteNFSFilesystem(_ context.Context, spaceID,
 		snapshot := c.snapshots[snapshotID]
 		if snapshot.SpaceID == spaceID && snapshot.FilesystemID == filesystemID {
 			delete(c.snapshots, snapshotID)
-			delete(c.snapshotByName, snapshot.Label)
 		}
 	}
 	return nil
@@ -420,13 +414,10 @@ func (c *fakeSanityLinodeClient) CreateNFSSnapshot(_ context.Context, spaceID, f
 		return nil, fakeSanityInvalid("NFS snapshot label is required")
 	}
 	for snapshotID := range c.snapshots {
-		if c.snapshots[snapshotID].Label == opts.Label {
+		snapshot := c.snapshots[snapshotID]
+		if snapshot.SpaceID == spaceID && snapshot.FilesystemID == filesystemID && snapshot.Label == opts.Label {
 			return nil, fakeSanityConflict("NFS snapshot %q already exists", opts.Label)
 		}
-	}
-	key := opts.Label
-	if _, ok := c.snapshotByName[key]; ok {
-		return nil, fakeSanityConflict("NFS snapshot %q already exists", opts.Label)
 	}
 	now := time.Now().UTC()
 	snapshot := linodego.NFSSnapshot{
@@ -443,7 +434,6 @@ func (c *fakeSanityLinodeClient) CreateNFSSnapshot(_ context.Context, spaceID, f
 	}
 	c.nextSnapshotID++
 	c.snapshots[snapshot.ID] = snapshot
-	c.snapshotByName[snapshot.Label] = snapshot.ID
 	result := cloneSanitySnapshot(&snapshot)
 	return &result, nil
 }
@@ -476,7 +466,6 @@ func (c *fakeSanityLinodeClient) DeleteNFSSnapshot(_ context.Context, spaceID, f
 		return fakeSanityConflict("NFS snapshot %d is locked", snapshotID)
 	}
 	delete(c.snapshots, snapshotID)
-	delete(c.snapshotByName, snapshot.Label)
 	return nil
 }
 
