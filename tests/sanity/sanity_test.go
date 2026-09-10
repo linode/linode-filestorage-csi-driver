@@ -94,7 +94,7 @@ func TestCSISanity(t *testing.T) {
 	config.TargetPath = filepath.Join(root, "target")
 	config.StagingPath = filepath.Join(root, "staging")
 	config.TestVolumeSize = fakeSanityFilesystemCapacity
-	config.TestVolumeParameters = map[string]string{"space-id": "1"}
+	config.TestVolumeParameters = map[string]string{driver.Name + "/space-id": "1"}
 	config.TestVolumeAccessType = "mount"
 	config.IDGen = &numericIDGenerator{}
 
