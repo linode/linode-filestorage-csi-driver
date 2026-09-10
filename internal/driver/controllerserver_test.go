@@ -241,6 +241,13 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						Tags:            []string{"tag-a"},
 					}, nil),
 					env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil),
+					env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), 123, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
+						Label:    new(""),
+						Enabled:  new(true),
+						VPCs:     new([]linodego.NFSSpaceAccessPolicyVPCOptions{{ID: 123456}}),
+						MTLSMode: new(linodego.NFSMTLSModeOptional),
+					})).Return(&linodego.NFSSpaceAccessPolicy{}, nil),
+					env.client.EXPECT().WaitForNFSSpaceAccessPolicyStatus(gomock.Any(), 123, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSSpaceAccessPolicy{}, nil),
 				)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
@@ -515,6 +522,13 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 				MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
 			}, nil)
 			env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 1123).Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil)
+			env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), 1123, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
+				Label:    new(""),
+				Enabled:  new(true),
+				VPCs:     new([]linodego.NFSSpaceAccessPolicyVPCOptions{{ID: 123456}}),
+				MTLSMode: new(linodego.NFSMTLSModeOptional),
+			})).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
+			env.client.EXPECT().WaitForNFSSpaceAccessPolicyStatus(gomock.Any(), 1123, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
 		}, codes.OK, func(t *testing.T, response *csi.CreateVolumeResponse) {
 			t.Helper()
 			assertCreateVolumeResponse(t, response, "1123/890", 3*1024*1024*1024, map[string]string{
