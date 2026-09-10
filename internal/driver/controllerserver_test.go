@@ -382,6 +382,34 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 			wantMessage: "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found",
 		},
 		{
+			name: "rejects an existing filesystem with incompatible capacity",
+			request: &csi.CreateVolumeRequest{
+				Name: "pvc-abc",
+				CapacityRange: &csi.CapacityRange{
+					RequiredBytes: 2 * 1024 * 1024 * 1024,
+					LimitBytes:    2 * 1024 * 1024 * 1024,
+				},
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				existingCapacity := int64(1024 * 1024 * 1024)
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
+					ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east",
+					Stats: linodego.NFSFilesystemStats{MaxCapacityBytes: &existingCapacity},
+				}}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
+					ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east",
+					Stats: linodego.NFSFilesystemStats{MaxCapacityBytes: &existingCapacity},
+				}, nil)
+			},
+			wantCode: codes.AlreadyExists,
+		},
+		{
 			name: "returns not found for an opaque snapshot handle",
 			request: &csi.CreateVolumeRequest{
 				Name:          "pvc-abc",
@@ -512,6 +540,14 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 				SourceSnapshotID: new(890),
 				Tags:             []string{"tag-a"},
 			}}, nil)
+			env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 1123).Return(&linodego.NFSSpaceAccessPolicy{MTLSMode: linodego.NFSMTLSModeOptional}, nil)
+			env.client.EXPECT().UpdateNFSSpaceAccessPolicy(gomock.Any(), 1123, gomock.Eq(linodego.NFSSpaceAccessPolicyUpdateOptions{
+				Label:    new(""),
+				Enabled:  new(true),
+				VPCs:     new([]linodego.NFSSpaceAccessPolicyVPCOptions{{ID: 123456}}),
+				MTLSMode: new(linodego.NFSMTLSModeOptional),
+			})).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
+			env.client.EXPECT().WaitForNFSSpaceAccessPolicyStatus(gomock.Any(), 1123, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSSpaceAccessPolicy{}, nil)
 			env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 1123, 890, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
 				ID:               890,
 				SpaceID:          1123,
