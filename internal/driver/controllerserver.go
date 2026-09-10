@@ -361,6 +361,14 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return csiCreateSnapshotResponse(existingSnapshot, handle)
 	}
 
+	existsElsewhere, err := s.snapshotLabelExistsInOtherFilesystem(ctx, handle, label)
+	if err != nil {
+		return nil, linodeError(err, "check NFS snapshot name")
+	}
+	if existsElsewhere {
+		return nil, status.Errorf(codes.AlreadyExists, "NFS snapshot %q already exists with a different source volume", label)
+	}
+
 	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
 		Label: label,
 	})

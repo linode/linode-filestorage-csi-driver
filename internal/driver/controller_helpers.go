@@ -687,6 +687,34 @@ func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volum
 	}
 	return nil, nil //nolint:nilnil // Snapshot absence is the expected create path.
 }
+func (s *ControllerServer) snapshotLabelExistsInOtherFilesystem(ctx context.Context, handle volumeHandle, label string) (bool, error) {
+	filesystems, err := s.client.ListNFSFilesystems(ctx, handle.spaceID, &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	for _, filesystem := range filesystems {
+		if filesystem.ID == handle.filesystemID {
+			continue
+		}
+		snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, filesystem.ID, &linodego.ListOptions{
+			PageOptions: &linodego.PageOptions{},
+			PageSize:    linodeclient.DefaultListPageSize,
+		})
+		if err != nil {
+			return false, err
+		}
+		for _, snapshot := range snapshots {
+			if snapshot.Label == label {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
 
 func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {
 	parsedSnapshot, err := parseSnapshotHandle(snapshotID)
