@@ -78,14 +78,13 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
-		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot)
+		return s.handleExistingFilesystem(ctx, existing, &params, space, cluster.VPCID, req.GetCapacityRange(), snapshot)
 	}
 
 	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
 	if err != nil {
 		return nil, err
 	}
-
 	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
 		return nil, err
 	}
@@ -362,6 +361,14 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return csiCreateSnapshotResponse(existingSnapshot, handle)
 	}
 
+	existsElsewhere, err := s.snapshotLabelExistsInOtherFilesystem(ctx, handle, label)
+	if err != nil {
+		return nil, linodeError(err, "check NFS snapshot name")
+	}
+	if existsElsewhere {
+		return nil, status.Errorf(codes.AlreadyExists, "NFS snapshot %q already exists with a different source volume", label)
+	}
+
 	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
 		Label: label,
 	})
@@ -370,6 +377,7 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		if lookupErr == nil && existingSnapshot != nil {
 			return csiCreateSnapshotResponse(existingSnapshot, handle)
 		}
+		return nil, status.Errorf(codes.AlreadyExists, "NFS snapshot %q already exists with a different source volume", label)
 	}
 	if err != nil {
 		return nil, linodeError(err, "create NFS snapshot")
@@ -400,7 +408,9 @@ func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSn
 
 	handle, err := parseSnapshotHandle(snapshotID)
 	if err != nil {
-		return nil, err
+		// CSI requires deletion of an unknown snapshot to succeed.
+		//nolint:nilerr // A malformed non-empty handle is an unknown snapshot.
+		return &csi.DeleteSnapshotResponse{}, nil
 	}
 
 	if err := s.client.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {

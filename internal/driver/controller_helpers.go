@@ -174,9 +174,13 @@ func parseSnapshotContentSource(source *csi.VolumeContentSource) (*snapshotHandl
 		return nil, status.Error(codes.InvalidArgument, "unsupported volume content source")
 	}
 
-	handle, err := parseSnapshotHandle(source.GetSnapshot().GetSnapshotId())
+	snapshotID := source.GetSnapshot().GetSnapshotId()
+	if snapshotID == "" {
+		return nil, status.Error(codes.InvalidArgument, "snapshot id is required")
+	}
+	handle, err := parseSnapshotHandle(snapshotID)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.NotFound, "snapshot id %q was not found", snapshotID)
 	}
 	return &handle, nil
 }
@@ -213,6 +217,18 @@ func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
 		return capacityRange.GetRequiredBytes()
 	}
 	return capacityRange.GetLimitBytes()
+}
+
+func validateExistingFilesystemCapacity(filesystem *linodego.NFSFilesystem, capacityRange *csi.CapacityRange) error {
+	if filesystem.Stats.MaxCapacityBytes == nil {
+		return nil
+	}
+
+	capacityBytes := *filesystem.Stats.MaxCapacityBytes
+	if capacityRange.GetRequiredBytes() > capacityBytes || (capacityRange.GetLimitBytes() != 0 && capacityBytes > capacityRange.GetLimitBytes()) {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible capacity %d", filesystem.Label, capacityBytes)
+	}
+	return nil
 }
 
 func validateCreateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
@@ -507,9 +523,10 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 			return err
 		}
 	}
-	if slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
+	vpcAllowed := slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
 		return vpc.ID == vpcID
-	}) {
+	})
+	if policy.Enabled && vpcAllowed {
 		return nil
 	}
 
@@ -521,10 +538,12 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 			Subnets: spaceAccessPolicySubnetIDs(vpc.Subnets),
 		})
 	}
-	vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
+	if !vpcAllowed {
+		vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
+	}
 	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
 		Label:    new(policy.Label),
-		Enabled:  new(policy.Enabled),
+		Enabled:  new(true),
 		VPCs:     new(vpcs),
 		MTLSMode: new(policy.MTLSMode),
 	}); err != nil {
@@ -538,7 +557,7 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	return nil
 }
 
-func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, vpcID int, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
@@ -550,6 +569,9 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	existing, err := s.client.WaitForNFSFilesystemStatus(waitCtx, existing.SpaceID, existing.ID, linodego.NFSFilesystemStatusActive)
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
+	}
+	if err := validateExistingFilesystemCapacity(existing, capacityRange); err != nil {
+		return nil, err
 	}
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
@@ -566,8 +588,11 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureSpaceVPC(ctx, space.ID, vpcID, spacePolicy); err != nil {
+		return nil, err
+	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, requestedCapacityBytes(capacityRange), spacePolicy.MTLSMode)}, nil
 }
 
 func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
@@ -599,7 +624,15 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 		}
 	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil
+	volume := csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)
+	volume.ContentSource = &csi.VolumeContentSource{
+		Type: &csi.VolumeContentSource_Snapshot{
+			Snapshot: &csi.VolumeContentSource_SnapshotSource{
+				SnapshotId: formatSnapshotHandle(source.spaceID, source.filesystemID, source.snapshotID),
+			},
+		},
+	}
+	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
 func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
@@ -653,6 +686,35 @@ func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volum
 		}
 	}
 	return nil, nil //nolint:nilnil // Snapshot absence is the expected create path.
+}
+func (s *ControllerServer) snapshotLabelExistsInOtherFilesystem(ctx context.Context, handle volumeHandle, label string) (bool, error) {
+	filesystems, err := s.client.ListNFSFilesystems(ctx, handle.spaceID, &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	for filesystemIndex := range filesystems {
+		filesystem := &filesystems[filesystemIndex]
+		if filesystem.ID == handle.filesystemID {
+			continue
+		}
+		snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, filesystem.ID, &linodego.ListOptions{
+			PageOptions: &linodego.PageOptions{},
+			PageSize:    linodeclient.DefaultListPageSize,
+		})
+		if err != nil {
+			return false, err
+		}
+		for snapshotIndex := range snapshots {
+			if snapshots[snapshotIndex].Label == label {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {

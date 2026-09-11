@@ -21,12 +21,16 @@ type NonBlockingGRPCServer interface {
 }
 
 type nonBlockingGRPCServer struct {
-	wg     sync.WaitGroup
-	server *grpc.Server
+	wg sync.WaitGroup
+
+	serverMu        sync.RWMutex
+	server          *grpc.Server
+	serverReady     chan struct{}
+	serverReadyOnce sync.Once
 }
 
 func NewNonBlockingGRPCServer() NonBlockingGRPCServer {
-	return &nonBlockingGRPCServer{}
+	return &nonBlockingGRPCServer{serverReady: make(chan struct{})}
 }
 
 func (s *nonBlockingGRPCServer) Start(endpoint string, ids csi.IdentityServer, cs csi.ControllerServer, ns csi.NodeServer) {
@@ -39,19 +43,20 @@ func (s *nonBlockingGRPCServer) Wait() {
 }
 
 func (s *nonBlockingGRPCServer) Stop() {
-	if s.server != nil {
-		s.server.GracefulStop()
+	if server := s.serverForStop(); server != nil {
+		server.GracefulStop()
 	}
 }
 
 func (s *nonBlockingGRPCServer) ForceStop() {
-	if s.server != nil {
-		s.server.Stop()
+	if server := s.serverForStop(); server != nil {
+		server.Stop()
 	}
 }
 
 func (s *nonBlockingGRPCServer) serve(endpoint string, ids csi.IdentityServer, cs csi.ControllerServer, ns csi.NodeServer) {
 	defer s.wg.Done()
+	defer s.serverReadyOnce.Do(func() { close(s.serverReady) })
 
 	urlObj, err := url.Parse(endpoint)
 	if err != nil {
@@ -76,18 +81,22 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ids csi.IdentityServer, c
 		klog.Fatalf("listen: %v", err)
 	}
 
-	s.server = grpc.NewServer(grpc.ChainUnaryInterceptor(logGRPC))
+	server := grpc.NewServer(grpc.ChainUnaryInterceptor(logGRPC))
 	if ids != nil {
-		csi.RegisterIdentityServer(s.server, ids)
+		csi.RegisterIdentityServer(server, ids)
 	}
 	if cs != nil {
-		csi.RegisterControllerServer(s.server, cs)
+		csi.RegisterControllerServer(server, cs)
 	}
 	if ns != nil {
-		csi.RegisterNodeServer(s.server, ns)
+		csi.RegisterNodeServer(server, ns)
 	}
+	s.serverMu.Lock()
+	s.server = server
+	s.serverMu.Unlock()
+	s.serverReadyOnce.Do(func() { close(s.serverReady) })
 
-	if err := s.server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		klog.Fatalf("serve: %v", err)
 	}
 
@@ -96,6 +105,13 @@ func (s *nonBlockingGRPCServer) serve(endpoint string, ids csi.IdentityServer, c
 			klog.ErrorS(err, "close unix listener")
 		}
 	}
+}
+
+func (s *nonBlockingGRPCServer) serverForStop() *grpc.Server {
+	<-s.serverReady
+	s.serverMu.RLock()
+	defer s.serverMu.RUnlock()
+	return s.server
 }
 
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
