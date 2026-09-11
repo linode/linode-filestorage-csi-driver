@@ -75,3 +75,11 @@ run = "just ci"
 [tasks.helm-install]
 description = "Install Helm charts"
 run = "just helm-install"
+
+[tasks.serve-docs]
+description = "Serve the documentation site locally with live reload"
+run = "just serve-docs"
+
+[tasks.build-docs]
+description = "Build the documentation site the way GitHub Pages does"
+run = "just build-docs"

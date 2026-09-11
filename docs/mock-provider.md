@@ -1,4 +1,10 @@
-# Mock Provider Development Plan
+---
+nav_order: 13
+---
+
+# 🧱 Mock Provider Development Plan
+
+> **Historical document.** This plan was written before the Linode managed NFS API was available, to unblock CSI development against a stand-in backend. The driver now targets the real `v4beta` NFS API, so nothing here describes current behavior. It is kept for the design rationale and for the validation plan, which is still the shape we want. For how the driver works today, start at [Architecture](./architecture.md).
 
 This document describes the temporary mock provider used to build the managed NFS CSI driver before the production file storage API and backing service are available.
 
@@ -65,7 +71,7 @@ This keeps the test backend focused on what the CSI driver owns:
 - unmounting idempotently during unpublish and unstage
 - reporting stats from the mounted filesystem
 
-The NFS server may need elevated privileges. 
+The NFS server may need elevated privileges.
 
 ## CSI Integration Plan
 

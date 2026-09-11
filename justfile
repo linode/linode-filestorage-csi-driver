@@ -21,6 +21,11 @@ CLUSTER_TIER := env("CLUSTER_TIER", "enterprise")
 CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --fail --silent --show-error https://ipv4.icanhazip.com)')
 K8S_VERSION := env("K8S_VERSION", "v1.33.6+lke7")
 
+DOCS_IMAGE := env("DOCS_IMAGE", "jekyll/jekyll:pages")
+DOCS_CONTAINER := env("DOCS_CONTAINER", "linode-filestorage-csi-driver-docs")
+DOCS_PORT := env("DOCS_PORT", "4000")
+DOCS_LIVERELOAD_PORT := env("DOCS_LIVERELOAD_PORT", "35729")
+
 helm_version := trim_start_match(IMAGE_VERSION, "v")
 
 # Format the Go code
@@ -51,6 +56,15 @@ sanity:
       -timeout 15m
 cover:
     go tool cover -html=coverage.out
+
+# Serve the documentation site locally with live reload
+serve-docs:
+    @echo "Serving the docs on http://localhost:{{ DOCS_PORT }}, press Ctrl-C to stop"
+    docker run --rm --interactive --tty --name {{ DOCS_CONTAINER }} --publish {{ DOCS_PORT }}:4000 --publish {{ DOCS_LIVERELOAD_PORT }}:35729 --volume "{{ justfile_directory() }}:/srv/jekyll" {{ DOCS_IMAGE }} jekyll serve --host 0.0.0.0 --livereload --force-polling
+
+# Build the documentation site the way GitHub Pages does
+build-docs:
+    docker run --rm --volume "{{ justfile_directory() }}:/srv/jekyll" {{ DOCS_IMAGE }} jekyll build
 
 # Build the binary
 build:
