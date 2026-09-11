@@ -43,6 +43,12 @@ lint:
 test:
     go test ./... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
+
+# Run the embedded CSI sanity suite
+sanity:
+    go test -race -count=1 -v ./tests/sanity \
+      -run '^TestCSISanity$' \
+      -timeout 15m
 cover:
     go tool cover -html=coverage.out
 
