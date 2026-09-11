@@ -107,7 +107,7 @@ func TestNodeGetInfo(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(instanceClient)
 			}
-			metadataSvc := metadataService{nodeName: "worker-a", instanceClient: instanceClient, kubeClient: mocks.NewMockKubeNodeClient(ctrl)}
+			metadataSvc := &metadataService{nodeName: "worker-a", instanceClient: instanceClient, kubeClient: mocks.NewMockKubeNodeClient(ctrl)}
 			server := &NodeServer{driver: &LinodeDriver{metadata: metadataSvc}}
 
 			response, err := server.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
