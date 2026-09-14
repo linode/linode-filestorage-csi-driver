@@ -38,6 +38,7 @@
 - Helm defaults leave `csi-snapshotter` and `csi-resizer` off. Enable them in values and re-render after those APIs are ready.
 
 ## Packaging And Deploy
+
 - Images are built with Docker, not ko. Use `mise run image-build` for local images and `IMAGE_REPO=<repo> IMAGE_VERSION=<tag> mise run image-push` for publishing.
 - Images are `linux/amd64` only. Akamai/LKE is amd64. `PLATFORM` defaults to `linux/amd64` so ARM Macs still produce LKE-runnable images.
 - Controller and node socket paths are intentionally different. Keep controller at `unix:///var/lib/csi/sockets/pluginproxy/csi.sock`; keep node at `unix:///csi/csi.sock` with kubelet registration at `/var/lib/kubelet/plugins/linodenfs.csi.linode.com/csi.sock`.
@@ -46,7 +47,3 @@
 - In the Helm chart, if `.Values.secretRef` is unset, `templates/secret.yaml` creates `linode-api-token` from `.Values.apiToken`, and the controller reads `LINODE_TOKEN` from key `token`.
 - The Helm controller chart has optional `.Values.controller.kubeconfig` secret wiring; if you touch controller containers or volumes, preserve the mount and `--kubeconfig` plumbing across the plugin and controller sidecars.
 - CI and Image workflows are back on Step Security `block` mode with allowlists derived from observed runs; if you change tool downloads or publish destinations, update those allowlists from fresh workflow logs. Release is still on `audit` until a representative tagged run is captured.
-
-## Current Development Direction
-
-- `docs/mock-provider.md` is the current plan for backend work: implement CSI behavior first against a small mock HTTP API plus a lightweight NFS server, then swap the backend client later.
