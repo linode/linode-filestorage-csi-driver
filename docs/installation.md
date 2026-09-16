@@ -1,7 +1,3 @@
----
-nav_order: 3
----
-
 # 🚀 Installation
 
 ## 📜 Table of Contents

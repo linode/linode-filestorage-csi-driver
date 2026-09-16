@@ -1,7 +1,3 @@
----
-nav_order: 12
----
-
 # 🧪 Testing
 
 ## 📜 Table of Contents

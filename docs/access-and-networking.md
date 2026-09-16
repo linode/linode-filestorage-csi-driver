@@ -1,7 +1,3 @@
----
-nav_order: 7
----
-
 # 🌐 Access and Networking
 
 Reaching an NFS export is not like attaching a block device. The path from a pod to its data crosses a VPC, two separate access policies, and optionally a mutual-TLS transport. This page covers each layer, who owns it, and what happens when it is wrong.

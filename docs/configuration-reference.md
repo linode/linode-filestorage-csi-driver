@@ -1,7 +1,3 @@
----
-nav_order: 8
----
-
 # 📖 Configuration Reference
 
 Every knob the driver exposes, in one place: the environment the binary reads, the Helm values that set it, and the volume context the controller hands to the node.

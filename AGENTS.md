@@ -37,6 +37,17 @@
 - Advertised capabilities are intentionally narrow: plugin `CONTROLLER_SERVICE`, controller `CREATE_DELETE_VOLUME`, node `STAGE_UNSTAGE_VOLUME` and `GET_VOLUME_STATS`.
 - Helm defaults leave `csi-snapshotter` and `csi-resizer` off. Enable them in values and re-render after those APIs are ready.
 
+## Documentation Site
+
+- The docs site is Jekyll with the `just-the-docs` remote theme, built by GitHub Pages from the `gh-pages` branch. Pages are the Markdown files in `docs/`; `README.md` is the site index via `jekyll-readme-index`.
+- **No Markdown file in this repo has YAML front matter, and none should get one.** GitHub's Markdown viewer renders a front matter block as a table at the top of the file, which is noise for anyone reading the docs in the repo or in a PR diff.
+- Page variables live in the `defaults` block of `_config.yml` instead, one entry per file. Jekyll populates `page.*` from `defaults` exactly as if the keys were in the file, so `nav_order`, `permalink`, and anything else the theme reads keep working. Adding a page means adding a `defaults` entry for it; renaming or deleting one means updating that entry.
+- `nav_order` values are contiguous starting at 1 (`README.md` is 1). Inserting a page in the middle means renumbering the entries after it. Reuse defaults as much as possible (generally, aside from page number which is unique per doc, other things such as layout etc should apply for all pages)
+- Page titles come from the first heading in the file, via `jekyll-titles-from-headings`. Do not add a `title` key for that.
+- `jekyll-optional-front-matter` is what turns a front-matter-less file into a page, and it refuses a hardcoded set of basenames (`README`, `LICENSE`, `LICENCE`, `COPYING`, `CODE_OF_CONDUCT`, `CONTRIBUTING`, `ISSUE_TEMPLATE`, `PULL_REQUEST_TEMPLATE`). A matching file is silently dropped from the site rather than erroring. `include:` in `_config.yml` is the plugin's escape hatch and is why `docs/contributing.md` is listed there; add an entry if you name a page one of those.
+- `optional_front_matter.remove_originals` and `readme_index.remove_originals` keep the raw `.md` files out of `_site`. Leave both on, or the site serves `/docs/usage/` and `/docs/usage.md` both.
+- Verify docs changes the way Pages builds them with `mise run build-docs` (one shot) or `mise run serve-docs` (live reload); both run `jekyll/jekyll:pages` against the repo root, so no local Ruby is needed. Check the generated nav order and that in-page anchor links still resolve. See "Working on the docs" in `docs/development-setup.md` for the heading-anchor rules.
+
 ## Packaging And Deploy
 
 - Images are built with Docker, not ko. Use `mise run image-build` for local images and `IMAGE_REPO=<repo> IMAGE_VERSION=<tag> mise run image-push` for publishing.

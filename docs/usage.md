@@ -1,7 +1,3 @@
----
-nav_order: 4
----
-
 # 💡 Usage
 
 ## 📜 Table of Contents

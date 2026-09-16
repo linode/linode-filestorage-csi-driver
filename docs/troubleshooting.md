@@ -1,7 +1,3 @@
----
-nav_order: 10
----
-
 # 🛠 Troubleshooting
 
 Start by finding out which half of the driver is unhappy. Provisioning problems are the controller; mount problems are the node plugin.

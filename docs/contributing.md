@@ -1,7 +1,3 @@
----
-nav_order: 14
----
-
 # 🤝 Contributing
 
 First off, thank you for taking the time to contribute.

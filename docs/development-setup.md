@@ -1,7 +1,3 @@
----
-nav_order: 11
----
-
 # 👩‍💻 Development Setup
 
 ## 📜 Table of Contents
@@ -254,7 +250,9 @@ Two orientation notes:
 
 ## 📝 Working on the docs
 
-This site is Jekyll with the [just-the-docs](https://just-the-docs.com/) remote theme. Every page is a Markdown file in `docs/` with a `nav_order` in its front matter; the ordering in the sidebar is that number, so inserting a page means renumbering the ones after it.
+This site is Jekyll with the [just-the-docs](https://just-the-docs.com/) remote theme. Every page is a plain Markdown file in `docs/` with no front matter at all. Sidebar order comes from `nav_order`, which lives in the `defaults` block of `_config.yml`, one entry per page, so adding a page means adding an entry there and renumbering the ones after it.
+
+The reason `nav_order` is not in the files is that GitHub's Markdown viewer renders a front matter block as a table at the top of the page. Jekyll treats a `defaults` value exactly as if it were in the file, so the nav is unaffected and the files stay clean in the repository. The page title comes from the first heading, via the `jekyll-titles-from-headings` plugin.
 
 GitHub Pages builds from the `gh-pages` branch, not from `main`. The [Auto Merge GH-Pages workflow](https://github.com/linode/linode-filestorage-csi-driver/blob/main/.github/workflows/automerge.yml) merges `main` into `gh-pages` on every push to `main`, so a merged docs change publishes itself. `gh-pages` is also where chart-releaser writes the Helm repository index, which is why the two share a branch. If a docs change is merged and the site does not update, check that workflow's run before looking at anything else.
 

@@ -1,7 +1,3 @@
----
-nav_order: 9
----
-
 # 🔌 CSI RPC Reference
 
 What the driver advertises, what each RPC actually does, and the exact errors it returns. Useful when reading sidecar logs, writing a CSI sanity test, or deciding whether a failure is yours or the driver's.

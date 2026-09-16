@@ -1,7 +1,3 @@
----
-nav_order: 5
----
-
 # 🎚 StorageClass parameters
 
 Every parameter the driver reads is namespaced with the driver name, `linodenfs.csi.linode.com/`. Unrecognized keys are ignored, so a typo in a parameter name fails silently as far as the driver is concerned; the `StorageClass` will simply behave as if you never set it.

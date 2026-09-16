@@ -1,7 +1,3 @@
----
-nav_order: 2
----
-
 # 📐 Architecture
 
 This page explains how the driver is put together and what happens on each code path. If you only want to install and use it, start with [Installation](./installation.md) and [Usage](./usage.md).
