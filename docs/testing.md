@@ -265,5 +265,5 @@ Note that `ci.yml` does **not** run `verify-kustomize`; that lives in `helm.yml`
 ## 📚 Related pages
 
 - [Development Setup](./development-setup.md)
-- [Contributing](./contributing.md)
+- [Contributing](../.github/CONTRIBUTING.md)
 - [CSI RPC reference](./csi-rpc-reference.md)

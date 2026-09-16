@@ -289,6 +289,6 @@ Both are what the release workflow attaches to a GitHub release. The chart is al
 ## 📚 Related pages
 
 - [Testing](./testing.md)
-- [Contributing](./contributing.md)
+- [Contributing](../.github/CONTRIBUTING.md)
 - [Architecture](./architecture.md)
 - [Configuration Reference](./configuration-reference.md)

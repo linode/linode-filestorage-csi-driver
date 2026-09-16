@@ -71,10 +71,14 @@ defaults:
       path: docs/testing.md
     values:
       nav_order: 12
+  # The contributing guide lives in .github/ so GitHub surfaces it to
+  # contributors, and the site publishes that same file rather than a copy. The
+  # permalink keeps the published URL out of the dot directory.
   - scope:
-      path: docs/contributing.md
+      path: .github/CONTRIBUTING.md
     values:
       nav_order: 13
+      permalink: /contributing/
 
 readme_index:
   remove_originals: true
@@ -84,16 +88,26 @@ readme_index:
 optional_front_matter:
   remove_originals: true
 
-# jekyll-optional-front-matter refuses a set of filenames by basename
-# (README, LICENSE, CONTRIBUTING and friends), so without front matter
-# docs/contributing.md is not turned into a page at all. Listing it here is the
-# plugin's own escape hatch: anything in `include` skips that check.
+# Publishing .github/CONTRIBUTING.md needs both entries, and `include` beats
+# `exclude`, which is what keeps the rest of .github/ out.
+#
+#   - `.github` alone: Jekyll skips any file or directory whose name starts
+#     with a dot, so without this it never looks inside the directory at all
+#     and the page is silently missing from the site. It also satisfies
+#     jekyll-optional-front-matter, which refuses a set of basenames (README,
+#     LICENSE, CONTRIBUTING and friends) unless the file is in `include`.
+#   - `CONTRIBUTING.md` unqualified: inside a subdirectory Jekyll matches
+#     `include` against the bare filename but `exclude` against the path from
+#     the source root, so the `.github/` exclude below would otherwise drop
+#     this file along with the workflows and the issue templates.
 include:
-  - docs/contributing.md
+  - .github
+  - CONTRIBUTING.md
 
 # Everything that is not documentation. Without this the site carries the whole
 # Go tree, and AGENTS.md is published as a stray page nothing links to.
 exclude:
+  - .github/
   - bin/
   - charts/
   - deploy/
@@ -103,6 +117,7 @@ exclude:
   - mocks/
   - pkg/
   - release/
+  - tests/
   - AGENTS.md
   - coverage.out
   - Dockerfile

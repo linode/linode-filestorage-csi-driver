@@ -58,7 +58,7 @@
   - [Local toolchain](docs/development-setup.md#-setting-up-the-local-development-environment)
   - [Development cluster](docs/development-setup.md#-creating-a-development-cluster)
   - [Testing](docs/testing.md)
-  - [Contributing](docs/contributing.md)
+  - [Contributing](.github/CONTRIBUTING.md)
 - [License](#license)
 - [Disclaimers](#-disclaimers)
 - [Community](#-join-us-on-slack)
