@@ -76,16 +76,16 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - **Provisions filesystems.** A `PersistentVolumeClaim` becomes a Linode NFS filesystem inside an NFS Storage Space that you pre-create and name in the `StorageClass`.
 - **Authorizes nodes.** Before a pod can mount a volume, the controller adds the node's Linode to the filesystem's Linode ACL and waits for that access policy to go active.
 - **Attaches the cluster VPC.** The controller resolves the cluster's VPC from the Linode API and adds it to the Storage Space access policy, because the driver requires VPC-backed connectivity to the mount target.
-- **Mounts over NFSv4.** The node plugin mounts `mount_target_fqdn` at the kubelet staging path, then bind-mounts it into each pod, optionally with `xprtsec=mtls`.
+- **Mounts over NFSv4.** The node plugin mounts filesystem DNS name at the kubelet staging path, then bind-mounts it into each pod.
 - **Snapshots and restores.** `VolumeSnapshot` objects map to Linode NFS snapshots, and a new PVC can be restored from a snapshot by cloning it into a filesystem.
-- **Reports usage.** `NodeGetVolumeStats` reports byte and inode usage read from the mounted filesystem with `statfs(2)`.
+- **Reports usage.** `NodeGetVolumeStats` reports byte and inode usage read from the mounted filesystem.
 
-### What it does not do yet
+### Current Limitations:
 
-- **Volume expansion.** `ControllerExpandVolume` and `NodeExpandVolume` return `Unimplemented`, and the `csi-resizer` sidecar is disabled by default.
+- **Volume expansion** is currently not supported.
 - **Capacity reporting.** `GetCapacity` returns `Unimplemented`.
 - **Volume listing.** `ListVolumes` is intentionally unimplemented and the capability is not advertised. See [the reasoning](docs/csi-rpc-reference.md#listvolumes-is-intentionally-unimplemented).
-- **Volume cloning.** `CLONE_VOLUME` is not advertised; cloning happens only through snapshot restore.
+- **Volume cloning:** cloning happens only through snapshot restore.
 
 See the [CSI RPC support matrix](docs/csi-rpc-reference.md) for the full, per-RPC picture.
 

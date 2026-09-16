@@ -316,7 +316,7 @@ Every long-running Linode operation is wrapped in `waitContext`, a 5 minute `con
 
 ## 🐳 Image build shape
 
-Images are built with a multi-stage `Dockerfile`, not `ko`.
+Images are built with a multi-stage `Dockerfile`.
 
 - The builder stage compiles a static binary with `CGO_ENABLED=0 -trimpath` and stamps `main.vendorVersion` from the `REV` build arg.
 - The runtime stage is `alpine:3.23.3` plus `ca-certificates` and `nfs-utils`, so the node plugin can exec `mount` and `mount.nfs4`.
