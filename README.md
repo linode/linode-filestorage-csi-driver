@@ -65,9 +65,9 @@
 
 ## 📚 Overview
 
-This is the Container Storage Interface ([CSI](https://github.com/container-storage-interface/spec)) driver for **Linode managed NFS file storage**. It lets Kubernetes provision, share, snapshot, and mount NFSv4 filesystems from a Linode NFS Storage Space as `PersistentVolume`s.
+This is the Container Storage Interface ([CSI](https://github.com/container-storage-interface/spec)) driver for **Linode managed NFS file storage**. It lets Kubernetes provision, share, snapshot, and mount NFSv4 filesystems from a Linode NFS Storage Space as `PersistentVolumes`.
 
-Unlike the [Linode Block Storage CSI driver](https://github.com/linode/linode-blockstorage-csi-driver), which attaches a block device to exactly one node at a time, this driver provisions network filesystems. A single volume can be mounted read-write by pods on many nodes at once, which makes it suitable for shared caches, shared media, CI artifacts, and any workload that needs `ReadWriteMany`.
+The volumes are network filesystems rather than block devices, so a single volume can be mounted read-write by pods on many nodes at the same time. That makes it suitable for shared caches, shared media, CI artifacts, and any workload that needs `ReadWriteMany`.
 
 For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https://kubernetes-csi.github.io/docs/introduction.html) and the [CSI specification](https://github.com/container-storage-interface/spec/).
 
