@@ -17,6 +17,11 @@ search_enabled: true
 heading_anchors: true
 color_scheme: dark
 
+# just-the-docs only loads mermaid when this key is present. The architecture
+# page uses it for the lifecycle sequence diagrams.
+mermaid:
+  version: "11.4.1"
+
 # Page front matter lives here rather than in the files themselves, because
 # GitHub's markdown viewer renders a front matter block as a table at the top
 # of the page. Jekyll reads these exactly as if they were in the file, so
@@ -56,28 +61,24 @@ defaults:
     values:
       nav_order: 8
   - scope:
-      path: docs/csi-rpc-reference.md
+      path: docs/troubleshooting.md
     values:
       nav_order: 9
   - scope:
-      path: docs/troubleshooting.md
+      path: docs/development-setup.md
     values:
       nav_order: 10
   - scope:
-      path: docs/development-setup.md
-    values:
-      nav_order: 11
-  - scope:
       path: docs/testing.md
     values:
-      nav_order: 12
+      nav_order: 11
   # The contributing guide lives in .github/ so GitHub surfaces it to
   # contributors, and the site publishes that same file rather than a copy. The
   # permalink keeps the published URL out of the dot directory.
   - scope:
       path: .github/CONTRIBUTING.md
     values:
-      nav_order: 13
+      nav_order: 12
       permalink: /contributing/
 
 readme_index:

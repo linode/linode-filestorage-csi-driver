@@ -22,7 +22,7 @@ Linode managed NFS has three nested objects, and the driver treats each one diff
 
 ```text
 NFS Storage Space              (you create it; the driver never creates or deletes one)
-├── access policy              (space-scoped: VPC ACL + mTLS mode)
+├── access policy              (space-scoped: VPC ACL)
 └── NFS Filesystem             (the driver creates one per PersistentVolume)
     ├── access policy          (filesystem-scoped: Linode ACL + squash policy + protocols)
     └── NFS Snapshot           (the driver creates one per VolumeSnapshot)
@@ -31,7 +31,7 @@ NFS Storage Space              (you create it; the driver never creates or delet
 | Object | Who owns it | Maps to |
 | --- | --- | --- |
 | **Storage Space** | You, out of band | Referenced by every `StorageClass` |
-| **Space access policy** | The driver *mutates* it | Cluster VPC attachment, mTLS mode |
+| **Space access policy** | The driver *mutates* it | Cluster VPC attachment |
 | **Filesystem** | The driver creates and deletes it | One `PersistentVolume` |
 | **Filesystem access policy** | The driver mutates it | Node authorization, squash policy |
 | **Snapshot** | The driver creates and deletes it | One `VolumeSnapshot` |
@@ -65,21 +65,26 @@ One container image serves both roles. `DRIVER_ROLE` picks which gRPC services g
 │                        └───────────────────────┘                            │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  DaemonSet: csi-linode-nfs-node   (DRIVER_ROLE=node, hostNetwork: true)     │
-│                                                                             │
-│  ┌────────────────────────┐ ┌──────────────────┐                            │
-│  │ node-driver-registrar  │ │  liveness probe  │                            │
-│  └───────────┬────────────┘ └────────┬─────────┘                            │
-│              └───────────────────────┘                                      │
-│                       unix:///csi/csi.sock                                  │
-│                                │                                            │
-│                    ┌───────────┴────────────┐                               │
-│                    │    plugin (node)       │──► mount.nfs4 ──► mount target│
-│                    │    Identity + Node     │──► Kubernetes API (nodes)     │
-│                    └────────────────────────┘──► go-metadata (169.254.169.254)
+                     ┌───────────────────────────┐
+                     │   kubelet (on each node)  │
+                     └──────▲─────────────┬──────┘
+    registration, once ─────┘             └───── NodeStage / NodePublish
+                            │                          │
+┌───────────────────────────┼──────────────────────────┼──────────────────────┐
+│  DaemonSet: csi-linode-nfs-node      (DRIVER_ROLE=node, hostNetwork: true)  │
+│                           │                          ▼                      │
+│      ┌────────────────────┴───┐      ┌────────────────────────┐             │
+│      │ node-driver-registrar  │─────►│    plugin (node)       │             │
+│      └────────────────────────┘      │    Identity + Node     │             │
+│         unix:///csi/csi.sock         └───────────┬────────────┘             │
+│                                                  │                          │
+│                                  mount.nfs4 ◄────┤                          │
+│                        Kubernetes API (nodes) ◄──┤                          │
+│                  go-metadata (169.254.169.254) ◄─┘                          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+`node-driver-registrar` runs once, at startup: it reads the driver name off the plugin socket and writes a registration file into the kubelet's plugin directory. From then on the kubelet calls the `plugin` container directly over the same socket and the registrar does nothing further.
 
 ### Socket paths are deliberately different per role
 
@@ -106,7 +111,7 @@ Keeping them separate avoids host-side contention when several CSI drivers are i
 │   ├── controllerserver.go       # controller RPC entry points
 │   ├── controller_helpers.go     # parameter parsing, handles, Linode API orchestration
 │   ├── nodeserver.go             # node RPC entry points
-│   ├── nodeserver_helpers.go     # mount-point setup, NFS mount, mTLS fallback
+│   ├── nodeserver_helpers.go     # mount-point setup, NFS mount
 │   ├── metadata.go               # node/cluster/VPC resolution
 │   ├── server.go                 # non-blocking gRPC server, unary logging interceptor
 │   └── errors.go                 # shared gRPC status errors
@@ -194,28 +199,30 @@ This is the subtle one, and it has two code paths because Linode has two interfa
 
 ### CreateVolume
 
-```text
- 1. Validate name and volume capabilities (mount-type only; all access modes accepted)
- 2. Parse the content source, if any -> snapshot handle for a restore
- 3. Parse StorageClass parameters -> space-id XOR space-label, tags, root squash
- 4. metadata.Cluster() -> region + VPC ID        (no VPC => FailedPrecondition)
- 5. resolveSpace()      -> by ID, or by exact-label list (0 => NotFound, >1 => FailedPrecondition)
- 6. Derive the label    -> lowercase + truncate to 63 bytes
- 7. findExistingFilesystem() by exact label + region
-      └─ found? -> wait active, re-validate tags/squash/clone source, return existing volume
- 8. getSpaceAccessPolicy()
- 9. ensureSpaceVPC()    -> add the cluster VPC to the space VPC ACL, wait for active
-10. Snapshot restore?   -> CloneNFSSnapshot into the space, wait active, apply squash, return
-11. CreateNFSFilesystem (label, region, protocol nfsv4, optional tags)
-12. WaitForNFSFilesystemStatus(active), 5 minute cap
-13. Require mount_target_fqdn to be present     (else FailedPrecondition)
-14. Apply the initial squash policy, if the StorageClass asked for one
-15. Return volume {handle, capacity echo, volume context incl. mtls-mode}
+```mermaid
+sequenceDiagram
+    participant P as csi-provisioner
+    participant C as controller plugin
+    participant L as Linode API
+    P->>C: CreateVolume(name, StorageClass params)
+    C->>C: validate the request, parse the parameters
+    C->>L: resolve the cluster region and VPC
+    C->>L: resolve the Storage Space (by ID or label)
+    C->>L: look for a filesystem already carrying this label
+    alt one already exists
+        C->>L: wait until active, re-check it matches the request
+        C-->>P: the existing volume
+    else nothing to reuse
+        C->>L: add the cluster VPC to the space access policy
+        C->>L: create the filesystem, wait until active
+        C->>L: apply the squash policy, if the class asked for one
+        C-->>P: volume {handle, mount target, region}
+    end
 ```
 
-Steps 7 and 11 are what make this idempotent. `csi-provisioner` retries `CreateVolume` freely, and a retry after a partial failure re-finds the filesystem by label and converges instead of leaking a second one.
+The lookup by label is what makes this idempotent. `csi-provisioner` retries `CreateVolume` freely, and a retry after a partial failure re-finds the filesystem instead of leaking a second one. A restore from a snapshot follows the same shape, with a clone in place of the create.
 
-Step 9 is a *mutation of an object you own*. The driver adds your cluster's VPC to the space access policy, preserving every VPC and subnet already in the ACL. It never removes one.
+Adding the VPC is a *mutation of an object you own*. The driver appends your cluster's VPC to the space access policy, preserving every VPC and subnet already in the ACL, and never removes one.
 
 ### DeleteVolume
 
@@ -232,13 +239,20 @@ The Storage Space is untouched.
 
 This driver sets `attachRequired: true`, so `csi-attacher` participates. "Attach" here means *authorize*, not *mount*:
 
-```text
-ControllerPublishVolume(volume, node)
-  ├─ parse handle + node ID (node ID is the Linode ID from NodeGetInfo)
-  ├─ GetNFSFilesystemAccessPolicy
-  ├─ Linode already in the ACL and the policy is enabled? -> no-op success
-  ├─ otherwise append the Linode ID and UpdateNFSFilesystemAccessPolicy(enabled=true, ids)
-  └─ wait for the filesystem access policy to be active
+```mermaid
+sequenceDiagram
+    participant A as csi-attacher
+    participant C as controller plugin
+    participant L as Linode API
+    A->>C: ControllerPublishVolume(volume, node)
+    C->>L: get the filesystem access policy
+    alt the node's Linode is already allowed
+        C-->>A: success, nothing to change
+    else
+        C->>L: add the Linode ID, enable the policy
+        C->>L: wait for the policy to be active
+        C-->>A: success
+    end
 ```
 
 `ControllerUnpublishVolume` is the mirror image and is idempotent in three ways: an empty node ID succeeds, a 404 on the filesystem succeeds, and a Linode that is not in the ACL succeeds. When it does remove an ID it preserves the policy's existing `enabled` value rather than forcing it.
@@ -251,21 +265,23 @@ The update always re-sends `Label`, `Enabled`, `LinodeIDs`, and `SquashPolicy` (
 
 Stages the NFS filesystem once per node, at the kubelet staging path.
 
-```text
-1. Validate volume ID, staging path, mount-type capability
-2. Require volume context "mount-target"          (else InvalidArgument)
-3. Validate "mtls-mode" if present                (required | optional | disabled)
-4. Take the per-volume lock                       (else Aborted)
-5. ensureMountPoint(): mkdir -p when missing; already a mount point? -> success, no remount
-6. Mount by mTLS mode:
-     required -> mount nfs4 with xprtsec=mtls, no fallback
-     optional -> try with xprtsec=mtls; on any error, retry without it
-     other    -> mount nfs4 with the capability's mount flags only
+```mermaid
+sequenceDiagram
+    participant K as kubelet
+    participant N as node plugin
+    participant H as host mount namespace
+    K->>N: NodeStageVolume(volume, staging path)
+    N->>N: validate the request, take the per-volume lock
+    N->>H: is the staging path already a mount point?
+    alt already staged
+        N-->>K: success, no remount
+    else
+        N->>H: mkdir the staging path, then mount.nfs4
+        N-->>K: success
+    end
 ```
 
-The source is `mount_target_fqdn`, carried from the controller in the volume context. The filesystem type is always `nfs4`.
-
-`optional` mode retries on *any* mount error today, not only mTLS negotiation failures. The code carries a `TODO` to narrow that once the NFS service exposes a distinguishable error, so a genuinely broken mount currently gets one extra non-mTLS attempt before failing.
+The mount source is the filesystem's DNS name, carried from the controller in the volume context under `mount-target`; a request without it fails with `InvalidArgument`. The filesystem type is always `nfs4`.
 
 ### NodePublishVolume
 
@@ -301,7 +317,9 @@ Every long-running Linode operation is wrapped in `waitContext`, a 5 minute `con
 
 ## 🚨 Error mapping
 
-`linodeError` translates Linode HTTP status codes into gRPC codes, which is what decides whether a sidecar retries, gives up, or surfaces a permanent failure on the PVC:
+The gRPC codes the driver returns follow the [CSI specification](https://github.com/container-storage-interface/spec/blob/master/spec.md), which defines, per RPC, which codes a plugin may return and how a caller is expected to react to each one. Read the spec's table for the RPC you are looking at when you need to know whether a particular failure is retried.
+
+`linodeError` is the other half: it translates Linode HTTP status codes into those gRPC codes, which is what decides whether a sidecar retries, gives up, or surfaces a permanent failure on the PVC:
 
 | Linode response | gRPC code | Effect |
 | --- | --- | --- |
@@ -327,6 +345,5 @@ Controller and node share one image and one entrypoint; `DRIVER_ROLE` selects th
 
 ## 📚 Related pages
 
-- [CSI RPC support matrix](./csi-rpc-reference.md) for the per-RPC status and validation rules
-- [Access and Networking](./access-and-networking.md) for the VPC, ACL, mTLS, and squash details
+- [Access and Networking](./access-and-networking.md) for the VPC, ACL, and squash details
 - [Configuration Reference](./configuration-reference.md) for every environment variable and Helm value

@@ -24,7 +24,7 @@
 
 - [Overview](#-overview)
   - [What the driver does](#what-the-driver-does)
-  - [What it does not do yet](#what-it-does-not-do-yet)
+  - [Current limitations](#current-limitations)
 - [Architecture](docs/architecture.md)
   - [Component layout](docs/architecture.md#-component-layout)
   - [Volume and snapshot identity](docs/architecture.md#-volume-and-snapshot-identity)
@@ -45,13 +45,11 @@
 - [Access and Networking](docs/access-and-networking.md)
   - [VPC requirement](docs/access-and-networking.md#-vpc-requirement)
   - [Access policies](docs/access-and-networking.md#-two-layers-of-access-policy)
-  - [mTLS](docs/access-and-networking.md#-mtls)
   - [Squash policy](docs/access-and-networking.md#-squash-policy)
 - [Reference](docs/configuration-reference.md)
   - [Environment variables](docs/configuration-reference.md#-driver-environment-variables)
   - [Helm values](docs/configuration-reference.md#-helm-values)
   - [Volume context keys](docs/configuration-reference.md#-volume-context-keys)
-  - [CSI RPC support matrix](docs/csi-rpc-reference.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Development](docs/development-setup.md)
   - [Prerequisites](docs/development-setup.md#-prerequisites)
@@ -83,20 +81,14 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 ### Current Limitations:
 
 - **Volume expansion** is currently not supported.
-- **Capacity reporting.** `GetCapacity` returns `Unimplemented`.
-- **Volume listing.** `ListVolumes` is intentionally unimplemented and the capability is not advertised. See [the reasoning](docs/csi-rpc-reference.md#listvolumes-is-intentionally-unimplemented).
 - **Volume cloning:** cloning happens only through snapshot restore.
-
-See the [CSI RPC support matrix](docs/csi-rpc-reference.md) for the full, per-RPC picture.
 
 ## 🚧 Disclaimers
 
-- **The driver is pre-1.0.** The Helm chart version is `0.0.1`, the API surface it targets is `v4beta`, and behavior may change between releases.
+- **The driver is in alpha.** Behavior and the interfaces it exposes may change between releases.
 - **A VPC is required.** `CreateVolume` fails with `FailedPrecondition` when the cluster's nodes are not attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - **Storage Spaces are not created by the driver.** You must create the NFS Storage Space yourself and reference it from every `StorageClass`. The driver creates and deletes filesystems inside that space, never the space itself.
 - **Capacity requests are advisory.** The Linode NFS API does not take a size on filesystem creation. The driver echoes the requested capacity back in the CSI response so Kubernetes can bind the PVC, but it does not enforce a quota. Do not treat `spec.resources.requests.storage` as a hard limit.
-- **Volume IDs are composite.** A volume handle is `{space_id}/{filesystem_id}`, and a snapshot handle is `{space_id}/{filesystem_id}/{snapshot_id}`. Do not assume a bare integer.
-- **Images are `linux/amd64` only.** Akamai/LKE is amd64, and `PLATFORM` defaults to `linux/amd64`.
 
 ## 💬 Join Us on Slack
 

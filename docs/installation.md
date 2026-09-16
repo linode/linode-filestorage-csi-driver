@@ -83,21 +83,29 @@ The Helm chart in `charts/linode-nfs-csi-driver` is the source of truth. `deploy
 
 ### 1. Using Helm
 
-#### 🚀 Deploy the CSI driver
+#### 🔄 Add the linode-csi repo
 
-Install from a release chart artifact:
+```sh
+helm repo add linode-nfs-csi https://linode.github.io/linode-filestorage-csi-driver/
+helm repo update linode-nfs-csi
+```
+
+Every tagged release publishes the chart to that repository, so this is the only step that needs repeating when a new version lands.
+
+#### 🚀 Deploy the CSI driver
 
 ```sh
 export LINODE_API_TOKEN="...your Linode API token..."
-export VERSION="v0.0.1"   # the release you want
 
-helm upgrade --install linode-nfs-csi-driver \
+helm install linode-nfs-csi-driver \
   --namespace kube-system \
   --set apiToken="${LINODE_API_TOKEN}" \
-  https://github.com/linode/linode-filestorage-csi-driver/releases/download/${VERSION}/helm-chart-${VERSION}.tgz
+  linode-nfs-csi/linode-nfs-csi-driver
 ```
 
-Or from a checkout of the repository:
+Pin a version with `--version`, and use `helm upgrade --install` if you want the same command to work whether or not the release already exists.
+
+Or install from a checkout of the repository:
 
 ```sh
 export LINODE_TOKEN="...your Linode API token..."
@@ -209,14 +217,17 @@ Every node should list `linodenfs.csi.linode.com`. If one does not, see [Trouble
 
 ```sh
 export LINODE_API_TOKEN="...your Linode API token..."
-export VERSION="v0.0.2"
+
+helm repo update linode-csi
 
 helm upgrade linode-nfs-csi-driver \
   --install \
   --namespace kube-system \
   --set apiToken="${LINODE_API_TOKEN}" \
-  https://github.com/linode/linode-filestorage-csi-driver/releases/download/${VERSION}/helm-chart-${VERSION}.tgz
+  linode-nfs-csi/linode-nfs-csi-driver
 ```
+
+`helm repo update` first, or Helm upgrades to the newest chart it already knows about rather than the newest chart that exists.
 
 Upgrades roll the controller Deployment and the node DaemonSet. Mounted volumes stay mounted across a node plugin restart, because the mounts live in the host mount namespace, not the plugin container. In-flight provisioning retries once the controller is back.
 
@@ -251,7 +262,7 @@ sidecars:
     enabled: true
 ```
 
-You also need the `snapshot.storage.k8s.io` CRDs and the snapshot controller installed in the cluster. See [Snapshots](./snapshots.md).
+You also need the `snapshot.storage.k8s.io` CRDs installed in the cluster. See [Snapshots](./snapshots.md).
 
 ### The resizer stays off
 
@@ -262,33 +273,6 @@ sidecars:
 ```
 
 `ControllerExpandVolume` returns `Unimplemented` and `EXPAND_VOLUME` is not advertised. Enabling `csi-resizer` produces a sidecar that logs errors against every expansion attempt without accomplishing anything.
-
-### Controller kubeconfig
-
-If the CSI sidecars must talk to the Kubernetes API through an explicit kubeconfig rather than their in-cluster ServiceAccount, mount one as a Secret. The chart mounts the Secret as a directory and passes `--kubeconfig=<mountDir>/<secretKey>` to `csi-provisioner`, `csi-attacher`, `csi-resizer`, and `csi-snapshotter`.
-
-```yaml
-controller:
-  kubeconfig:
-    mountDir: /etc/kubeconfig
-    secretName: csi-kubeconfig
-    secretKey: external-kubeconfig
-```
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: csi-kubeconfig
-  namespace: kube-system
-stringData:
-  external-kubeconfig: |
-    # contents of your kubeconfig file
-```
-
-Set all three fields or none. The volume is rendered from `secretName` and `secretKey`, but the volume mount is rendered from `mountDir` and `secretName`, so a config with `mountDir` and `secretName` alone produces a pod template that mounts a volume which does not exist, and the API server rejects it.
-
-The `plugin` container receives the mounted directory but not the flag. It has no `args`, and the driver parses only klog's flags, so it would exit non-zero on an unrecognized one. The controller plugin reaches the Kubernetes API with in-cluster configuration either way; this setting exists for the sidecars. See [the rendering table](./configuration-reference.md#-helm-values) for exactly what each field controls.
 
 ### ServiceAccount and RBAC toggles
 

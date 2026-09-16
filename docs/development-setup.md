@@ -228,7 +228,7 @@ internal/driver/
   controllerserver.go      Controller RPCs
   controller_helpers.go    Parameter parsing, handles, labels, idempotency, error mapping
   nodeserver.go            Node RPCs
-  nodeserver_helpers.go    Mount logic, mTLS handling
+  nodeserver_helpers.go    Mount logic
   metadata.go              Node and cluster metadata, VPC resolution
   server.go                Non-blocking gRPC server
   errors.go                Shared gRPC errors

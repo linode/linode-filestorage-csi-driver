@@ -47,7 +47,7 @@ The levels the driver actually uses:
 | Level | What appears |
 | --- | --- |
 | default | Errors and warnings |
-| `-v=2` | Startup, role, endpoint, driver configuration, optional-mTLS fallbacks |
+| `-v=2` | Startup, role, endpoint, driver configuration |
 | `-v=4` | Every RPC entry (`handling controller rpc`), mount and unmount decisions, metadata fallbacks |
 | `-v=5` | Idempotent no-op paths, such as an unstage on an already-unmounted path |
 
@@ -95,9 +95,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.replicaCount` | `1` | Replicas. See the note below |
 | `controller.hostNetwork` | `false` | Host networking for the controller pod |
 | `controller.dnsPolicy` | `Default` | Set to `ClusterFirstWithHostNet` if you enable `hostNetwork` |
-| `controller.kubeconfig.mountDir` | `""` | Mount path for an external kubeconfig |
-| `controller.kubeconfig.secretName` | `""` | Secret holding it |
-| `controller.kubeconfig.secretKey` | `""` | Key within that Secret |
+| `controller.kubeconfig.*` | `""` | Internal. Leave unset; see the note below |
 | `controller.serviceAccount.enabled` | `true` | Create the ServiceAccount. When false, the Deployment still references the name |
 | `controller.serviceAccount.name` | `csi-linode-nfs-controller` | |
 | `controller.rbac.enabled` | `true` | Create the ClusterRole and ClusterRoleBinding |
@@ -105,17 +103,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.affinity` | `{}` | |
 | `controller.tolerations` | `CriticalAddonsOnly` + `NoExecute` | Lets the controller schedule on control-plane-ish nodes |
 
-Set all three `kubeconfig` fields or none. Each piece of the rendering is guarded separately, and the combinations are not interchangeable:
-
-| Rendered | Guarded by |
-| --- | --- |
-| The `controller-kubeconfig` volume | `secretName` and `secretKey` |
-| The volume mount, on the plugin container and on every sidecar except `liveness-probe` | `mountDir` and `secretName` |
-| `--kubeconfig=<mountDir>/<secretKey>` on `csi-provisioner`, `csi-attacher`, `csi-resizer`, and `csi-snapshotter` | `mountDir`, `secretName`, and `secretKey` |
-
-So setting only `mountDir` and `secretName` renders a volume mount with no matching volume, and the API server rejects the pod template outright.
-
-The flag reaches the four sidecars only. The `plugin` container has no `args` at all and takes no `--kubeconfig`: the driver parses only klog's flags, so an unrecognized flag would make it exit non-zero. The controller plugin always uses in-cluster configuration to reach the Kubernetes API; the kubeconfig is there for the sidecars.
+**On `controller.kubeconfig`:** the chart can mount a kubeconfig Secret and pass `--kubeconfig` to the CSI sidecars, but this is not a supported way to run the driver and it is not what the sidecars should be using. They authenticate with the controller ServiceAccount and the ClusterRole the chart creates, which is the arrangement the RBAC is written for. Leave these values empty.
 
 **On `replicaCount`:** raising it above 1 gives you multiple driver processes, and the sidecars lease-elect among themselves so only one is active. The driver's own in-process locks (which serialize concurrent operations on the same volume) are per-process and do not coordinate across replicas, so leader election is what keeps that safe. Leave it at 1 unless you have a reason.
 
@@ -168,14 +156,10 @@ Summarized here; the full rules, error messages, and idempotency implications ar
 | `filesystem-id` | `1337` | informational |
 | `mount-target` | `fs-1337.us-ord.nfs.linode.com` | **`NodeStageVolume`, as the NFS mount source** |
 | `region` | `us-ord` | informational |
-| `mtls-mode` | `required`, `optional`, `disabled` | **`NodeStageVolume`, to decide on `xprtsec=mtls`** |
 
-Two of the five are load-bearing:
+`mount-target` is the load-bearing one: `NodeStageVolume` fails with `InvalidArgument` when it is missing. The controller also refuses to return a volume whose filesystem has no mount target, so an empty value should never reach a PV.
 
-- **`mount-target` is required.** `NodeStageVolume` fails with `InvalidArgument` when it is missing. The controller also refuses to return a volume whose filesystem has no mount target, so an empty value should never reach a PV.
-- **`mtls-mode` is validated.** A value outside the three accepted strings fails with `invalid mtls-mode value, must be one of: required, optional, disabled`. Empty is allowed and means "no mTLS".
-
-Editing a PV's `volumeAttributes` by hand is how you break a working volume. The values are a snapshot taken at provisioning time, and the driver never refreshes them; see the [mTLS caveat](./access-and-networking.md#-mtls).
+Editing a PV's `volumeAttributes` by hand is how you break a working volume. The values are a snapshot taken at provisioning time, and the driver never refreshes them.
 
 ## 📦 Deployed objects
 
@@ -215,5 +199,4 @@ For reference when matching against your cluster's Kubernetes version:
 
 - [Installation](./installation.md)
 - [StorageClass parameters](./storage-class-parameters.md)
-- [CSI RPC reference](./csi-rpc-reference.md)
 - [Troubleshooting](./troubleshooting.md)

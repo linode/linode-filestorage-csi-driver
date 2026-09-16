@@ -41,12 +41,13 @@ The whole suite is hermetic: no network, no cluster, no Linode token. If a test 
 | `internal/driver/controllerserver_test.go` | Every controller RPC, including error paths |
 | `internal/driver/controller_helpers_test.go` | Parameter parsing, handle formats, label normalization, idempotency comparisons, error mapping |
 | `internal/driver/nodeserver_test.go` | Node RPC validation, locking, stats |
-| `internal/driver/nodeserver_helpers_test.go` | Mount option assembly, the mTLS decision, the optional-mTLS fallback |
+| `internal/driver/nodeserver_helpers_test.go` | Mount option assembly, mount-point setup |
 | `internal/driver/metadata_test.go` | Provider ID parsing, region resolution, both VPC discovery paths, the multi-region rejection |
 | `internal/driver/identityserver_test.go` | Plugin info, capabilities, probe readiness |
 | `internal/driver/driver_test.go` | Setup, role validation, capability advertisement |
 | `pkg/linode-client/client_test.go` | Client construction and configuration |
 | `pkg/mount-manager/safe_mounter_test.go` | The mounter wrapper |
+| `tests/sanity/sanity_test.go` | `csi-sanity` against the real servers over fakes. See [CSI sanity](#-csi-sanity) |
 
 The parts worth having tests for, and which do have them, are the ones that are painful to verify by hand: the composite handle formats, the 63-byte label truncation with its trailing-hyphen strip, the HTTP-to-gRPC error mapping table, and the two different VPC discovery paths for legacy and modern interface generations.
 
@@ -236,15 +237,24 @@ Things worth deliberately breaking while you are in here, because each one exerc
 
 ## 🧷 CSI sanity
 
-The repository does not currently run [csi-sanity](https://github.com/kubernetes-csi/csi-test) in CI. If you run it manually, expect and ignore failures for the capabilities the driver does not advertise: `ListVolumes`, `GetCapacity`, expansion, and cloning. `ListSnapshots` is a special case, since the RPC works but the capability is not advertised, so sanity may skip tests that would in fact pass.
-
-The driver's socket is reachable inside the plugin container:
+[csi-sanity](https://github.com/kubernetes-csi/csi-test) runs against the real driver in `tests/sanity`, with no cluster and no Linode account:
 
 ```sh
-# controller
-kubectl -n kube-system exec deploy/csi-linode-nfs-controller -c plugin -- \
-  ls -l /var/lib/csi/sockets/pluginproxy/csi.sock
+just sanity
 ```
+
+That is `go test -race -count=1 -v ./tests/sanity -run '^TestCSISanity$' -timeout 15m`. It is also an ordinary Go test, so `mise run test` and `go test ./...` pick it up, which means CI runs it on every PR as part of `mise run ci`.
+
+How it is wired, in `tests/sanity/sanity_test.go`:
+
+1. Three fakes stand in for everything external: `fake_sanity_linode_client.go` implements the `LinodeClient` interface over in-memory spaces, filesystems, access policies, and snapshots; `fake_sanity_metadata.go` fakes the instance metadata service and the Kubernetes node lookups; `fake_sanity_mounter.go` fakes the mounter so nothing is actually mounted.
+2. `driver.NewTestServices` builds the identity, controller, and node servers over those fakes, and the real `NewNonBlockingGRPCServer` serves all three on one Unix socket in a `t.TempDir()`.
+3. The test waits for the socket to accept a gRPC connection, then hands the endpoint to `csisanity.Test` with `space-id: "1"` as the volume parameters and a custom `IDGen` that produces `{space}/{filesystem}` handles, since the suite's default identifiers are not valid handles for this driver.
+
+Because the whole thing is in-process and hermetic, a sanity failure is a real protocol-conformance bug rather than an environment problem. Two consequences when you change the driver:
+
+- **Advertising a new capability turns on more sanity tests.** `capabilities.go` is what the suite reads to decide which RPCs to exercise, so adding a capability without implementing it fails here first.
+- **A new RPC needs the fake to support it.** The fakes implement only what the driver calls, so an unimplemented fake method shows up as a sanity failure rather than a compile error.
 
 ## 🤖 What CI runs
 
@@ -266,4 +276,3 @@ Note that `ci.yml` does **not** run `verify-kustomize`; that lives in `helm.yml`
 
 - [Development Setup](./development-setup.md)
 - [Contributing](../.github/CONTRIBUTING.md)
-- [CSI RPC reference](./csi-rpc-reference.md)

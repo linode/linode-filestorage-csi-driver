@@ -15,11 +15,10 @@ A `VolumeSnapshot` maps to a Linode NFS snapshot, taken on the filesystem behind
 
 ## 🔧 Prerequisites
 
-Three things have to be in place, and only one of them is inside this chart:
+Two things have to be in place, and only one of them is inside this chart:
 
 1. **The snapshot CRDs.** `volumesnapshots`, `volumesnapshotcontents`, and `volumesnapshotclasses` from `snapshot.storage.k8s.io`. Kubernetes does not ship these; install them from [external-snapshotter](https://github.com/kubernetes-csi/external-snapshotter).
-2. **The snapshot controller.** The cluster-wide controller from the same project, which watches the CRDs. On LKE, check whether it is already present before installing your own; running two is a bad time.
-3. **The `csi-snapshotter` sidecar.** Shipped in the chart but **disabled by default**:
+2. **The `csi-snapshotter` sidecar.** Shipped in the chart but **disabled by default**:
 
    ```yaml
    sidecars:
@@ -222,16 +221,12 @@ The `starting_token` is an absolute offset rather than a backend page cursor, so
 
 | Limitation | Detail |
 | --- | --- |
-| **No PVC-to-PVC cloning** | A `dataSource` of `kind: PersistentVolumeClaim` is rejected with `InvalidArgument: unsupported volume content source`. `CLONE_VOLUME` is not advertised. Snapshot, then restore |
 | **No group snapshots** | `GET_VOLUME_GROUP_SNAPSHOT` is not advertised; `VolumeGroupSnapshot` will not work |
 | **No in-place restore** | Restoring always produces a new filesystem and a new PV. To swap it in, repoint your workload at the restored PVC |
 | **No snapshot-class parameters** | Tags and squash policy on a restored volume come from the restore `StorageClass` |
-| **Region is not validated on restore** | The clone targets the cluster region regardless of the snapshot's region |
-| **No unfiltered listing** | See above |
 
 ## 📚 Related pages
 
 - [Usage](./usage.md)
 - [StorageClass parameters](./storage-class-parameters.md)
-- [CSI RPC reference](./csi-rpc-reference.md)
 - [Troubleshooting](./troubleshooting.md)

@@ -1,17 +1,16 @@
 # 🌐 Access and Networking
 
-Reaching an NFS export is not like attaching a block device. The path from a pod to its data crosses a VPC, two separate access policies, and optionally a mutual-TLS transport. This page covers each layer, who owns it, and what happens when it is wrong.
+Reaching an NFS export is not like attaching a block device. The path from a pod to its data crosses a VPC and two separate access policies. This page covers each layer, who owns it, and what happens when it is wrong.
 
 ## 📜 Table of Contents
 
 1. [The data path](#-the-data-path)
 2. [VPC requirement](#-vpc-requirement)
 3. [Two layers of access policy](#-two-layers-of-access-policy)
-4. [mTLS](#-mtls)
-5. [Squash policy](#-squash-policy)
-6. [Node identity](#-node-identity)
-7. [Firewalls and ports](#-firewalls-and-ports)
-8. [Security notes](#-security-notes)
+4. [Squash policy](#-squash-policy)
+5. [Node identity](#-node-identity)
+6. [Firewalls and ports](#-firewalls-and-ports)
+7. [Security notes](#-security-notes)
 
 ## 🛣 The data path
 
@@ -25,13 +24,13 @@ Reaching an NFS export is not like attaching a block device. The path from a pod
    ▼
   /var/lib/kubelet/plugins/kubernetes.io/csi/<driver>/<hash>/globalmount
    │
-   │  nfs4, optionally xprtsec=mtls
+   │  nfs4
    ▼
-  mount_target_fqdn  ── resolves to an address inside the VPC
+  filesystem DNS name  ── resolves to an address inside the VPC
    │
    ▼
   Linode NFS filesystem
-      guarded by: space access policy   (VPC ACL, mTLS mode)
+      guarded by: space access policy   (VPC ACL)
                   filesystem access policy (Linode ACL, squash policy)
 ```
 
@@ -52,13 +51,9 @@ The driver resolves the cluster VPC from the Linode API rather than from Kuberne
 3. Fetch that Linode and branch on its `interface_generation`:
    - **`legacy_config`** (LKE and CAPI nodes today): list the instance's config profiles and look for an active interface with `purpose: vpc`.
    - anything else: list the Linode's interfaces and look for one carrying a VPC.
-4. If the Linode is attached to more than one VPC, fail rather than guess.
-5. If no VPC is found, fail with the `FailedPrecondition` above.
+4. If no VPC is found, fail with the `FailedPrecondition` above.
 
-Two consequences worth internalizing:
-
-- **The first node decides.** The whole cluster's VPC is inferred from one node. A cluster whose nodes live in different VPCs will provision volumes reachable from only some of them, and the failure shows up later as a mount timeout, not as a provisioning error.
-- **Region agreement is checked across all nodes, VPC membership is not.** Adding a node pool outside the VPC will not fail provisioning; it will fail mounting.
+A cluster's nodes all live in one VPC and one region, so taking the first node is enough to identify the cluster's VPC.
 
 Checking your own cluster:
 
@@ -84,7 +79,7 @@ Scope: the whole Storage Space, and therefore every filesystem in it.
 The driver adds the cluster VPC to this policy the first time it provisions a volume in the space, inside `CreateVolume`:
 
 - Read the current policy. If the VPC is already in `vpc_acl`, do nothing.
-- Otherwise rewrite the policy with the existing VPC entries plus the cluster VPC, preserving each entry's label, enabled flag, subnets, and mTLS mode.
+- Otherwise rewrite the policy with the existing VPC entries plus the cluster VPC, preserving each entry's label, enabled flag, and subnets.
 - Wait up to 5 minutes for the policy to go `active`.
 
 The VPC is added **without subnet restrictions**, meaning all subnets of that VPC are admitted. If you need subnet-level narrowing, set it yourself in the Cloud Manager; the driver preserves subnets it did not create, so a manual narrowing survives later provisioning as long as the VPC entry stays present.
@@ -124,29 +119,6 @@ Both operations preserve the policy's label, squash policy, and protocol list, b
 Note that publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL, which admits nothing but leaves the switch on.
 
 `ControllerGetVolume` surfaces this state to Kubernetes: the volume status lists the Linode IDs currently in the ACL as published node IDs, which is how a `kubectl describe pv` can disagree with reality if someone edited the ACL by hand.
-
-## 🔐 mTLS
-
-Mutual TLS is a property of the **Storage Space access policy**, not of the driver or the `StorageClass`. Set it on the space; the driver reads it and adapts.
-
-`CreateVolume` reads the space policy's mTLS mode and puts it in the volume context under `mtls-mode`, which lands in the PV's `volumeAttributes` and comes back to the node plugin on every stage.
-
-| `mtls-mode` | `NodeStageVolume` behavior |
-| --- | --- |
-| `required` | Appends `xprtsec=mtls` to the mount flags. A failure is a failure |
-| `optional` | Tries the mount **with** `xprtsec=mtls` first; on any error, retries without it |
-| `disabled` | Plain NFSv4, no `xprtsec` flag |
-| unset / empty | Same as `disabled`. The flag is not added |
-| anything else | `InvalidArgument: invalid mtls-mode value, must be one of: required, optional, disabled` |
-
-Do not add `xprtsec=mtls` to `mountOptions` yourself. With `required` you would get it twice, and with `disabled` you would get a mount the backend rejects; either way you have taken the decision away from the code that knows the space's actual setting.
-
-Two caveats on `optional`:
-
-- The fallback triggers on **any** mount error, not specifically on an mTLS negotiation failure. A transient network problem during the first attempt silently produces a non-mTLS mount. This is a known rough edge, marked with a `TODO` in the source pending better error typing from the NFS service.
-- `mtls-mode` is captured at provisioning time. Changing the space's mTLS mode afterwards does **not** update existing PVs' `volumeAttributes`, so already-provisioned volumes keep staging with the old mode until the PV is recreated. If you tighten a space to `required`, expect existing volumes to keep mounting without mTLS.
-
-`xprtsec=mtls` requires client-side support: an NFS client and kernel that implement RPC-with-TLS, plus a running `tlshd`. The driver image bundles the NFS userspace tooling, but transport security is negotiated by the host kernel, so a host without it will fail a `required` mount with an error from `mount.nfs4` rather than from the driver.
 
 ## 🎭 Squash policy
 
@@ -196,7 +168,7 @@ The node needs outbound NFSv4 to the mount target inside the VPC:
 
 If you run a Linode Cloud Firewall or in-cluster egress policy, TCP 2049 to the VPC has to be permitted. A blocked port produces a `NodeStageVolume` that hangs and then fails with a `mount.nfs4` timeout, which looks identical to an ACL problem in the kubelet's logs. Check the ACL first, since it is cheaper to verify.
 
-DNS matters too: `mount_target_fqdn` has to resolve from the node, using the host's resolver rather than the cluster's. The node plugin runs with `hostNetwork: true` and mounts in the host mount namespace, so `/etc/resolv.conf` on the node is what counts, not CoreDNS.
+DNS matters too: the filesystem's DNS name has to resolve from the node, using the host's resolver rather than the cluster's. The node plugin runs with `hostNetwork: true` and mounts in the host mount namespace, so `/etc/resolv.conf` on the node is what counts, not CoreDNS.
 
 ## 🛡 Security notes
 

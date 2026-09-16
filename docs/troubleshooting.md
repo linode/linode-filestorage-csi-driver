@@ -275,7 +275,7 @@ The node cannot reach the mount target. Check in this order, cheapest first:
 mount.nfs4: an incorrect mount option was specified
 ```
 
-Usually a bad flag in the `StorageClass` `mountOptions`, or a manually added `xprtsec=mtls` on a host whose kernel has no RPC-with-TLS support. Remove it and let the driver decide based on the space's mTLS mode.
+Usually a bad flag in the `StorageClass` `mountOptions`. Remove it and let the driver assemble the options itself.
 
 ### Missing mount target in the volume context
 
@@ -284,14 +284,6 @@ InvalidArgument: mount-target is required in volume context
 ```
 
 The PV's `volumeAttributes` lost its `mount-target`, which normally means someone edited the PV. Editing it back is not reliably recoverable, since the value has to match the actual filesystem. Recreate the PVC.
-
-### Invalid mTLS mode
-
-```text
-InvalidArgument: invalid mtls-mode value, must be one of: required, optional, disabled
-```
-
-Same cause: an edited PV. The only accepted values are those three, or empty.
 
 ### Mounts work on some nodes only
 
@@ -451,11 +443,10 @@ Something called `ListSnapshots` with no filter, which the driver refuses. `exte
 | `volume access mode is required` | No access mode on the PVC | [Access modes](./usage.md#-access-modes) |
 | `unsupported volume content source` | PVC-to-PVC clone attempted | [Unsupported volume content source](#unsupported-volume-content-source) |
 | `mount-target is required in volume context` | PV attributes were edited | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
-| `invalid mtls-mode value` | PV attributes were edited | [Invalid mTLS mode](#invalid-mtls-mode) |
 | `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#the-node-plugin-never-registers) |
 | `An operation with the given volume key` | Lock contention; retried automatically | [Benign lock contention](#benign-lock-contention) |
-| `operation not implemented` | An unimplemented RPC was called | [Capabilities](./csi-rpc-reference.md#-capabilities) |
-| `volume path not found` | `NodeGetVolumeStats` on a path that is gone | [NodeGetVolumeStats](./csi-rpc-reference.md#nodegetvolumestats) |
+| `operation not implemented` | An unimplemented RPC was called | [What is not implemented](./usage.md#-what-is-not-supported) |
+| `volume path not found` | `NodeGetVolumeStats` on a path that is gone | [NodeGetVolumeStats](./architecture.md#nodegetvolumestats) |
 
 ## 🧰 Collecting a bug report
 
@@ -486,11 +477,10 @@ kubectl get events --sort-by=.lastTimestamp
 
 None of those outputs contain the API token, and none of them should: do not include `kubectl get secret linode-api-token -o yaml`.
 
-Say which Linode region you are in, whether the nodes are in a VPC, and whether the Storage Space has mTLS enabled. Those three account for most of the difficulty in reproducing a report.
+Say which Linode region you are in and whether the nodes are in a VPC. Those two account for most of the difficulty in reproducing a report.
 
 ## 📚 Related pages
 
 - [Installation](./installation.md)
 - [Access and Networking](./access-and-networking.md)
-- [CSI RPC reference](./csi-rpc-reference.md)
 - [Configuration Reference](./configuration-reference.md)

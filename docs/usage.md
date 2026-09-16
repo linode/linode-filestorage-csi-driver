@@ -7,11 +7,10 @@
 3. [Consume it from a pod](#3-consume-it-from-a-pod)
 4. [Share one volume between pods](#4-share-one-volume-between-pods)
 5. [Access modes](#-access-modes)
-6. [About capacity](#-about-capacity)
-7. [Mount options](#-mount-options)
-8. [Reclaim policy](#-reclaim-policy)
-9. [Inspecting a volume](#-inspecting-a-volume)
-10. [What is not supported](#-what-is-not-supported)
+6. [Mount options](#-mount-options)
+7. [Reclaim policy](#-reclaim-policy)
+8. [Inspecting a volume](#-inspecting-a-volume)
+9. [What is not supported](#-what-is-not-supported)
 
 ## 1. Create a StorageClass
 
@@ -38,7 +37,7 @@ parameters:
   linodenfs.csi.linode.com/space-label: "my-cluster-space"
 ```
 
-Referencing by label costs one extra API call per `CreateVolume` (an exact-match list) and fails with `FailedPrecondition` if two spaces share the label. Referencing by ID is the more deterministic choice.
+Referencing by label costs one extra API call per `CreateVolume` (an exact-match list), so referencing by ID is marginally cheaper.
 
 To make it the cluster default:
 
@@ -110,7 +109,7 @@ kubectl exec nfs-app -- tail -n 3 /data/out.txt
 Three things happen between scheduling and a running pod:
 
 1. **Attach.** `csi-attacher` calls `ControllerPublishVolume`, which adds that node's Linode to the filesystem's Linode ACL and waits for the access policy to become active. There is no block device involved; "attach" here means "authorize".
-2. **Stage.** The node plugin mounts the filesystem's `mount_target_fqdn` over NFSv4 at the kubelet staging path, once per node.
+2. **Stage.** The node plugin mounts the filesystem's DNS name over NFSv4 at the kubelet staging path, once per node.
 3. **Publish.** The node plugin bind-mounts the staging path into the pod's target path.
 
 ## 4. Share one volume between pods
@@ -166,30 +165,10 @@ The driver accepts every mount access mode the CSI spec defines:
 | `ReadOnlyMany` | ROX | ✅ |
 | `ReadWriteOnce` | RWO | ✅ |
 | `ReadWriteOncePod` | RWOP | ✅ |
-| Block volumes | n/a | ❌ `only mount volume capabilities are supported` |
-| Unset / unknown mode | n/a | ❌ `volume access mode is required` |
 
 `ReadWriteMany` is the mode that reflects what the backend actually does. The narrower modes are accepted and honored by Kubernetes' own scheduling and binding rules, but nothing in the driver or the NFS backend enforces single-node exclusivity for them, so do not rely on `ReadWriteOnce` as a data-safety mechanism here.
 
 Requesting a raw block volume (`volumeMode: Block`) fails with `InvalidArgument`. This is a filesystem, not a device.
-
-## 📏 About capacity
-
-`spec.resources.requests.storage` is **not enforced**. The Linode NFS API does not accept a size when creating a filesystem, so:
-
-- The driver echoes the requested capacity back in the CSI `Volume` so Kubernetes can bind the PVC and report a size.
-- Nothing stops the workload writing more than the request.
-- `kubectl get pvc` shows the number you asked for, not a real quota.
-
-For actual consumption, read the mounted filesystem instead:
-
-```sh
-kubectl exec nfs-app -- df -h /data
-```
-
-Or, if your metrics pipeline collects CSI volume stats, `NodeGetVolumeStats` reports both bytes and inodes read from `statfs(2)` on the mount.
-
-When both `required_bytes` and `limit_bytes` are set, the driver reports `required_bytes`; with only a limit set, it reports the limit.
 
 ## ⚓ Mount options
 
@@ -217,7 +196,6 @@ Notes:
 
 - The filesystem type is always `nfs4`. There is no `fsType` parameter, and setting `csi.storage.k8s.io/fstype` has no effect.
 - `NodeStageVolume` passes these flags to the NFS mount. `NodePublishVolume` passes them again alongside `bind`, and adds `ro` when the pod mounts the PVC read-only.
-- Do not add `xprtsec=mtls` by hand. The driver adds it based on the Storage Space's mTLS mode, which arrives in the volume context. See [mTLS](./access-and-networking.md#-mtls).
 
 ## 🔄 Reclaim policy
 
@@ -239,13 +217,12 @@ kubectl get pv -o custom-columns=\
 NAME:.metadata.name,\
 HANDLE:.spec.csi.volumeHandle,\
 TARGET:.spec.csi.volumeAttributes.mount-target,\
-REGION:.spec.csi.volumeAttributes.region,\
-MTLS:.spec.csi.volumeAttributes.mtls-mode
+REGION:.spec.csi.volumeAttributes.region
 ```
 
 ```text
-NAME                                       HANDLE    TARGET                              REGION    MTLS
-pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   42/1337   fs-1337.us-ord.nfs.linode.com      us-ord    disabled
+NAME                                       HANDLE    TARGET                              REGION
+pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   42/1337   fs-1337.us-ord.nfs.linode.com      us-ord
 ```
 
 The handle is `{space_id}/{filesystem_id}`. To see which nodes are currently authorized, read the filesystem's access policy:
@@ -266,7 +243,7 @@ The `linode_acl` array is what the driver maintains through `ControllerPublishVo
 | **Volume cloning** (`dataSource` of kind `PersistentVolumeClaim`) | Rejected with `unsupported volume content source`. Snapshot the source and restore from the snapshot instead |
 | **Raw block volumes** | Rejected. Mount capabilities only |
 | **`GetCapacity`** | Not implemented, so storage-capacity-aware scheduling has nothing to consume |
-| **Listing volumes** | Not implemented and not advertised. See [the reasoning](./csi-rpc-reference.md#listvolumes-is-intentionally-unimplemented) |
+| **Listing volumes** | `ListVolumes` is not implemented and the capability is not advertised, so the external-provisioner never calls it |
 
 ## 📚 Related pages
 
