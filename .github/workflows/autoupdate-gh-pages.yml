@@ -1,4 +1,4 @@
-name: 'Auto Merge GH-Pages'
+name: Auto Update GH-Pages
 
 on:
   push:
