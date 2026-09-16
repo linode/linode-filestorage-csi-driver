@@ -17,6 +17,16 @@ search_enabled: true
 heading_anchors: true
 color_scheme: dark
 
+defaults:
+  - scope:
+      path: README.md
+    values:
+      nav_order: 1
+      permalink: /
+
+readme_index:
+  remove_originals: true
+
 # Everything that is not documentation. Without this the site carries the whole
 # Go tree, and AGENTS.md is published as a stray page nothing links to.
 exclude:

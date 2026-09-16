@@ -1,8 +1,3 @@
----
-nav_order: 1
-permalink: /
----
-
 # 📁 Linode File Storage CSI Driver
 
 <p align="center">
