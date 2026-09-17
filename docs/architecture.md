@@ -49,14 +49,13 @@ One container image serves both roles. `DRIVER_ROLE` picks which gRPC services g
                        └───────────────────┬─────────────────────────┘
                                            │ watch + update
 ┌──────────────────────────────────────────┴──────────────────────────────────┐
-│  Deployment: csi-linode-nfs-controller       (DRIVER_ROLE=controller)        │
+│  Deployment: csi-linode-nfs-controller       (DRIVER_ROLE=controller)       │
 │                                                                             │
-│  ┌───────────────┐ ┌─────────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
-│  │csi-provisioner│ │ csi-attacher│ │csi-resizer│ │csi-snap- │ │ liveness  │  │
-│  │               │ │             │ │ (off)    │ │shotter   │ │  probe    │  │
-│  │               │ │             │ │          │ │ (off)    │ │           │  │
-│  └───────┬───────┘ └──────┬──────┘ └────┬─────┘ └────┬─────┘ └─────┬─────┘  │
-│          └────────────────┴─────────────┴────────────┴─────────────┘        │
+│ ┌────────────────┐ ┌────────────────┐ ┌────────────────┐ ┌────────────────┐ │
+│ │csi-provisioner │ │  csi-attacher  │ │  csi-resizer   │ │csi-snapshotter │ │
+│ │                │ │                │ │     (off)      │ │     (off)      │ │
+│ └────────┬───────┘ └────────┬───────┘ └────────┬───────┘ └────────┬───────┘ │
+│          └──────────────────┴──────────────────┴──────────────────┘         │
 │                    unix:///var/lib/csi/sockets/pluginproxy/csi.sock         │
 │                                    │                                        │
 │                        ┌───────────┴───────────┐                            │

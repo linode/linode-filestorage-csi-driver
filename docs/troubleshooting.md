@@ -195,14 +195,16 @@ DeadlineExceeded: wait for NFS filesystem active: ...
 
 The filesystem was created but did not reach `active` within 5 minutes. That timeout is not configurable. `csi-provisioner` retries, and the retry finds the still-settling filesystem through the idempotency lookup rather than creating a second one, so this usually resolves itself. If it repeats, check the filesystem's status directly and open a support ticket; the driver is only reporting what the backend told it.
 
-### Parameters changed mid-provision
+### Existing filesystem does not match the request
 
 ```text
 AlreadyExists: NFS filesystem "..." already exists with incompatible tags
 AlreadyExists: NFS filesystem "..." already exists with incompatible root squash policy
 ```
 
-A retry landed on a filesystem created under different parameters, which almost always means the `StorageClass` was edited while a volume was being provisioned. Delete the PVC, restore the class's original parameters, and create a **new** class for the new parameters rather than editing this one. See [idempotency and immutability](./storage-class-parameters.md#-idempotency-and-immutability).
+The idempotency lookup found a filesystem with this volume's label already in the space, but its tags or squash policy do not match what the `StorageClass` asked for, so the driver refused to reuse it. `StorageClass` parameters cannot be edited in place (see [Parameters are immutable](./storage-class-parameters.md#-parameters-are-immutable)), so the usual causes are a class that was deleted and recreated with different parameters while a volume was still being provisioned, or a filesystem created outside the driver whose label collides.
+
+Delete the PVC, then either provision against a class whose parameters match the existing filesystem or remove the conflicting filesystem from the space.
 
 ### No provisioning events at all
 
@@ -437,7 +439,7 @@ Something called `ListSnapshots` with no filter, which the driver refuses. `exte
 | `multiple NFS spaces match label` | Duplicate space labels | [Duplicate Storage Space labels](#duplicate-storage-space-labels) |
 | `PermissionDenied` on any call | Token wrong, expired, or under-scoped | [Token rejected](#token-rejected) |
 | `wait for NFS filesystem active` with `DeadlineExceeded` | Backend still settling | [Timed out waiting for the filesystem](#timed-out-waiting-for-the-filesystem) |
-| `already exists with incompatible tags` | Class edited mid-provision | [Parameters changed mid-provision](#parameters-changed-mid-provision) |
+| `already exists with incompatible tags` | Label collides with a filesystem created under different parameters | [Existing filesystem does not match the request](#existing-filesystem-does-not-match-the-request) |
 | `unsupported ... filesystem-root-squash value` | Bad squash value | [StorageClass parameters](./storage-class-parameters.md#filesystem-root-squash) |
 | `only mount volume capabilities are supported` | `volumeMode: Block` requested | [Access modes](./usage.md#-access-modes) |
 | `volume access mode is required` | No access mode on the PVC | [Access modes](./usage.md#-access-modes) |
