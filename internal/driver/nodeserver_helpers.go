@@ -71,7 +71,10 @@ func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.Node
 
 	source := req.GetVolumeContext()[volumeContextMountTarget]
 	mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]
-	options := req.GetVolumeCapability().GetMount().GetMountFlags()
+	options := append([]string{}, req.GetVolumeCapability().GetMount().GetMountFlags()...)
+	if len(options) == 0 {
+		options = append(options, "vers=4.1", "proto=tcp6")
+	}
 	switch mtlsMode {
 	case mtlsModeRequired:
 		options = append(options, mtlsMountOption)

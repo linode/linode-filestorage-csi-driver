@@ -88,6 +88,7 @@ spec:
             - --leader-election
             - --volume-name-prefix=pvc
             - --volume-name-uuid-length=16
+            - --timeout={{ .Values.sidecars.provisioner.timeout }}
             {{- with .Values.controller.kubeconfig }}
               {{- if and .mountDir .secretName .secretKey }}
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
@@ -114,7 +115,7 @@ spec:
             - --v=2
             - --csi-address=$(ADDRESS)
             - --leader-election
-            - --timeout=30s
+            - --timeout={{ .Values.sidecars.attacher.timeout }}
             {{- with .Values.controller.kubeconfig }}
               {{- if and .mountDir .secretName .secretKey }}
             - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
