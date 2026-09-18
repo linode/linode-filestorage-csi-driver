@@ -28,8 +28,9 @@ type NodeServer struct {
 var _ csi.NodeServer = &NodeServer{}
 
 const (
-	bindMountOption   = "bind"
-	nfsFilesystemType = "nfs4"
+	bindMountOption = "bind"
+	// "nfs" selects mount.nfs; the "nfs4" filesystem type is deprecated.
+	nfsFilesystemType = "nfs"
 	mtlsMountOption   = "xprtsec=mtls"
 )
 
