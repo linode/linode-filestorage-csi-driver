@@ -46,6 +46,14 @@ type ClusterMetadata struct {
 	VPCID  int
 }
 
+// MetadataProvider supplies the cluster and node facts consumed by CSI services.
+type MetadataProvider interface {
+	CurrentNode(context.Context) (NodeMetadata, error)
+	Cluster(context.Context) (ClusterMetadata, error)
+}
+
+var _ MetadataProvider = (*metadataService)(nil)
+
 type InstanceMetadataClient interface {
 	GetInstance(ctx context.Context) (*metadataapi.InstanceData, error)
 	GetNetwork(ctx context.Context) (*metadataapi.NetworkData, error)
@@ -93,10 +101,10 @@ type metadataService struct {
 	linodeClient   linodeclient.LinodeClient
 }
 
-func newMetadataService(ctx context.Context, nodeName string, linodeClient linodeclient.LinodeClient) (metadataService, error) {
+func newMetadataService(ctx context.Context, nodeName string, linodeClient linodeclient.LinodeClient) (*metadataService, error) {
 	kubeClient, err := newKubeNodeClient(ctx)
 	if err != nil {
-		return metadataService{}, fmt.Errorf("create kubernetes metadata client: %w", err)
+		return nil, fmt.Errorf("create kubernetes metadata client: %w", err)
 	}
 
 	instanceClient, err := newInstanceMetadataClient(ctx)
@@ -105,12 +113,21 @@ func newMetadataService(ctx context.Context, nodeName string, linodeClient linod
 		instanceClient = nil
 	}
 
-	return metadataService{
+	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient, linodeClient), nil
+}
+
+func newMetadataServiceWithClients(
+	nodeName string,
+	instanceClient InstanceMetadataClient,
+	kubeClient KubeNodeClient,
+	linodeClient linodeclient.LinodeClient,
+) *metadataService {
+	return &metadataService{
 		nodeName:       nodeName,
 		instanceClient: instanceClient,
 		kubeClient:     kubeClient,
 		linodeClient:   linodeClient,
-	}, nil
+	}
 }
 
 func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error) {

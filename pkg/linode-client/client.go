@@ -25,7 +25,6 @@ type LinodeClient interface {
 
 	ListNFSFilesystems(ctx context.Context, spaceID int, opts *linodego.ListOptions) ([]linodego.NFSFilesystem, error)
 	GetNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) (*linodego.NFSFilesystem, error)
-	GetNFSFilesystemByID(ctx context.Context, filesystemID int) (*linodego.NFSFilesystem, error)
 	CreateNFSFilesystem(ctx context.Context, spaceID int, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error)
 	WaitForNFSFilesystemStatus(ctx context.Context, spaceID int, filesystemID int, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error)
 	DeleteNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) error

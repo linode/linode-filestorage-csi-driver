@@ -28,8 +28,9 @@ type NodeServer struct {
 var _ csi.NodeServer = &NodeServer{}
 
 const (
-	bindMountOption   = "bind"
-	nfsFilesystemType = "nfs4"
+	bindMountOption = "bind"
+	// "nfs" selects mount.nfs; the "nfs4" filesystem type is deprecated.
+	nfsFilesystemType = "nfs"
 	mtlsMountOption   = "xprtsec=mtls"
 )
 
@@ -52,7 +53,7 @@ func (s *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 	klog.V(4).InfoS("handling node rpc", "method", "NodeGetInfo")
 
 	_ = req
-	if !s.driver.metadata.configured(RoleNode) {
+	if s.driver.metadata == nil {
 		return nil, status.Error(codes.Internal, "metadata service is not configured")
 	}
 

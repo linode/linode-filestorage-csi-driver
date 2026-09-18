@@ -78,22 +78,13 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
-		return s.handleExistingFilesystem(ctx, existing, &params, space, capacityBytes, snapshot)
-	}
-
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
-		return nil, err
+		return s.handleExistingFilesystem(ctx, existing, &params, cluster.VPCID, req.GetCapacityRange(), snapshot)
 	}
 
 	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
 		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, &params, capacityBytes, spacePolicy)
+		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
@@ -115,16 +106,12 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
-	if err := validateFilesystemMountTarget(filesystem); err != nil {
+	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID, capacityBytes)
+	if err != nil {
 		return nil, err
 	}
-	if params.squashPolicySet {
-		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
-			return nil, err
-		}
-	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -163,6 +150,12 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return nil, status.Error(codes.InvalidArgument, message)
 	}
 
+	volumeID := req.GetVolumeId()
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
+
 	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
 		if status.Code(err) == codes.InvalidArgument {
@@ -198,6 +191,12 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 	if req.GetNodeId() == "" {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
+
+	volumeID := req.GetVolumeId()
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
 
 	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
@@ -362,6 +361,14 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		return csiCreateSnapshotResponse(existingSnapshot, handle)
 	}
 
+	existsElsewhere, err := s.snapshotLabelExistsInOtherFilesystem(ctx, handle, label)
+	if err != nil {
+		return nil, linodeError(err, "check NFS snapshot name")
+	}
+	if existsElsewhere {
+		return nil, status.Errorf(codes.AlreadyExists, "NFS snapshot %q already exists with a different source volume", label)
+	}
+
 	snapshot, err := s.client.CreateNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, linodego.NFSSnapshotCreateOptions{
 		Label: label,
 	})
@@ -370,6 +377,7 @@ func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSn
 		if lookupErr == nil && existingSnapshot != nil {
 			return csiCreateSnapshotResponse(existingSnapshot, handle)
 		}
+		return nil, status.Errorf(codes.AlreadyExists, "NFS snapshot %q already exists with a different source volume", label)
 	}
 	if err != nil {
 		return nil, linodeError(err, "create NFS snapshot")
@@ -400,7 +408,9 @@ func (s *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSn
 
 	handle, err := parseSnapshotHandle(snapshotID)
 	if err != nil {
-		return nil, err
+		// CSI requires deletion of an unknown snapshot to succeed.
+		//nolint:nilerr // A malformed non-empty handle is an unknown snapshot.
+		return &csi.DeleteSnapshotResponse{}, nil
 	}
 
 	if err := s.client.DeleteNFSSnapshot(ctx, handle.spaceID, handle.filesystemID, handle.snapshotID); err != nil {

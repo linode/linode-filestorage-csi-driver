@@ -1,4 +1,4 @@
-# Contributing Guidelines
+# 🤝 Contributing Guidelines
 
 :+1::tada: First off, we appreciate you taking the time to contribute! THANK YOU! :tada::+1:
 
