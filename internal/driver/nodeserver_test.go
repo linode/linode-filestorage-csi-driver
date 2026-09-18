@@ -284,6 +284,58 @@ func TestNodeStageVolume(t *testing.T) {
 			wantCode: codes.OK,
 		},
 		{
+			name: "uses NFS defaults when no mount flags are provided",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "preserves caller NFSv4 and transport options",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+				"hard,nfsvers=4.2",
+				"proto=rdma",
+				"nconnect=8",
+				"timeo=600",
+				"xprtsec=tls",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard,nfsvers=4.2", "proto=rdma", "nconnect=8", "timeo=600", "xprtsec=tls"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "preserves caller NFSv3 option",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+				"hard",
+				"vers=3",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "vers=3"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
 			name: "optional mtls without node mtls support falls back to plain mount",
 			req: newRequest(
 				t.TempDir(),

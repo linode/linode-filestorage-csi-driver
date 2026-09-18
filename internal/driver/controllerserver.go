@@ -78,21 +78,13 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
-		return s.handleExistingFilesystem(ctx, existing, &params, space, cluster.VPCID, req.GetCapacityRange(), snapshot)
-	}
-
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.ensureSpaceVPC(ctx, space.ID, cluster.VPCID, spacePolicy); err != nil {
-		return nil, err
+		return s.handleExistingFilesystem(ctx, existing, &params, cluster.VPCID, req.GetCapacityRange(), snapshot)
 	}
 
 	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
 		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, &params, capacityBytes, spacePolicy)
+		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
@@ -114,16 +106,12 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
-	if err := validateFilesystemMountTarget(filesystem); err != nil {
+	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID, capacityBytes)
+	if err != nil {
 		return nil, err
 	}
-	if params.squashPolicySet {
-		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
-			return nil, err
-		}
-	}
 
-	return &csi.CreateVolumeResponse{Volume: csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
 func (s *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -162,6 +150,12 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return nil, status.Error(codes.InvalidArgument, message)
 	}
 
+	volumeID := req.GetVolumeId()
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
+
 	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {
 		if status.Code(err) == codes.InvalidArgument {
@@ -197,6 +191,12 @@ func (s *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *c
 	if req.GetNodeId() == "" {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
+
+	volumeID := req.GetVolumeId()
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
 
 	handle, linodeID, policy, err := s.getFilesystemPolicyForVolumeAndNode(ctx, req.GetVolumeId(), req.GetNodeId())
 	if err != nil {

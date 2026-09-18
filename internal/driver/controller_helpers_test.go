@@ -262,6 +262,27 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 	}
 }
 
+func TestSetInitialSquashPolicyWaitsForMatchingUpdatingPolicy(t *testing.T) {
+	env := newControllerTestEnv(t)
+	policy := &linodego.NFSFilesystemAccessPolicy{
+		FilesystemID: 456,
+		SquashPolicy: linodego.NFSSquashPolicyRootSquash,
+		Status:       linodego.NFSAccessPolicyStatusUpdating,
+	}
+	gomock.InOrder(
+		env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil),
+		env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{
+			FilesystemID: 456,
+			SquashPolicy: linodego.NFSSquashPolicyRootSquash,
+			Status:       linodego.NFSAccessPolicyStatusActive,
+		}, nil),
+	)
+
+	if err := env.server.setInitialSquashPolicy(t.Context(), 123, 456, linodego.NFSSquashPolicyRootSquash); err != nil {
+		t.Fatalf("setInitialSquashPolicy() error = %v", err)
+	}
+}
+
 func TestRequestedCapacityBytes(t *testing.T) {
 	tests := []struct {
 		name          string
