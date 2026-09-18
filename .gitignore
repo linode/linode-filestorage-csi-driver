@@ -3,6 +3,13 @@ dist/
 release/
 coverage.out
 
+# Jekyll documentation site
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+Gemfile.lock
+
 
 # Local Development Environment sub dirs
 .vscode/
