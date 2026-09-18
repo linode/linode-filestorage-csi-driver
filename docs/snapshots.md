@@ -196,8 +196,6 @@ The snapshot label is the CSI snapshot name (which `csi-snapshotter` derives fro
 
 The label is the identity key, so two snapshots of the same filesystem cannot share a name.
 
-`CreateSnapshot` takes the volume lock on the source volume ID. A snapshot in flight blocks `NodeStageVolume` and `NodeUnstageVolume` for that volume with `Aborted`, and the sidecars retry. Snapshots of different volumes proceed in parallel.
-
 ### Waiting
 
 After creating, the driver waits up to 5 minutes for the snapshot to reach `active` before responding. On timeout it returns `DeadlineExceeded` and `csi-snapshotter` retries, at which point the idempotency lookup finds the snapshot that is still settling and returns it with `ReadyToUse: false`. The snapshot controller then polls until it is ready.

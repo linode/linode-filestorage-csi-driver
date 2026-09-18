@@ -39,6 +39,7 @@
 - [Usage](docs/usage.md)
   - [Create a StorageClass](docs/usage.md#1-create-a-storageclass)
   - [Create a PersistentVolumeClaim](docs/usage.md#2-create-a-persistentvolumeclaim)
+  - [Consume it from a pod](docs/usage.md#3-consume-it-from-a-pod)
   - [Share one volume between pods](docs/usage.md#4-share-one-volume-between-pods)
   - [StorageClass parameters](docs/storage-class-parameters.md)
   - [Snapshots and restore](docs/snapshots.md)

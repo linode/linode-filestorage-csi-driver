@@ -336,7 +336,7 @@ The gRPC codes the driver returns follow the [CSI specification](https://github.
 Images are built with a multi-stage `Dockerfile`.
 
 - The builder stage compiles a static binary with `CGO_ENABLED=0 -trimpath` and stamps `main.vendorVersion` from the `REV` build arg.
-- The runtime stage is `alpine:3.23.3` plus `ca-certificates` and `nfs-utils`, so the node plugin can exec `mount` and `mount.nfs4`.
+- The runtime stage is `alpine` plus `ca-certificates` and `nfs-utils`, so the node plugin can exec `mount` and `mount.nfs4`.
 - `mise run image-build` builds for `PLATFORM`, default `linux/amd64`.
 - `IMAGE_REPO=... IMAGE_VERSION=... mise run image-push` publishes that image.
 

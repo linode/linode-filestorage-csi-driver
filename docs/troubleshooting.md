@@ -8,7 +8,7 @@ Start by finding out which half of the driver is unhappy. Provisioning problems 
 2. [Increase log verbosity](#-increase-log-verbosity)
 3. [A PVC stays Pending](#-a-pvc-stays-pending)
 4. [A pod stays ContainerCreating](#-a-pod-stays-containercreating)
-5. [The node plugin never registers](#the-node-plugin-never-registers)
+5. [The node plugin never registers](#-the-node-plugin-never-registers)
 6. [A PVC or PV will not delete](#-a-pvc-or-pv-will-not-delete)
 7. [Permission denied inside the pod](#-permission-denied-inside-the-pod)
 8. [Snapshot problems](#-snapshot-problems)
@@ -299,7 +299,7 @@ Aborted: An operation with the given volume key ... already exists.
 
 Not an error to fix. Two operations raced on the same volume and one backed off; the sidecar retries. It only matters if it repeats for minutes, which suggests an operation is wedged, most likely inside a 5-minute wait.
 
-## The node plugin never registers
+## 🔌 The node plugin never registers
 
 A node missing from `csinodes` will never have a pod mount a volume on it.
 
@@ -445,7 +445,7 @@ Something called `ListSnapshots` with no filter, which the driver refuses. `exte
 | `volume access mode is required` | No access mode on the PVC | [Access modes](./usage.md#-access-modes) |
 | `unsupported volume content source` | PVC-to-PVC clone attempted | [Unsupported volume content source](#unsupported-volume-content-source) |
 | `mount-target is required in volume context` | PV attributes were edited | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
-| `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#the-node-plugin-never-registers) |
+| `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#-the-node-plugin-never-registers) |
 | `An operation with the given volume key` | Lock contention; retried automatically | [Benign lock contention](#benign-lock-contention) |
 | `operation not implemented` | An unimplemented RPC was called | [What is not implemented](./usage.md#-what-is-not-supported) |
 | `volume path not found` | `NodeGetVolumeStats` on a path that is gone | [NodeGetVolumeStats](./architecture.md#nodegetvolumestats) |

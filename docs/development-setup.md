@@ -22,20 +22,7 @@
 | A Linode account and API token | Anything beyond unit tests |
 | `git` | |
 
-Everything else, Go included, comes from `mise.toml`:
-
-```toml
-[tools]
-go = "1.26.8"
-kubectl = "1.36.3"
-helm = "4.2.3"
-golangci-lint = "2.12.2"
-kustomize = "5.8.1"
-just = "1.58.0"
-yq = "4.53.3"
-uv = "latest"
-"pipx:linode-cli" = "5.68.0"
-```
+Everything else comes from the `[tools]` block in `mise.toml`: Go itself, plus `kubectl`, `helm`, `golangci-lint`, `kustomize`, `just`, `yq`, `uv`, and `linode-cli`. That block is the source of truth for versions, so read it there rather than trusting a copy here; `mise ls` shows what you actually have installed.
 
 `minimum_release_age = "7d"` in the settings block means mise refuses tool versions published less than a week ago, which keeps a freshly-cut upstream release from landing in the toolchain before anyone has looked at it.
 
@@ -122,7 +109,7 @@ mise run image-build
 mise run image-push
 ```
 
-The build is two-stage: a `golang:1.26-alpine` builder producing a `CGO_ENABLED=0` static binary with `-trimpath -w -s`, then an `alpine:3.23.3` runtime carrying `ca-certificates` and `nfs-utils`. `nfs-utils` is the reason the image is not `scratch`: the node plugin shells out to `mount.nfs4`.
+The build is two-stage: a `golang-alpine` builder producing a `CGO_ENABLED=0` static binary with `-trimpath -w -s`, then an `alpine` runtime carrying `ca-certificates` and `nfs-utils`. Both base images are pinned in the `Dockerfile`. `nfs-utils` is the reason the image is not `scratch`: the node plugin shells out to `mount.nfs4`.
 
 `PLATFORM` defaults to `linux/amd64`, which is what Akamai and LKE run. Override it if you need something else, but note that the published images are amd64-only.
 
@@ -254,7 +241,7 @@ This site is Jekyll with the [just-the-docs](https://just-the-docs.com/) remote 
 
 The reason `nav_order` is not in the files is that GitHub's Markdown viewer renders a front matter block as a table at the top of the page. Jekyll treats a `defaults` value exactly as if it were in the file, so the nav is unaffected and the files stay clean in the repository. The page title comes from the first heading, via the `jekyll-titles-from-headings` plugin.
 
-GitHub Pages builds from the `gh-pages` branch, not from `main`. The [Auto Merge GH-Pages workflow](https://github.com/linode/linode-filestorage-csi-driver/blob/main/.github/workflows/automerge.yml) merges `main` into `gh-pages` on every push to `main`, so a merged docs change publishes itself. `gh-pages` is also where chart-releaser writes the Helm repository index, which is why the two share a branch. If a docs change is merged and the site does not update, check that workflow's run before looking at anything else.
+GitHub Pages builds from the `gh-pages` branch, not from `main`. The [Auto Update GH-Pages workflow](https://github.com/linode/linode-filestorage-csi-driver/blob/main/.github/workflows/autoupdate-gh-pages.yml) merges `main` into `gh-pages` on every push to `main`, so a merged docs change publishes itself. `gh-pages` is also where chart-releaser writes the Helm repository index, which is why the two share a branch. If a docs change is merged and the site does not update, check that workflow's run before looking at anything else.
 
 Preview your changes the way Pages will build them:
 

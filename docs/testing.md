@@ -77,32 +77,32 @@ The existing tests are table-driven with `gomock` expectations. The shape to fol
 
 ```go
 func TestSomething(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range []struct {
-		name    string
-		setup   func(*mocks.MockLinodeClient)
-		wantErr codes.Code
-	}{
-		{
-			name: "success",
-			setup: func(c *mocks.MockLinodeClient) {
-				c.EXPECT().GetNFSSpace(gomock.Any(), 42).Return(&linodego.NFSSpace{ID: 42}, nil)
-			},
-		},
-		{
-			name: "space not found",
-			setup: func(c *mocks.MockLinodeClient) {
-				c.EXPECT().GetNFSSpace(gomock.Any(), 42).Return(nil, &linodego.Error{Code: 404})
-			},
-			wantErr: codes.NotFound,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			// ...
-		})
-	}
+  t.Parallel()
+  
+  for _, tt := range []struct {
+  name    string
+  setup   func(*mocks.MockLinodeClient)
+  wantErr codes.Code
+  }{
+    {
+      name: "success",
+      setup: func(c *mocks.MockLinodeClient) {
+      c.EXPECT().GetNFSSpace(gomock.Any(), 42).Return(&linodego.NFSSpace{ID: 42}, nil)
+      },
+    },
+    {
+      name: "space not found",
+      setup: func(c *mocks.MockLinodeClient) {
+      c.EXPECT().GetNFSSpace(gomock.Any(), 42).Return(nil, &linodego.Error{Code: 404})
+      },
+      wantErr: codes.NotFound,
+    },
+  } {
+    t.Run(tt.name, func(t *testing.T) {
+      t.Parallel()
+      // ...
+    })
+  }
 }
 ```
 
@@ -254,7 +254,7 @@ How it is wired, in `tests/sanity/sanity_test.go`:
 Because the whole thing is in-process and hermetic, a sanity failure is a real protocol-conformance bug rather than an environment problem. Two consequences when you change the driver:
 
 - **Advertising a new capability turns on more sanity tests.** `capabilities.go` is what the suite reads to decide which RPCs to exercise, so adding a capability without implementing it fails here first.
-- **A new RPC needs the fake to support it.** The fakes implement only what the driver calls, so an unimplemented fake method shows up as a sanity failure rather than a compile error.
+- **A new backend call needs the fake to implement it.** Each fake carries a compile-time interface assertion (`var _ linodeclient.LinodeClient = (*fakeSanityLinodeClient)(nil)` and the equivalents for the metadata and mounter fakes), so adding a method to one of those interfaces without updating the fake breaks the build rather than the test run. What sanity catches is the layer above that: a fake that compiles but returns something the CSI spec does not allow.
 
 ## 🤖 What CI runs
 
@@ -268,7 +268,7 @@ Because the whole thing is in-process and hermetic, a sanity failure is a real p
 
 `mise run ci` locally is the same command CI runs, so a green local run means a green pipeline.
 
-Every workflow runs `step-security/harden-runner`, but the egress policy is not uniform. `ci.yml`, `helm.yml`, and `automerge.yml` use `egress-policy: block` with an explicit `allowed-endpoints` list; the rest use `audit`, which only records outbound connections. So in those three, adding a dependency that fetches from a new host fails the job in a way that looks unrelated to your change. If a build starts failing on a network error, check that workflow's `allowed-endpoints` before you suspect your code.
+Every workflow runs `step-security/harden-runner`, but the egress policy is not uniform. `ci.yml`, `helm.yml`, and `autoupdate-gh-pages.yml` use `egress-policy: block` with an explicit `allowed-endpoints` list; the rest use `audit`, which only records outbound connections. So in those three, adding a dependency that fetches from a new host fails the job in a way that looks unrelated to your change. If a build starts failing on a network error, check that workflow's `allowed-endpoints` before you suspect your code.
 
 Note that `ci.yml` does **not** run `verify-kustomize`; that lives in `helm.yml` and only fires on the paths listed above. A chart change bundled into a PR that also touches Go code will still trigger it, since the path filter matches on any changed file.
 

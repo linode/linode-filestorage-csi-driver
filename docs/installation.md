@@ -83,7 +83,7 @@ The Helm chart in `charts/linode-nfs-csi-driver` is the source of truth. `deploy
 
 ### 1. Using Helm
 
-#### 🔄 Add the linode-csi repo
+#### 🔄 Add the linode-nfs-csi repo
 
 ```sh
 helm repo add linode-nfs-csi https://linode.github.io/linode-filestorage-csi-driver/
@@ -211,14 +211,14 @@ Confirm the node plugins registered with their kubelets:
 kubectl get csinodes -o custom-columns=NODE:.metadata.name,DRIVERS:.spec.drivers[*].name
 ```
 
-Every node should list `linodenfs.csi.linode.com`. If one does not, see [Troubleshooting](./troubleshooting.md#the-node-plugin-never-registers).
+Every node should list `linodenfs.csi.linode.com`. If one does not, see [Troubleshooting](./troubleshooting.md#-the-node-plugin-never-registers).
 
 ## ⏫ Upgrading the driver
 
 ```sh
 export LINODE_API_TOKEN="...your Linode API token..."
 
-helm repo update linode-csi
+helm repo update linode-nfs-csi
 
 helm upgrade linode-nfs-csi-driver \
   --install \
@@ -276,12 +276,12 @@ sidecars:
 
 ### ServiceAccount and RBAC toggles
 
-The chart creates both ServiceAccounts and their ClusterRoles/ClusterRoleBindings by default. Disable them to manage them yourself:
+The chart creates both ServiceAccounts and their ClusterRoles/ClusterRoleBindings by default, and that is the arrangement the driver is meant to run in:
 
 ```yaml
 controller:
   serviceAccount:
-    enabled: true          # false: skip creating it; the Deployment still references the name
+    enabled: true
     name: csi-linode-nfs-controller
   rbac:
     enabled: true          # false: skip the ClusterRole and ClusterRoleBinding
@@ -293,6 +293,10 @@ node:
   rbac:
     enabled: true
 ```
+
+Leave `serviceAccount.enabled` at `true`. Setting it to `false` does not point the workload at a ServiceAccount you manage; the chart omits `serviceAccountName` from the pod spec entirely, so the pod runs as the namespace's `default` ServiceAccount and the RBAC the driver needs is not bound to it.
+
+`rbac.enabled: false` is the supported toggle if you manage roles and bindings yourself. Bind them to the ServiceAccount names above.
 
 The controller role needs PVs, PVCs, nodes, events, secrets, CSINodes, VolumeAttachments, StorageClasses, leases, and the snapshot API group. The node role needs only `get`, `list`, and `watch` on nodes, which is how the node plugin resolves its own Linode ID when instance metadata is unavailable.
 
