@@ -2,7 +2,7 @@
 minimum_release_age = "7d"  # only install versions released more than 7 days ago - https://mise.en.dev/security.html#minimum-release-age
 
 [tools]
-go = "1.26.5"
+go = "1.26.8"
 kubectl = "1.36.3"
 helm = "4.2.3"
 golangci-lint = "2.12.2"
@@ -81,3 +81,11 @@ run = "just helm-install"
 [tasks.csi-sanity-test]
 description = "Run destructive CSI sanity with KUBECONFIG and NFS_CSI_SANITY_SPACE_ID"
 run = "just csi-sanity-test"
+
+[tasks.serve-docs]
+description = "Serve the documentation site locally with live reload"
+run = "just serve-docs"
+
+[tasks.build-docs]
+description = "Build the documentation site the way GitHub Pages does"
+run = "just build-docs"

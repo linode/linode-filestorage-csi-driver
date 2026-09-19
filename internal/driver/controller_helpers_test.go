@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -46,6 +47,13 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 		{
 			name:     "missing space selector",
 			params:   map[string]string{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "unqualified parameters are ignored",
+			params: map[string]string{
+				"space-id": "123",
+			},
 			wantCode: codes.InvalidArgument,
 		},
 		{
@@ -254,6 +262,27 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 	}
 }
 
+func TestSetInitialSquashPolicyWaitsForMatchingUpdatingPolicy(t *testing.T) {
+	env := newControllerTestEnv(t)
+	policy := &linodego.NFSFilesystemAccessPolicy{
+		FilesystemID: 456,
+		SquashPolicy: linodego.NFSSquashPolicyRootSquash,
+		Status:       linodego.NFSAccessPolicyStatusUpdating,
+	}
+	gomock.InOrder(
+		env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil),
+		env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{
+			FilesystemID: 456,
+			SquashPolicy: linodego.NFSSquashPolicyRootSquash,
+			Status:       linodego.NFSAccessPolicyStatusActive,
+		}, nil),
+	)
+
+	if err := env.server.setInitialSquashPolicy(t.Context(), 123, 456, linodego.NFSSquashPolicyRootSquash); err != nil {
+		t.Fatalf("setInitialSquashPolicy() error = %v", err)
+	}
+}
+
 func TestRequestedCapacityBytes(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -440,6 +469,34 @@ func TestLinodeWaitError(t *testing.T) {
 			err := linodeWaitError(tt.err, "wait")
 			if status.Code(err) != tt.wantCode {
 				t.Fatalf("linodeWaitError() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestNormalizeLabel(t *testing.T) {
+	got := normalizeLabel("Sanity_TEST.42")
+	if want := "sanity_test.42"; got != want {
+		t.Fatalf("normalizeLabel() = %q, want %q", got, want)
+	}
+}
+
+func TestTruncateNFSLabelToMaxBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		label string
+		want  string
+	}{
+		{name: "preserves label at the limit", label: strings.Repeat("a", 63), want: strings.Repeat("a", 63)},
+		{name: "truncates a label over the limit", label: strings.Repeat("a", 70), want: strings.Repeat("a", 63)},
+		{name: "trims a single trailing hyphen left by truncation", label: strings.Repeat("a", 62) + "-x", want: strings.Repeat("a", 62)},
+		{name: "trims a run of trailing hyphens left by truncation", label: strings.Repeat("a", 61) + "--x", want: strings.Repeat("a", 61)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := truncateNFSLabelToMaxBytes(tt.label); got != tt.want {
+				t.Fatalf("truncateNFSLabelToMaxBytes(%q) = %q, want %q", tt.label, got, tt.want)
 			}
 		})
 	}

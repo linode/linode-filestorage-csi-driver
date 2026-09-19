@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,10 +23,14 @@ import (
 const waitTimeout = 5 * time.Minute
 
 const (
-	storageClassParamSpaceID    = "space-id"
-	storageClassParamSpaceLabel = "space-label"
-	storageClassParamRootSquash = "filesystem-root-squash"
-	storageClassParamTags       = "tags"
+	// storageClassParamNamespace is the driver-qualified namespace for
+	// StorageClass parameters.
+	storageClassParamNamespace = Name + "/"
+
+	storageClassParamSpaceID    = storageClassParamNamespace + "space-id"
+	storageClassParamSpaceLabel = storageClassParamNamespace + "space-label"
+	storageClassParamRootSquash = storageClassParamNamespace + "filesystem-root-squash"
+	storageClassParamTags       = storageClassParamNamespace + "tags"
 
 	volumeContextSpaceID       = "space-id"
 	volumeContextFilesystemID  = "filesystem-id"
@@ -42,6 +47,13 @@ const (
 	filterFieldLabel  = "label"
 	filterFieldRegion = "region"
 )
+
+// nfsLabelMaxBytes is the maximum length accepted by the NFS OpenAPI.
+const nfsLabelMaxBytes = 63
+
+// trailingHyphens matches one or more hyphens at the end of a string, used
+// to strip a dangling hyphen run left behind by truncating a label.
+var trailingHyphens = regexp.MustCompile(`-+$`)
 
 type createVolumeParameters struct {
 	region          string
@@ -72,16 +84,16 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 	if spaceID != "" {
 		id, err := strconv.Atoi(spaceID)
 		if err != nil || id <= 0 {
-			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameter space-id %q must be a positive integer", spaceID)
+			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameter %s %q must be a positive integer", storageClassParamSpaceID, spaceID)
 		}
 		parsed.spaceID = id
 	}
 
 	if parsed.spaceID == 0 && parsed.spaceLabel == "" {
-		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass must set either space-id or space-label for a pre-created NFS Storage Space")
+		return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass must set either %s or %s for a pre-created NFS Storage Space", storageClassParamSpaceID, storageClassParamSpaceLabel)
 	}
 	if parsed.spaceID != 0 && parsed.spaceLabel != "" {
-		return createVolumeParameters{}, status.Error(codes.InvalidArgument, "StorageClass parameters space-id and space-label are mutually exclusive")
+		return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "StorageClass parameters %s and %s are mutually exclusive", storageClassParamSpaceID, storageClassParamSpaceLabel)
 	}
 
 	if value := strings.TrimSpace(params[storageClassParamRootSquash]); value != "" {
@@ -91,7 +103,7 @@ func parseCreateVolumeParameters(params map[string]string) (createVolumeParamete
 			parsed.squashPolicy = mode
 			parsed.squashPolicySet = true
 		default:
-			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "unsupported filesystem-root-squash value %q", value)
+			return createVolumeParameters{}, status.Errorf(codes.InvalidArgument, "unsupported %s value %q", storageClassParamRootSquash, value)
 		}
 	}
 
@@ -162,9 +174,13 @@ func parseSnapshotContentSource(source *csi.VolumeContentSource) (*snapshotHandl
 		return nil, status.Error(codes.InvalidArgument, "unsupported volume content source")
 	}
 
-	handle, err := parseSnapshotHandle(source.GetSnapshot().GetSnapshotId())
+	snapshotID := source.GetSnapshot().GetSnapshotId()
+	if snapshotID == "" {
+		return nil, status.Error(codes.InvalidArgument, "snapshot id is required")
+	}
+	handle, err := parseSnapshotHandle(snapshotID)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.NotFound, "snapshot id %q was not found", snapshotID)
 	}
 	return &handle, nil
 }
@@ -201,6 +217,18 @@ func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
 		return capacityRange.GetRequiredBytes()
 	}
 	return capacityRange.GetLimitBytes()
+}
+
+func validateExistingFilesystemCapacity(filesystem *linodego.NFSFilesystem, capacityRange *csi.CapacityRange) error {
+	if filesystem.Stats.MaxCapacityBytes == nil {
+		return nil
+	}
+
+	capacityBytes := *filesystem.Stats.MaxCapacityBytes
+	if capacityRange.GetRequiredBytes() > capacityBytes || (capacityRange.GetLimitBytes() != 0 && capacityBytes > capacityRange.GetLimitBytes()) {
+		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible capacity %d", filesystem.Label, capacityBytes)
+	}
+	return nil
 }
 
 func validateCreateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
@@ -405,6 +433,22 @@ func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolum
 	}
 }
 
+// normalizeLabel lowercases labels sent to the NFS backend while preserving all
+// other characters unchanged.
+func normalizeLabel(name string) string {
+	return strings.ToLower(name)
+}
+
+// truncateNFSLabelToMaxBytes truncates a label to the NFS OpenAPI's maximum
+// length, trimming any trailing hyphens left dangling by the cut.
+func truncateNFSLabelToMaxBytes(label string) string {
+	if len(label) <= nfsLabelMaxBytes {
+		return label
+	}
+
+	return trailingHyphens.ReplaceAllString(label[:nfsLabelMaxBytes], "")
+}
+
 func (s *ControllerServer) findExistingFilesystem(ctx context.Context, spaceID int, label, region string) (*linodego.NFSFilesystem, bool, error) {
 	options, err := listOptionsForExactFields(map[string]string{filterFieldLabel: label, filterFieldRegion: region})
 	if err != nil {
@@ -441,20 +485,9 @@ func validateExistingSnapshotClone(filesystem *linodego.NFSFilesystem, sourceSna
 	return nil
 }
 
-func (s *ControllerServer) validateExistingFilesystem(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
+func validateExistingFilesystem(filesystem *linodego.NFSFilesystem, params *createVolumeParameters) error {
 	if !slices.Equal(filesystem.Tags, params.tags) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible tags", filesystem.Label)
-	}
-	if !params.squashPolicySet {
-		return nil
-	}
-
-	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, filesystem.SpaceID, filesystem.ID)
-	if err != nil {
-		return linodeError(err, "get NFS filesystem access policy")
-	}
-	if policy.SquashPolicy != params.squashPolicy {
-		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible root squash policy", filesystem.Label)
 	}
 	return nil
 }
@@ -479,29 +512,33 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 			return err
 		}
 	}
-	if slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
+	vpcAllowed := slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
 		return vpc.ID == vpcID
-	}) {
-		return nil
-	}
+	})
 
-	vpcs := make([]linodego.NFSSpaceAccessPolicyVPCOptions, 0, len(policy.VPCACL)+1)
-	for i := range policy.VPCACL {
-		vpc := &policy.VPCACL[i]
-		vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{
-			ID:      vpc.ID,
-			Subnets: spaceAccessPolicySubnetIDs(vpc.Subnets),
-		})
+	if !policy.Enabled || !vpcAllowed {
+		vpcs := make([]linodego.NFSSpaceAccessPolicyVPCOptions, 0, len(policy.VPCACL)+1)
+		for i := range policy.VPCACL {
+			vpc := &policy.VPCACL[i]
+			vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{
+				ID:      vpc.ID,
+				Subnets: spaceAccessPolicySubnetIDs(vpc.Subnets),
+			})
+		}
+		if !vpcAllowed {
+			vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
+		}
+		if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
+			Label:    new(policy.Label),
+			Enabled:  new(true),
+			VPCs:     new(vpcs),
+			MTLSMode: new(policy.MTLSMode),
+		}); err != nil {
+			return linodeError(err, "update NFS space access policy")
+		}
 	}
-	vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
-	if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
-		Label:    new(policy.Label),
-		Enabled:  new(policy.Enabled),
-		VPCs:     new(vpcs),
-		MTLSMode: new(policy.MTLSMode),
-	}); err != nil {
-		return linodeError(err, "update NFS space access policy")
-	}
+	// Always wait for the policy status. A retried CreateVolume can observe the
+	// requested VPC fields while an earlier asynchronous update is still pending.
 	waitCtx, cancel := waitContext(ctx)
 	defer cancel()
 	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, spaceID, linodego.NFSAccessPolicyStatusActive); err != nil {
@@ -510,7 +547,30 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 	return nil
 }
 
-func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, space *linodego.NFSSpace, capacityBytes int64, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
+// finalizeFilesystemVolume completes backend initialization after the caller has
+// waited for the filesystem to become active. The API creates a space's backing
+// tenant lazily with its first filesystem, so reconciling the space policy
+// before filesystem activation can leave the policy blocked.
+func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityBytes int64) (*csi.Volume, error) {
+	if err := validateFilesystemMountTarget(filesystem); err != nil {
+		return nil, err
+	}
+	if params.squashPolicySet {
+		if err := s.setInitialSquashPolicy(ctx, filesystem.SpaceID, filesystem.ID, params.squashPolicy); err != nil {
+			return nil, err
+		}
+	}
+	spacePolicy, err := s.getSpaceAccessPolicy(ctx, filesystem.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureSpaceVPC(ctx, filesystem.SpaceID, vpcID, spacePolicy); err != nil {
+		return nil, err
+	}
+	return csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode), nil
+}
+
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
@@ -523,28 +583,27 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
+	if err := validateExistingFilesystemCapacity(existing, capacityRange); err != nil {
+		return nil, err
+	}
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
 		}
 	}
-	if err := s.validateExistingFilesystem(ctx, existing, params); err != nil {
+	if err := validateExistingFilesystem(existing, params); err != nil {
 		return nil, err
 	}
-	if err := validateFilesystemMountTarget(existing); err != nil {
-		return nil, err
-	}
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID, requestedCapacityBytes(capacityRange))
 	if err != nil {
 		return nil, err
 	}
-
-	return &csi.CreateVolumeResponse{Volume: csiVolume(existing, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
-func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.CreateVolumeRequest, source snapshotHandle, spaceID int, params *createVolumeParameters, capacityBytes int64, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID, vpcID int, params *createVolumeParameters, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
 	options := linodego.NFSSnapshotCloneOptions{
-		Label:   req.GetName(),
+		Label:   label,
 		Region:  params.region,
 		SpaceID: new(new(spaceID)),
 	}
@@ -562,16 +621,18 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, req *csi.Cre
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
 	}
-	if err := validateFilesystemMountTarget(cloned); err != nil {
+	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID, capacityBytes)
+	if err != nil {
 		return nil, err
 	}
-	if params.squashPolicySet {
-		if err := s.setInitialSquashPolicy(ctx, cloned.SpaceID, cloned.ID, params.squashPolicy); err != nil {
-			return nil, err
-		}
+	volume.ContentSource = &csi.VolumeContentSource{
+		Type: &csi.VolumeContentSource_Snapshot{
+			Snapshot: &csi.VolumeContentSource_SnapshotSource{
+				SnapshotId: formatSnapshotHandle(source.spaceID, source.filesystemID, source.snapshotID),
+			},
+		},
 	}
-
-	return &csi.CreateVolumeResponse{Volume: csiVolume(cloned, capacityBytes, spacePolicy.MTLSMode)}, nil
+	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
 func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
@@ -593,12 +654,13 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
-	if policy.SquashPolicy == squashPolicy {
-		return nil
+	if policy.SquashPolicy != squashPolicy {
+		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
+			return linodeError(err, "update NFS filesystem squash policy")
+		}
 	}
-	if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
-		return linodeError(err, "update NFS filesystem squash policy")
-	}
+	// Always wait for the policy status. A retried CreateVolume can observe the
+	// requested squash value while an earlier asynchronous update is still pending.
 	return s.waitForFilesystemAccessPolicyActive(ctx, spaceID, filesystemID)
 }
 
@@ -625,6 +687,35 @@ func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volum
 		}
 	}
 	return nil, nil //nolint:nilnil // Snapshot absence is the expected create path.
+}
+func (s *ControllerServer) snapshotLabelExistsInOtherFilesystem(ctx context.Context, handle volumeHandle, label string) (bool, error) {
+	filesystems, err := s.client.ListNFSFilesystems(ctx, handle.spaceID, &linodego.ListOptions{
+		PageOptions: &linodego.PageOptions{},
+		PageSize:    linodeclient.DefaultListPageSize,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	for filesystemIndex := range filesystems {
+		filesystem := &filesystems[filesystemIndex]
+		if filesystem.ID == handle.filesystemID {
+			continue
+		}
+		snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, filesystem.ID, &linodego.ListOptions{
+			PageOptions: &linodego.PageOptions{},
+			PageSize:    linodeclient.DefaultListPageSize,
+		})
+		if err != nil {
+			return false, err
+		}
+		for snapshotIndex := range snapshots {
+			if snapshots[snapshotIndex].Label == label {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *ControllerServer) listSnapshotByID(ctx context.Context, snapshotID, sourceVolumeID string) (*csi.ListSnapshotsResponse, error) {

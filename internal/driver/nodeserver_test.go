@@ -107,7 +107,7 @@ func TestNodeGetInfo(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(instanceClient)
 			}
-			metadataSvc := metadataService{nodeName: "worker-a", instanceClient: instanceClient, kubeClient: mocks.NewMockKubeNodeClient(ctrl)}
+			metadataSvc := &metadataService{nodeName: "worker-a", instanceClient: instanceClient, kubeClient: mocks.NewMockKubeNodeClient(ctrl)}
 			server := &NodeServer{driver: &LinodeDriver{metadata: metadataSvc}}
 
 			response, err := server.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
@@ -279,6 +279,58 @@ func TestNodeStageVolume(t *testing.T) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
 					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "nconnect=8"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "uses NFS defaults when no mount flags are provided",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "preserves caller NFSv4 and transport options",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+				"hard,nfsvers=4.2",
+				"proto=rdma",
+				"nconnect=8",
+				"timeo=600",
+				"xprtsec=tls",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard,nfsvers=4.2", "proto=rdma", "nconnect=8", "timeo=600", "xprtsec=tls"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "preserves caller NFSv3 option",
+			req: newRequest(
+				t.TempDir(),
+				map[string]string{volumeContextMountTarget: "nfs.server.linode.com:/fs-id"},
+				nil,
+				"hard",
+				"vers=3",
+			),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard", "vers=3"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,

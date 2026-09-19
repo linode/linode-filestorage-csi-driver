@@ -1,0 +1,130 @@
+remote_theme: just-the-docs/just-the-docs
+
+# GitHub Pages turns the plugins below on by default; a local `jekyll build`
+# does not, which is why pages that rely on them (markdown without front
+# matter, titles taken from the first heading) are missing from the local nav
+# unless they are listed here. Listing them changes nothing in production.
+plugins:
+  - jekyll-remote-theme
+  - jekyll-default-layout
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-titles-from-headings
+
+title: Linode File Storage CSI Driver
+search_enabled: true
+heading_anchors: true
+color_scheme: dark
+
+# just-the-docs only loads mermaid when this key is present. The architecture
+# page uses it for the lifecycle sequence diagrams.
+mermaid:
+  version: "11.4.1"
+
+# Page front matter lives here rather than in the files themselves, because
+# GitHub's markdown viewer renders a front matter block as a table at the top
+# of the page. Jekyll reads these exactly as if they were in the file, so
+# just-the-docs still orders the nav by nav_order.
+defaults:
+  - scope:
+      path: README.md
+    values:
+      nav_order: 1
+      permalink: /
+  - scope:
+      path: docs/architecture.md
+    values:
+      nav_order: 2
+  - scope:
+      path: docs/installation.md
+    values:
+      nav_order: 3
+  - scope:
+      path: docs/usage.md
+    values:
+      nav_order: 4
+  - scope:
+      path: docs/storage-class-parameters.md
+    values:
+      nav_order: 5
+  - scope:
+      path: docs/snapshots.md
+    values:
+      nav_order: 6
+  - scope:
+      path: docs/access-and-networking.md
+    values:
+      nav_order: 7
+  - scope:
+      path: docs/configuration-reference.md
+    values:
+      nav_order: 8
+  - scope:
+      path: docs/troubleshooting.md
+    values:
+      nav_order: 9
+  - scope:
+      path: docs/development-setup.md
+    values:
+      nav_order: 10
+  - scope:
+      path: docs/testing.md
+    values:
+      nav_order: 11
+  # The contributing guide lives in .github/ so GitHub surfaces it to
+  # contributors, and the site publishes that same file rather than a copy. The
+  # permalink keeps the published URL out of the dot directory.
+  - scope:
+      path: .github/CONTRIBUTING.md
+    values:
+      nav_order: 12
+      permalink: /contributing/
+
+readme_index:
+  remove_originals: true
+
+# A page built from a front-matter-less file leaves the raw .md behind as a
+# static file, so the site would serve both /docs/usage/ and /docs/usage.md.
+optional_front_matter:
+  remove_originals: true
+
+# Publishing .github/CONTRIBUTING.md needs both entries, and `include` beats
+# `exclude`, which is what keeps the rest of .github/ out.
+#
+#   - `.github` alone: Jekyll skips any file or directory whose name starts
+#     with a dot, so without this it never looks inside the directory at all
+#     and the page is silently missing from the site. It also satisfies
+#     jekyll-optional-front-matter, which refuses a set of basenames (README,
+#     LICENSE, CONTRIBUTING and friends) unless the file is in `include`.
+#   - `CONTRIBUTING.md` unqualified: inside a subdirectory Jekyll matches
+#     `include` against the bare filename but `exclude` against the path from
+#     the source root, so the `.github/` exclude below would otherwise drop
+#     this file along with the workflows and the issue templates.
+include:
+  - .github
+  - CONTRIBUTING.md
+
+# Everything that is not documentation. Without this the site carries the whole
+# Go tree, and AGENTS.md is published as a stray page nothing links to.
+exclude:
+  - .github/
+  - bin/
+  - charts/
+  - deploy/
+  - dist/
+  - hack/
+  - internal/
+  - mocks/
+  - pkg/
+  - release/
+  - tests/
+  - AGENTS.md
+  - coverage.out
+  - Dockerfile
+  - go.mod
+  - go.sum
+  - justfile
+  - main.go
+  - mise.toml
+  - renovate.json5
