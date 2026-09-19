@@ -68,7 +68,7 @@ The levels the driver actually uses:
 | `secretRef.name` | unset | Use an existing Secret instead of creating one |
 | `secretRef.apiTokenRef` | `token` | Key within that Secret |
 | `driver.name` | `linodenfs.csi.linode.com` | The CSI driver name. Changing it changes the `CSIDriver` object, the socket path, and the `provisioner` every `StorageClass` must use |
-| `accessPolicy.mode` | `space` | Authorization model. `space` uses the Space VPC ACL without CSI attachment; `node` also maintains per-filesystem Linode ACLs and requires CSI attachment |
+| `accessPolicy.mode` | `space` | Authorization model. `space` uses the Space VPC ACL without CSI attachment. `node` maintains per-filesystem Linode ACLs and requires CSI attachment, but is not currently recommended because its asynchronous per-node policy updates cause severe scheduling and cleanup delays |
 | `podAnnotations` | `{}` | Applied to controller and node pods |
 | `podLabels` | `{}` | Applied to controller and node pods |
 

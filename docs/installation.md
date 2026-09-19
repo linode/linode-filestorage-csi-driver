@@ -243,13 +243,16 @@ helm upgrade linode-nfs-csi-driver \
   --set accessPolicy.mode=space \
   linode-nfs-csi/linode-nfs-csi-driver
 
-# Optional: also maintain a per-filesystem Linode ACL.
+# Optional compatibility mode; not currently recommended because per-node
+# policy updates add severe scheduling and cleanup delays.
 helm upgrade linode-nfs-csi-driver \
   --namespace kube-system \
   --reuse-values \
   --set accessPolicy.mode=node \
   linode-nfs-csi/linode-nfs-csi-driver
 ```
+
+Use `space` mode unless per-node Linode ACLs are a hard requirement. `node` mode waits for an asynchronous filesystem policy update on every CSI publish and unpublish operation, and these updates serialize for a volume. The delay grows sharply when an RWX volume is used across many nodes.
 
 Kubernetes treats `CSIDriver.spec.attachRequired` as immutable. To change modes, first stop workloads using this driver, delete the `linodenfs.csi.linode.com` `CSIDriver`, then run the Helm upgrade so it is recreated with the matching value.
 

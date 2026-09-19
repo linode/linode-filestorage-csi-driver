@@ -80,6 +80,8 @@ The Helm value `accessPolicy.mode` selects one installation-wide authorization m
 | `space` (default) | maintained | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
 | `node` | maintained | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
 
+`node` mode is not currently recommended. Every publish and unpublish performs an asynchronous filesystem policy replacement and waits for it to become active. Those operations serialize for a volume, causing severe delays as the number of nodes grows. In live DevCloud checks, ten pods mounting one existing RWX volume across ten nodes reached Ready in 4.73 seconds with `space` mode versus 874.99 seconds with `node` mode. Removing them took 1.24 seconds with `space` mode versus 1,135.13 seconds with `node` mode. These are point-in-time measurements rather than service guarantees, but the per-node policy waits are inherent to the current implementation.
+
 ### Space access policy: the VPC ACL
 
 Scope: the whole Storage Space, and therefore every filesystem in it.

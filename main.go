@@ -39,9 +39,10 @@ func loadConfig() linodeclient.Config {
 		RootCertificatePath: os.Getenv("LINODE_CA"),
 		Timeout:             timeout,
 
-		DriverRole:  envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
-		CSIEndpoint: envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
-		NodeName:    os.Getenv("NODE_NAME"),
+		DriverRole:       envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
+		AccessPolicyMode: envOrDefault("NFS_ACCESS_POLICY_MODE", string(driver.AccessPolicyModeSpace)),
+		CSIEndpoint:      envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
+		NodeName:         os.Getenv("NODE_NAME"),
 	}
 }
 
@@ -81,10 +82,7 @@ func maxProcs() {
 
 func handle(ctx context.Context) error {
 	cfg := loadConfig()
-	accessPolicyMode, err := driver.ParseAccessPolicyMode(envOrDefault("NFS_ACCESS_POLICY_MODE", string(driver.AccessPolicyModeSpace)))
-	if err != nil {
-		return fmt.Errorf("configure NFS access policy mode: %w", err)
-	}
+	accessPolicyMode := driver.AccessPolicyMode(cfg.AccessPolicyMode)
 	linodeDriver := driver.GetLinodeDriver(ctx)
 	role, client, mounter, err := dependenciesForRole(&cfg)
 	if err != nil {

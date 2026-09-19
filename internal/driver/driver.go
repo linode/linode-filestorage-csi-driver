@@ -66,6 +66,10 @@ func (d *LinodeDriver) SetupLinodeDriver(
 		return errInvalidRole
 	}
 
+	if accessPolicyMode != AccessPolicyModeSpace && accessPolicyMode != AccessPolicyModeNode {
+		return fmt.Errorf("%w %q", errInvalidAccessPolicyMode, accessPolicyMode)
+	}
+
 	d.name = name
 	d.vendorVersion = vendorVersion
 	d.pluginCaps = pluginCapabilities(role)

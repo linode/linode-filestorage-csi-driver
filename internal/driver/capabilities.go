@@ -1,10 +1,6 @@
 package driver
 
-import (
-	"fmt"
-
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
-)
+import csi "github.com/container-storage-interface/spec/lib/go/csi"
 
 type AccessPolicyMode string
 
@@ -12,16 +8,6 @@ const (
 	AccessPolicyModeSpace AccessPolicyMode = "space"
 	AccessPolicyModeNode  AccessPolicyMode = "node"
 )
-
-func ParseAccessPolicyMode(value string) (AccessPolicyMode, error) {
-	mode := AccessPolicyMode(value)
-	switch mode {
-	case AccessPolicyModeSpace, AccessPolicyModeNode:
-		return mode, nil
-	default:
-		return "", fmt.Errorf("invalid access policy mode %q, must be one of: %s, %s", value, AccessPolicyModeSpace, AccessPolicyModeNode)
-	}
-}
 
 func pluginCapabilities(role Role) []*csi.PluginCapability {
 	var capabilities []csi.PluginCapability_Service_Type

@@ -63,32 +63,6 @@ func defaultMounterHelper(t *testing.T) *mountmanager.SafeFormatAndMount {
 	}
 }
 
-func TestParseAccessPolicyMode(t *testing.T) {
-	tests := []struct {
-		name    string
-		value   string
-		want    AccessPolicyMode
-		wantErr bool
-	}{
-		{name: "space", value: "space", want: AccessPolicyModeSpace},
-		{name: "node", value: "node", want: AccessPolicyModeNode},
-		{name: "empty", wantErr: true},
-		{name: "unknown", value: "subnet", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseAccessPolicyMode(tt.value)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ParseAccessPolicyMode() error = %v, wantErr %t", err, tt.wantErr)
-			}
-			if got != tt.want {
-				t.Fatalf("ParseAccessPolicyMode() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 	tests := []struct {
 		name string
@@ -133,27 +107,37 @@ func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 
 func TestSetupLinodeDriver(t *testing.T) {
 	tests := []struct {
-		name     string
-		role     Role
-		nodeName string
-		wantErr  error
-		assert   func(t *testing.T, driver *LinodeDriver)
+		name             string
+		role             Role
+		nodeName         string
+		accessPolicyMode AccessPolicyMode
+		wantErr          error
+		assert           func(t *testing.T, driver *LinodeDriver)
 	}{
 		{
-			name:   "assigns controller servers",
-			role:   RoleController,
-			assert: assertControllerDriverSetup,
+			name:             "assigns controller servers",
+			role:             RoleController,
+			accessPolicyMode: AccessPolicyModeSpace,
+			assert:           assertControllerDriverSetup,
 		},
 		{
-			name:     "assigns node server",
-			role:     RoleNode,
-			nodeName: "node-a",
-			assert:   assertNodeDriverSetup,
+			name:             "assigns node server",
+			role:             RoleNode,
+			nodeName:         "node-a",
+			accessPolicyMode: AccessPolicyModeSpace,
+			assert:           assertNodeDriverSetup,
 		},
 		{
-			name:    "rejects invalid role",
-			role:    Role("all"),
-			wantErr: errInvalidRole,
+			name:             "rejects invalid role",
+			role:             Role("all"),
+			accessPolicyMode: AccessPolicyModeSpace,
+			wantErr:          errInvalidRole,
+		},
+		{
+			name:             "rejects invalid access policy mode",
+			role:             RoleController,
+			accessPolicyMode: AccessPolicyMode("subnet"),
+			wantErr:          errInvalidAccessPolicyMode,
 		},
 	}
 
@@ -166,7 +150,7 @@ func TestSetupLinodeDriver(t *testing.T) {
 			client := defaultClientHelper(t)
 			mounter := defaultMounterHelper(t)
 
-			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, AccessPolicyModeSpace)
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, tt.accessPolicyMode)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}
