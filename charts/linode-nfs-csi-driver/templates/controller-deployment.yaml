@@ -51,6 +51,8 @@ spec:
             # CSI drivers are installed.
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: NFS_ACCESS_POLICY_MODE
+              value: {{ .Values.accessPolicy.mode | quote }}
             - name: LINODE_TOKEN
               valueFrom:
                 secretKeyRef:

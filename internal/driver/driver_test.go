@@ -63,6 +63,74 @@ func defaultMounterHelper(t *testing.T) *mountmanager.SafeFormatAndMount {
 	}
 }
 
+func TestParseAccessPolicyMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    AccessPolicyMode
+		wantErr bool
+	}{
+		{name: "space", value: "space", want: AccessPolicyModeSpace},
+		{name: "node", value: "node", want: AccessPolicyModeNode},
+		{name: "empty", wantErr: true},
+		{name: "unknown", value: "subnet", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseAccessPolicyMode(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseAccessPolicyMode() error = %v, wantErr %t", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("ParseAccessPolicyMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode AccessPolicyMode
+		want []csi.ControllerServiceCapability_RPC_Type
+	}{
+		{
+			name: "space omits publish and unpublish",
+			mode: AccessPolicyModeSpace,
+			want: []csi.ControllerServiceCapability_RPC_Type{
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+			},
+		},
+		{
+			name: "node advertises publish and unpublish",
+			mode: AccessPolicyModeNode,
+			want: []csi.ControllerServiceCapability_RPC_Type{
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+				csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := controllerServiceCapabilities(tt.mode)
+			if len(got) != len(tt.want) {
+				t.Fatalf("controllerServiceCapabilities() returned %d capabilities, want %d", len(got), len(tt.want))
+			}
+			for i, want := range tt.want {
+				if got[i].GetRpc().GetType() != want {
+					t.Fatalf("capability %d = %v, want %v", i, got[i].GetRpc().GetType(), want)
+				}
+			}
+		})
+	}
+}
+
 func TestSetupLinodeDriver(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -98,7 +166,7 @@ func TestSetupLinodeDriver(t *testing.T) {
 			client := defaultClientHelper(t)
 			mounter := defaultMounterHelper(t)
 
-			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName)
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, AccessPolicyModeSpace)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}
@@ -138,7 +206,6 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 
 	wantControllerCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}

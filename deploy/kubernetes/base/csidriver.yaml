@@ -5,7 +5,7 @@ kind: CSIDriver
 metadata:
   name: linodenfs.csi.linode.com
 spec:
-  attachRequired: true
+  attachRequired: false
   podInfoOnMount: false
   fsGroupPolicy: File
 

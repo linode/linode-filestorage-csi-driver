@@ -81,6 +81,10 @@ func maxProcs() {
 
 func handle(ctx context.Context) error {
 	cfg := loadConfig()
+	accessPolicyMode, err := driver.ParseAccessPolicyMode(envOrDefault("NFS_ACCESS_POLICY_MODE", string(driver.AccessPolicyModeSpace)))
+	if err != nil {
+		return fmt.Errorf("configure NFS access policy mode: %w", err)
+	}
 	linodeDriver := driver.GetLinodeDriver(ctx)
 	role, client, mounter, err := dependenciesForRole(&cfg)
 	if err != nil {
@@ -95,11 +99,12 @@ func handle(ctx context.Context) error {
 		vendorVersion,
 		role,
 		cfg.NodeName,
+		accessPolicyMode,
 	); err != nil {
 		return fmt.Errorf("setup driver: %w", err)
 	}
 
-	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint)
+	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint, "accessPolicyMode", accessPolicyMode)
 	linodeDriver.Run(ctx, cfg.CSIEndpoint)
 	return nil
 }

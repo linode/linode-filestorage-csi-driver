@@ -231,6 +231,30 @@ helm upgrade linode-nfs-csi-driver \
 
 Upgrades roll the controller Deployment and the node DaemonSet. Mounted volumes stay mounted across a node plugin restart, because the mounts live in the host mount namespace, not the plugin container. In-flight provisioning retries once the controller is back.
 
+### Change the access-policy mode
+
+Set one authorization model for the installation:
+
+```sh
+# Default: Space VPC ACL only, without CSI attachment.
+helm upgrade linode-nfs-csi-driver \
+  --namespace kube-system \
+  --reuse-values \
+  --set accessPolicy.mode=space \
+  linode-nfs-csi/linode-nfs-csi-driver
+
+# Optional: also maintain a per-filesystem Linode ACL.
+helm upgrade linode-nfs-csi-driver \
+  --namespace kube-system \
+  --reuse-values \
+  --set accessPolicy.mode=node \
+  linode-nfs-csi/linode-nfs-csi-driver
+```
+
+Kubernetes treats `CSIDriver.spec.attachRequired` as immutable. To change modes, first stop workloads using this driver, delete the `linodenfs.csi.linode.com` `CSIDriver`, then run the Helm upgrade so it is recreated with the matching value.
+
+When changing from `node` to `space`, existing filesystems can retain an enabled Linode ACL. Recreate or explicitly migrate those filesystem policies before restarting workloads. Changing from `space` to `node` needs no policy migration: the first publish enables the filesystem policy and adds its node.
+
 *See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documentation.*
 
 ## 🧹 Uninstalling the driver

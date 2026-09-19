@@ -43,7 +43,7 @@ type LinodeDriver struct {
 func GetLinodeDriver(ctx context.Context) *LinodeDriver {
 	klog.V(2).InfoS("creating LinodeDriver")
 	return &LinodeDriver{
-		controllerCaps: controllerServiceCapabilities(),
+		controllerCaps: controllerServiceCapabilities(AccessPolicyModeSpace),
 		nodeCaps:       nodeServiceCapabilities(),
 	}
 }
@@ -56,6 +56,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	vendorVersion string,
 	role Role,
 	nodeName string,
+	accessPolicyMode AccessPolicyMode,
 ) error {
 	if name == "" {
 		return fmt.Errorf("driver name missing")
@@ -68,6 +69,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	d.name = name
 	d.vendorVersion = vendorVersion
 	d.pluginCaps = pluginCapabilities(role)
+	d.controllerCaps = controllerServiceCapabilities(accessPolicyMode)
 	klog.V(2).InfoS("configuring driver", "role", role, "name", name)
 	metadataSvc, err := newMetadataService(ctx, nodeName, client)
 	if err != nil {
