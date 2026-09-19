@@ -83,9 +83,9 @@ func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 			mode: AccessPolicyModeNode,
 			want: []csi.ControllerServiceCapability_RPC_Type{
 				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-				csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 				csi.ControllerServiceCapability_RPC_GET_VOLUME,
 				csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+				csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 			},
 		},
 	}
