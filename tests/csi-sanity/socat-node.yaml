@@ -23,5 +23,5 @@ spec:
   volumes:
     - name: plugin-dir
       hostPath:
-        path: /var/lib/kubelet/plugins/linodefs.csi.linode.com
+        path: /var/lib/kubelet/plugins/linodenfs.csi.linode.com
         type: Directory

@@ -76,7 +76,7 @@ NAME      STATUS   VOLUME                                     CAPACITY   ACCESS 
 nfs-pvc   Bound    pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   10Gi       RWX            linode-nfs     35s
 ```
 
-Behind the bound PVC, the controller has created an NFS filesystem in your Storage Space labelled after the PV name (lowercased, truncated to 63 bytes), attached your cluster VPC to the space access policy, and waited for the filesystem to reach `active`.
+Behind the bound PVC, the controller has created an NFS filesystem in your Storage Space labelled after the PV name (lowercased, truncated to the live backend limit of 60 bytes), attached your cluster VPC to the space access policy, and waited for the filesystem to reach `active`.
 
 Provisioning waits on the Linode API, so first-time creation is not instant. The driver allows up to 5 minutes per wait before returning `DeadlineExceeded` and letting `csi-provisioner` retry.
 

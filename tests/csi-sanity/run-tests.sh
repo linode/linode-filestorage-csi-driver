@@ -17,17 +17,14 @@ SOCAT_CONTAINER="csi-sanity-socat"
 ARTIFACT_DIR="${CSI_SANITY_ARTIFACT_DIR:-artifacts/csi-sanity}"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CREATE_DIRECTORY="${DIR}/mkdir_in_pod.sh"
-DELETE_DIRECTORY="${DIR}/rmdir_in_pod.sh"
-CHECK_PATH="${DIR}/checkpath_in_pod.sh"
+REPO_ROOT="$(cd "${DIR}/../.." && pwd)"
 
-# Snapshot and quota APIs are not live yet; all other advertised sanity capabilities run.
-SKIP_TESTS="CreateSnapshot|DeleteSnapshot|ListSnapshots|GetSnapshot|volume source snapshot|create volume from an existing source snapshot|already existing name and different capacity"
+# Snapshot APIs are not live yet; every non-snapshot sanity case runs.
+SKIP_TESTS="CreateSnapshot|DeleteSnapshot|ListSnapshots|GetSnapshot|volume source snapshot|create volume from an existing source snapshot"
 
 added_controller_socat=0
 pf_controller_pid=""
 pf_node_pid=""
-params=""
 NODE_PROXY_NAME=""
 
 log() { printf '%s\n' "$*"; }
@@ -89,18 +86,18 @@ cleanup() {
     fi
     kubectl rollout status "deploy/${CONTROLLER_DEPLOY}" -n "${NS}" --timeout=120s >/dev/null
   fi
-  [[ -z "${params}" ]] || rm -f "${params}"
   return "${status}"
 }
 
 command -v kubectl >/dev/null || die "kubectl not found"
-command -v csi-sanity >/dev/null || die "csi-sanity not found (mise install)"
+command -v go >/dev/null || die "go not found (mise install)"
 
 [[ -n "${KUBECONFIG:-}" ]] || die "KUBECONFIG is required"
 [[ -r "${KUBECONFIG}" ]] || die "KUBECONFIG is not readable: ${KUBECONFIG}"
 [[ "${NFS_CSI_SANITY_SPACE_ID:-}" =~ ^[1-9][0-9]*$ ]] \
   || die "NFS_CSI_SANITY_SPACE_ID must be a positive integer for live provisioning tests"
 mkdir -p "${ARTIFACT_DIR}"
+ARTIFACT_DIR="$(cd "${ARTIFACT_DIR}" && pwd)"
 [[ -d "${ARTIFACT_DIR}" && -w "${ARTIFACT_DIR}" ]] \
   || die "CSI_SANITY_ARTIFACT_DIR is not writable: ${ARTIFACT_DIR}"
 export CSI_SANITY_NAMESPACE="${NS}"
@@ -183,23 +180,18 @@ pf_node_pid=$!
 wait_tcp "${CONTROLLER_PORT}" || die "controller port-forward :${CONTROLLER_PORT} never became ready"
 wait_tcp "${NODE_PORT}" || die "node port-forward :${NODE_PORT} never became ready"
 
-params="$(mktemp)"
-sed "s|__SPACE_ID__|${NFS_CSI_SANITY_SPACE_ID}|g" "${DIR}/volume-parameters.yaml.tpl" >"${params}"
+export NFS_CSI_LIVE_SANITY=1
+export CSI_SANITY_CONTROLLER_ENDPOINT="dns:///127.0.0.1:${CONTROLLER_PORT}"
+export CSI_SANITY_NODE_ENDPOINT="dns:///127.0.0.1:${NODE_PORT}"
 
-sanity_args=(
-  --ginkgo.v
-  --ginkgo.skip="${SKIP_TESTS}"
-  --ginkgo.junit-report="${ARTIFACT_DIR%/}/csi-sanity-junit.xml"
-  --csi.endpoint="dns:///127.0.0.1:${NODE_PORT}"
-  --csi.controllerendpoint="dns:///127.0.0.1:${CONTROLLER_PORT}"
-  --csi.testvolumeaccesstype=mount
-  --csi.testvolumeparameters="${params}"
-  --csi.createstagingpathcmd="${CREATE_DIRECTORY}"
-  --csi.createmountpathcmd="${CREATE_DIRECTORY}"
-  --csi.removestagingpathcmd="${DELETE_DIRECTORY}"
-  --csi.removemountpathcmd="${DELETE_DIRECTORY}"
-  --csi.checkpathcmd="${CHECK_PATH}"
+log "running live CSI sanity (controller :${CONTROLLER_PORT}, node :${NODE_PORT})"
+(
+  cd "${REPO_ROOT}"
+  go test -count=1 -v ./tests/csi-sanity \
+    -run '^TestLiveCSISanity$' \
+    -timeout 90m \
+    -args \
+    --ginkgo.v \
+    --ginkgo.skip="${SKIP_TESTS}" \
+    --ginkgo.junit-report="${ARTIFACT_DIR}/csi-sanity-junit.xml"
 )
-
-log "running csi-sanity (controller :${CONTROLLER_PORT}, node :${NODE_PORT})"
-csi-sanity "${sanity_args[@]}"

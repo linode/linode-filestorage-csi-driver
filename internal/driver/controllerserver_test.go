@@ -108,7 +108,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				assertCreateVolumeResponse(t, response, testVolumeID, 1024, map[string]string{
+				assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
 					volumeContextSpaceID:       "123",
 					volumeContextFilesystemID:  "456",
 					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
@@ -150,7 +150,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				assertCreateVolumeResponse(t, response, testVolumeID, 1024, map[string]string{
+				assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
 					volumeContextSpaceID:       "123",
 					volumeContextFilesystemID:  "456",
 					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-volume-1c8",
@@ -217,7 +217,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				assertCreateVolumeResponse(t, response, "1123/890", 3*1024*1024*1024, map[string]string{
+				assertCreateVolumeResponse(t, response, "1123/890", 0, map[string]string{
 					volumeContextSpaceID:       "1123",
 					volumeContextFilesystemID:  "890",
 					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315",
@@ -639,7 +639,7 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 			)
 		}, codes.OK, func(t *testing.T, response *csi.CreateVolumeResponse) {
 			t.Helper()
-			assertCreateVolumeResponse(t, response, "1123/890", 3*1024*1024*1024, map[string]string{
+			assertCreateVolumeResponse(t, response, "1123/890", 0, map[string]string{
 				volumeContextSpaceID:       "1123",
 				volumeContextFilesystemID:  "890",
 				volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-315",
@@ -913,6 +913,7 @@ func TestControllerPublishVolume(t *testing.T) {
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
 				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().GetInstance(gomock.Any(), 202).Return(&linodego.Instance{}, nil)
 				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyNone))).Return(policy, nil)
 				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
@@ -966,6 +967,7 @@ func TestControllerPublishVolume(t *testing.T) {
 					Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 				}
 				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil)
+				env.client.EXPECT().GetInstance(gomock.Any(), 202).Return(&linodego.Instance{}, nil)
 				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(testFilesystemPolicyUpdate("policy-a", true, []int{101, 202}, linodego.NFSSquashPolicyRootSquash))).Return(policy, nil)
 				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(policy, nil)
 			},
@@ -990,6 +992,19 @@ func TestControllerPublishVolume(t *testing.T) {
 				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
 			},
 			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "returns not found for nonexistent node",
+			request: &csi.ControllerPublishVolumeRequest{
+				VolumeId:         testVolumeID,
+				NodeId:           "2000000001",
+				VolumeCapability: mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
+				env.client.EXPECT().GetInstance(gomock.Any(), 2000000001).Return(nil, linodeAPIError(http.StatusNotFound))
+			},
+			wantCode: codes.NotFound,
 		},
 	}
 

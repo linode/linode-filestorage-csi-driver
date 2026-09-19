@@ -48,8 +48,9 @@ const (
 	filterFieldRegion = "region"
 )
 
-// nfsLabelMaxBytes is the maximum length accepted by the NFS OpenAPI.
-const nfsLabelMaxBytes = 63
+// nfsLabelMaxBytes is the longest label that the NFS backend provisions
+// successfully. The API accepts 63 bytes, but longer than 60 enters error.
+const nfsLabelMaxBytes = 60
 
 // trailingHyphens matches one or more hyphens at the end of a string, used
 // to strip a dangling hyphen run left behind by truncating a label.
@@ -209,22 +210,19 @@ func (s *ControllerServer) getFilesystemPolicyForVolumeAndNode(ctx context.Conte
 	return handle, linodeID, policy, nil
 }
 
-func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
-	if capacityRange == nil {
+func filesystemCapacityBytes(filesystem *linodego.NFSFilesystem) int64 {
+	if filesystem.Stats.MaxCapacityBytes == nil {
 		return 0
 	}
-	if capacityRange.GetRequiredBytes() > 0 {
-		return capacityRange.GetRequiredBytes()
-	}
-	return capacityRange.GetLimitBytes()
+	return *filesystem.Stats.MaxCapacityBytes
 }
 
 func validateExistingFilesystemCapacity(filesystem *linodego.NFSFilesystem, capacityRange *csi.CapacityRange) error {
-	if filesystem.Stats.MaxCapacityBytes == nil {
+	capacityBytes := filesystemCapacityBytes(filesystem)
+	if capacityBytes == 0 {
 		return nil
 	}
 
-	capacityBytes := *filesystem.Stats.MaxCapacityBytes
 	if capacityRange.GetRequiredBytes() > capacityBytes || (capacityRange.GetLimitBytes() != 0 && capacityBytes > capacityRange.GetLimitBytes()) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible capacity %d", filesystem.Label, capacityBytes)
 	}
@@ -280,10 +278,10 @@ func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLS
 	return values
 }
 
-func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
+func csiVolume(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
 	return &csi.Volume{
 		VolumeId:      formatVolumeHandle(filesystem.SpaceID, filesystem.ID),
-		CapacityBytes: capacityBytes,
+		CapacityBytes: filesystemCapacityBytes(filesystem),
 		VolumeContext: volumeContext(filesystem, mtlsMode),
 	}
 }
@@ -551,7 +549,7 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 // waited for the filesystem to become active. The API creates a space's backing
 // tenant lazily with its first filesystem, so reconciling the space policy
 // before filesystem activation can leave the policy blocked.
-func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityBytes int64) (*csi.Volume, error) {
+func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int) (*csi.Volume, error) {
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
@@ -567,7 +565,7 @@ func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesys
 	if err := s.ensureSpaceVPC(ctx, filesystem.SpaceID, vpcID, spacePolicy); err != nil {
 		return nil, err
 	}
-	return csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode), nil
+	return csiVolume(filesystem, spacePolicy.MTLSMode), nil
 }
 
 func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
@@ -594,14 +592,14 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err := validateExistingFilesystem(existing, params); err != nil {
 		return nil, err
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID, requestedCapacityBytes(capacityRange))
+	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID)
 	if err != nil {
 		return nil, err
 	}
 	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
-func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID, vpcID int, params *createVolumeParameters, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID, vpcID int, params *createVolumeParameters) (*csi.CreateVolumeResponse, error) {
 	options := linodego.NFSSnapshotCloneOptions{
 		Label:   label,
 		Region:  params.region,
@@ -621,7 +619,7 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID, capacityBytes)
+	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID)
 	if err != nil {
 		return nil, err
 	}

@@ -118,7 +118,7 @@ Fields that Kubernetes itself interprets, and what they mean for this driver:
 
 ### Filesystem labels
 
-The filesystem label comes from the PV name that `csi-provisioner` passes as the `CreateVolume` name, lowercased and truncated to 63 bytes. The chart runs `csi-provisioner` with `--volume-name-prefix=pvc` and `--volume-name-uuid-length=16`, so a PV name is 20 characters and truncation does not happen with the chart's defaults.
+The filesystem label comes from the PV name that `csi-provisioner` passes as the `CreateVolume` name, lowercased and truncated to the live backend limit of 60 bytes. The chart runs `csi-provisioner` with `--volume-name-prefix=pvc` and `--volume-name-uuid-length=16`, so a PV name is 20 characters and truncation does not happen with the chart's defaults.
 
 ## 📚 Related pages
 

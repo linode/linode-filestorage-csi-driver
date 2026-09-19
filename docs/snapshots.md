@@ -187,7 +187,7 @@ Use `deletionPolicy: Retain` for anything you adopted, so deleting the Kubernete
 
 ### Snapshot labels and idempotency
 
-The snapshot label is the CSI snapshot name (which `csi-snapshotter` derives from the `VolumeSnapshotContent` name), lowercased and truncated to 63 bytes.
+The snapshot label is the CSI snapshot name (which `csi-snapshotter` derives from the `VolumeSnapshotContent` name), lowercased and truncated to the live backend limit of 60 bytes.
 
 `CreateSnapshot` must be idempotent, and the driver gets there in two passes:
 

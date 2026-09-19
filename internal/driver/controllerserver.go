@@ -75,7 +75,6 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
-	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
 		return s.handleExistingFilesystem(ctx, existing, &params, cluster.VPCID, req.GetCapacityRange(), snapshot)
@@ -84,7 +83,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if snapshot != nil {
 		// Snapshot restores target the cluster's region. Source-region validation is
 		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
+		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params)
 	}
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
@@ -106,7 +105,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
-	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID, capacityBytes)
+	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +168,9 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 			return &csi.ControllerPublishVolumeResponse{}, nil
 		}
 	} else {
+		if _, err := s.client.GetInstance(ctx, linodeID); err != nil {
+			return nil, linodeError(err, "get Linode instance")
+		}
 		linodeIDs = append(linodeIDs, linodeID)
 	}
 
@@ -325,7 +327,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	}
 
 	return &csi.ControllerGetVolumeResponse{
-		Volume: csiVolume(filesystem, 0, ""),
+		Volume: csiVolume(filesystem, ""),
 		Status: csiControllerVolumeStatus(policy),
 	}, nil
 }

@@ -49,7 +49,7 @@ The whole suite is hermetic: no network, no cluster, no Linode token. If a test 
 | `pkg/mount-manager/safe_mounter_test.go` | The mounter wrapper |
 | `tests/sanity/sanity_test.go` | `csi-sanity` against the real servers over fakes. See [CSI sanity](#-csi-sanity) |
 
-The parts worth having tests for, and which do have them, are the ones that are painful to verify by hand: the composite handle formats, the 63-byte label truncation with its trailing-hyphen strip, the HTTP-to-gRPC error mapping table, and the two different VPC discovery paths for legacy and modern interface generations.
+The parts worth having tests for, and which do have them, are the ones that are painful to verify by hand: the composite handle formats, the 60-byte live-backend label limit with its trailing-hyphen strip, the HTTP-to-gRPC error mapping table, and the two different VPC discovery paths for legacy and modern interface generations.
 
 ## 🎭 Mocks
 
@@ -237,6 +237,8 @@ Things worth deliberately breaking while you are in here, because each one exerc
 
 ## 🧷 CSI sanity
 
+### Hermetic
+
 [csi-sanity](https://github.com/kubernetes-csi/csi-test) runs against the real driver in `tests/sanity`, with no cluster and no Linode account:
 
 ```sh
@@ -255,6 +257,29 @@ Because the whole thing is in-process and hermetic, a sanity failure is a real p
 
 - **Advertising a new capability turns on more sanity tests.** `capabilities.go` is what the suite reads to decide which RPCs to exercise, so adding a capability without implementing it fails here first.
 - **A new backend call needs the fake to implement it.** Each fake carries a compile-time interface assertion (`var _ linodeclient.LinodeClient = (*fakeSanityLinodeClient)(nil)` and the equivalents for the metadata and mounter fakes), so adding a method to one of those interfaces without updating the fake breaks the build rather than the test run. What sanity catches is the layer above that: a fake that compiles but returns something the CSI spec does not allow.
+
+### Live LKE Enterprise
+
+`tests/csi-sanity/run-tests.sh` runs the same upstream sanity library against a
+deployed driver. It creates temporary socat proxies for the separate controller
+and node sockets, then uses a small Go test to supply this driver's
+`<space-id>/<filesystem-id>` and numeric Linode ID formats.
+
+Use a dedicated test cluster and an empty NFS Space. The run creates and deletes
+real filesystems and changes their access policies.
+
+```sh
+export KUBECONFIG="$(pwd)/nfs-csi-driver-dev-kubeconfig"
+export NFS_CSI_SANITY_SPACE_ID="<space-id>"
+mise run csi-sanity-test
+```
+
+Snapshot cases are skipped because the live API is not available yet.
+Unadvertised capabilities, including volume expansion, are skipped by
+`csi-sanity`. JUnit output is written under `artifacts/csi-sanity/`.
+
+The runner removes both proxy resources on exit. After any failed run, verify
+that the dedicated Space contains no leftover filesystems before reusing it.
 
 ## 🤖 What CI runs
 
