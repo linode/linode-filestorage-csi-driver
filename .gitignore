@@ -2,6 +2,7 @@ bin/
 dist/
 release/
 coverage.out
+artifacts/
 
 # Jekyll documentation site
 _site/

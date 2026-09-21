@@ -161,7 +161,7 @@ snapshot handle:  {space_id}/{filesystem_id}/{snap}   e.g. 42/1337/9
 The CSI volume name from `csi-provisioner` (for example `pvc-0f3a…`) becomes the filesystem label after two transformations:
 
 1. `normalizeLabel` lowercases it. The NFS backend expects lowercase labels.
-2. `truncateNFSLabelToMaxBytes` cuts it to 63 bytes, the NFS OpenAPI maximum, then strips any trailing hyphen run the cut left dangling, so `my-volume-` never reaches the API.
+2. `truncateNFSLabelToMaxBytes` cuts it to 60 bytes, the longest length the live NFS backend provisions successfully, then strips any trailing hyphen run the cut left dangling, so `my-volume-` never reaches the API. Although the OpenAPI accepts up to 63 bytes, labels longer than 60 currently enter the backend `error` state.
 
 The same normalization applies to snapshot labels. Because the label is derived deterministically from the CSI name, a retried `CreateVolume` produces the same label and finds the existing filesystem instead of creating a second one.
 

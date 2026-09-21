@@ -88,7 +88,7 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - **The driver is in alpha.** Behavior and the interfaces it exposes may change between releases.
 - **A VPC is required.** `CreateVolume` fails with `FailedPrecondition` when the cluster's nodes are not attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - **Storage Spaces are not created by the driver.** You must create the NFS Storage Space yourself and reference it from every `StorageClass`. The driver creates and deletes filesystems inside that space, never the space itself.
-- **Capacity requests are advisory.** The Linode NFS API does not take a size on filesystem creation. The driver echoes the requested capacity back in the CSI response so Kubernetes can bind the PVC, but it does not enforce a quota. Do not treat `spec.resources.requests.storage` as a hard limit.
+- **Capacity requests are advisory.** The Linode NFS API does not take a size on filesystem creation or enforce it as a quota. The CSI response reports the backend's maximum capacity when the API provides one and zero when it does not. Kubernetes still records the PVC's requested size for binding, but do not treat `spec.resources.requests.storage` as a hard limit.
 
 ## 💬 Join Us on Slack
 

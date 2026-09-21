@@ -12,6 +12,7 @@ yq = "4.53.3"
 uv = "latest"
 "pipx:linode-cli" = "5.68.0"
 
+
 [tasks.fmt]
 description = "Format Go sources"
 run = "just fmt"
@@ -75,6 +76,10 @@ run = "just ci"
 [tasks.helm-install]
 description = "Install Helm charts"
 run = "just helm-install"
+
+[tasks.csi-sanity-test]
+description = "Run destructive CSI sanity with KUBECONFIG and NFS_CSI_SANITY_SPACE_ID"
+run = "just csi-sanity-test"
 
 [tasks.serve-docs]
 description = "Serve the documentation site locally with live reload"

@@ -283,21 +283,21 @@ func TestSetInitialSquashPolicyWaitsForMatchingUpdatingPolicy(t *testing.T) {
 	}
 }
 
-func TestRequestedCapacityBytes(t *testing.T) {
+func TestFilesystemCapacityBytes(t *testing.T) {
+	capacityBytes := int64(1024)
 	tests := []struct {
-		name          string
-		capacityRange *csi.CapacityRange
-		want          int64
+		name       string
+		filesystem *linodego.NFSFilesystem
+		want       int64
 	}{
-		{name: "nil", want: 0},
-		{name: "required", capacityRange: &csi.CapacityRange{RequiredBytes: 1024, LimitBytes: 2048}, want: 1024},
-		{name: "limit fallback", capacityRange: &csi.CapacityRange{LimitBytes: 2048}, want: 2048},
+		{name: "unknown", filesystem: &linodego.NFSFilesystem{}, want: 0},
+		{name: "reported", filesystem: &linodego.NFSFilesystem{Stats: linodego.NFSFilesystemStats{MaxCapacityBytes: &capacityBytes}}, want: capacityBytes},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := requestedCapacityBytes(tt.capacityRange); got != tt.want {
-				t.Fatalf("requestedCapacityBytes() = %d, want %d", got, tt.want)
+			if got := filesystemCapacityBytes(tt.filesystem); got != tt.want {
+				t.Fatalf("filesystemCapacityBytes() = %d, want %d", got, tt.want)
 			}
 		})
 	}
@@ -398,25 +398,27 @@ func TestVolumeContext(t *testing.T) {
 }
 
 func TestCSIVolume(t *testing.T) {
+	capacityBytes := int64(1024)
 	filesystem := &linodego.NFSFilesystem{
 		ID:              456,
 		SpaceID:         123,
 		Region:          "us-east",
 		MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
+		Stats:           linodego.NFSFilesystemStats{MaxCapacityBytes: &capacityBytes},
 	}
 
-	volume := csiVolume(filesystem, 1024, "")
+	volume := csiVolume(filesystem, "")
 	if volume.GetVolumeId() != "123/456" {
 		t.Fatalf("csiVolume() volume id = %q", volume.GetVolumeId())
 	}
-	if volume.GetCapacityBytes() != 1024 {
+	if volume.GetCapacityBytes() != capacityBytes {
 		t.Fatalf("csiVolume() capacity = %d", volume.GetCapacityBytes())
 	}
 	if len(volume.GetVolumeContext()) != 4 {
 		t.Fatalf("csiVolume() context = %#v", volume.GetVolumeContext())
 	}
 
-	volumeWithMTLS := csiVolume(filesystem, 1024, linodego.NFSMTLSModeOptional)
+	volumeWithMTLS := csiVolume(filesystem, linodego.NFSMTLSModeOptional)
 	if got := volumeWithMTLS.GetVolumeContext()[volumeContextSpaceMTLSMode]; got != string(linodego.NFSMTLSModeOptional) {
 		t.Fatalf("csiVolume() mtls mode = %q", got)
 	}
@@ -487,10 +489,11 @@ func TestTruncateNFSLabelToMaxBytes(t *testing.T) {
 		label string
 		want  string
 	}{
-		{name: "preserves label at the limit", label: strings.Repeat("a", 63), want: strings.Repeat("a", 63)},
-		{name: "truncates a label over the limit", label: strings.Repeat("a", 70), want: strings.Repeat("a", 63)},
-		{name: "trims a single trailing hyphen left by truncation", label: strings.Repeat("a", 62) + "-x", want: strings.Repeat("a", 62)},
-		{name: "trims a run of trailing hyphens left by truncation", label: strings.Repeat("a", 61) + "--x", want: strings.Repeat("a", 61)},
+		{name: "preserves label at the limit", label: strings.Repeat("a", 60), want: strings.Repeat("a", 60)},
+		{name: "truncates a label one byte over the backend limit", label: strings.Repeat("a", 61), want: strings.Repeat("a", 60)},
+		{name: "truncates a long label", label: strings.Repeat("a", 70), want: strings.Repeat("a", 60)},
+		{name: "trims a single trailing hyphen left by truncation", label: strings.Repeat("a", 59) + "-x", want: strings.Repeat("a", 59)},
+		{name: "trims a run of trailing hyphens left by truncation", label: strings.Repeat("a", 58) + "--x", want: strings.Repeat("a", 58)},
 	}
 
 	for _, tt := range tests {
