@@ -21,6 +21,12 @@ driver:
   # CSI driver name advertised to Kubernetes.
   name: linodenfs.csi.linode.com
 
+# Access-policy authorization applied to provisioned filesystems.
+accessPolicy:
+  # space uses only the Storage Space VPC ACL. node additionally maintains
+  # each filesystem's per-Linode ACL through CSI publish/unpublish operations.
+  mode: space
+
 image:
   # Driver image repository.
   repository: docker.io/linode/linode-filestorage-csi-driver
