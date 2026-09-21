@@ -63,9 +63,10 @@ type Config struct {
 	RootCertificatePath string
 	Timeout             time.Duration
 
-	DriverRole  string
-	CSIEndpoint string
-	NodeName    string
+	DriverRole       string
+	AccessPolicyMode string
+	CSIEndpoint      string
+	NodeName         string
 }
 
 const defaultUserAgentProduct = "LinodeFileStorageCSI"

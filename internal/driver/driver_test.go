@@ -63,29 +63,81 @@ func defaultMounterHelper(t *testing.T) *mountmanager.SafeFormatAndMount {
 	}
 }
 
-func TestSetupLinodeDriver(t *testing.T) {
+func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 	tests := []struct {
-		name     string
-		role     Role
-		nodeName string
-		wantErr  error
-		assert   func(t *testing.T, driver *LinodeDriver)
+		name string
+		mode AccessPolicyMode
+		want []csi.ControllerServiceCapability_RPC_Type
 	}{
 		{
-			name:   "assigns controller servers",
-			role:   RoleController,
-			assert: assertControllerDriverSetup,
+			name: "space omits publish and unpublish",
+			mode: AccessPolicyModeSpace,
+			want: []csi.ControllerServiceCapability_RPC_Type{
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+			},
 		},
 		{
-			name:     "assigns node server",
-			role:     RoleNode,
-			nodeName: "node-a",
-			assert:   assertNodeDriverSetup,
+			name: "node advertises publish and unpublish",
+			mode: AccessPolicyModeNode,
+			want: []csi.ControllerServiceCapability_RPC_Type{
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+				csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := controllerServiceCapabilities(tt.mode)
+			if len(got) != len(tt.want) {
+				t.Fatalf("controllerServiceCapabilities() returned %d capabilities, want %d", len(got), len(tt.want))
+			}
+			for i, want := range tt.want {
+				if got[i].GetRpc().GetType() != want {
+					t.Fatalf("capability %d = %v, want %v", i, got[i].GetRpc().GetType(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestSetupLinodeDriver(t *testing.T) {
+	tests := []struct {
+		name             string
+		role             Role
+		nodeName         string
+		accessPolicyMode AccessPolicyMode
+		wantErr          error
+		assert           func(t *testing.T, driver *LinodeDriver)
+	}{
+		{
+			name:             "assigns controller servers",
+			role:             RoleController,
+			accessPolicyMode: AccessPolicyModeSpace,
+			assert:           assertControllerDriverSetup,
 		},
 		{
-			name:    "rejects invalid role",
-			role:    Role("all"),
-			wantErr: errInvalidRole,
+			name:             "assigns node server",
+			role:             RoleNode,
+			nodeName:         "node-a",
+			accessPolicyMode: AccessPolicyModeSpace,
+			assert:           assertNodeDriverSetup,
+		},
+		{
+			name:             "rejects invalid role",
+			role:             Role("all"),
+			accessPolicyMode: AccessPolicyModeSpace,
+			wantErr:          errInvalidRole,
+		},
+		{
+			name:             "rejects invalid access policy mode",
+			role:             RoleController,
+			accessPolicyMode: AccessPolicyMode("subnet"),
+			wantErr:          errInvalidAccessPolicyMode,
 		},
 	}
 
@@ -98,7 +150,7 @@ func TestSetupLinodeDriver(t *testing.T) {
 			client := defaultClientHelper(t)
 			mounter := defaultMounterHelper(t)
 
-			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName)
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, tt.accessPolicyMode)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}
@@ -138,7 +190,6 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 
 	wantControllerCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
