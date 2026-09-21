@@ -39,9 +39,10 @@ func loadConfig() linodeclient.Config {
 		RootCertificatePath: os.Getenv("LINODE_CA"),
 		Timeout:             timeout,
 
-		DriverRole:  envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
-		CSIEndpoint: envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
-		NodeName:    os.Getenv("NODE_NAME"),
+		DriverRole:       envOrDefault("DRIVER_ROLE", string(driver.RoleController)),
+		AccessPolicyMode: envOrDefault("NFS_ACCESS_POLICY_MODE", string(driver.AccessPolicyModeSpace)),
+		CSIEndpoint:      envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
+		NodeName:         os.Getenv("NODE_NAME"),
 	}
 }
 
@@ -81,6 +82,7 @@ func maxProcs() {
 
 func handle(ctx context.Context) error {
 	cfg := loadConfig()
+	accessPolicyMode := driver.AccessPolicyMode(cfg.AccessPolicyMode)
 	linodeDriver := driver.GetLinodeDriver(ctx)
 	role, client, mounter, err := dependenciesForRole(&cfg)
 	if err != nil {
@@ -95,11 +97,12 @@ func handle(ctx context.Context) error {
 		vendorVersion,
 		role,
 		cfg.NodeName,
+		accessPolicyMode,
 	); err != nil {
 		return fmt.Errorf("setup driver: %w", err)
 	}
 
-	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint)
+	klog.V(2).InfoS("starting driver", "role", cfg.DriverRole, "endpoint", cfg.CSIEndpoint, "accessPolicyMode", accessPolicyMode)
 	linodeDriver.Run(ctx, cfg.CSIEndpoint)
 	return nil
 }

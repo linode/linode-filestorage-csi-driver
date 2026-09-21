@@ -3,6 +3,6 @@ kind: CSIDriver
 metadata:
   name: {{ .Values.driver.name }}
 spec:
-  attachRequired: true
+  attachRequired: {{ eq .Values.accessPolicy.mode "node" }}
   podInfoOnMount: false
   fsGroupPolicy: File

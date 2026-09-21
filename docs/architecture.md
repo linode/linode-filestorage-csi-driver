@@ -236,7 +236,7 @@ The Storage Space is untouched.
 
 ### ControllerPublishVolume and ControllerUnpublishVolume
 
-This driver sets `attachRequired: true`, so `csi-attacher` participates. "Attach" here means *authorize*, not *mount*:
+These RPCs participate only when `accessPolicy.mode=node`. In that mode the chart sets `attachRequired: true`, and "attach" means *authorize*, not *mount*:
 
 ```mermaid
 sequenceDiagram
@@ -257,6 +257,8 @@ sequenceDiagram
 `ControllerUnpublishVolume` is the mirror image and is idempotent in three ways: an empty node ID succeeds, a 404 on the filesystem succeeds, and a Linode that is not in the ACL succeeds. When it does remove an ID it preserves the policy's existing `enabled` value rather than forcing it.
 
 The update always re-sends `Label`, `Enabled`, `LinodeIDs`, and `SquashPolicy` (and `Protocols` when set), because the API treats the update as a replacement of the policy.
+
+In the default `space` mode, the controller does not advertise these RPCs and the chart sets `attachRequired: false`. Kubernetes proceeds directly to the node mount after scheduling and creates no `VolumeAttachment`.
 
 ## 🔌 Mount lifecycle
 

@@ -106,11 +106,13 @@ kubectl apply -f nfs-app.yaml
 kubectl exec nfs-app -- tail -n 3 /data/out.txt
 ```
 
-Three things happen between scheduling and a running pod:
+After scheduling, the sequence depends on `accessPolicy.mode`:
 
-1. **Attach.** `csi-attacher` calls `ControllerPublishVolume`, which adds that node's Linode to the filesystem's Linode ACL and waits for the access policy to become active. There is no block device involved; "attach" here means "authorize".
+1. **Authorize (`node` mode only).** `csi-attacher` calls `ControllerPublishVolume`, which adds that node's Linode to the filesystem's Linode ACL and waits for the access policy to become active. There is no block device involved.
 2. **Stage.** The node plugin mounts the filesystem's DNS name over NFSv4 at the kubelet staging path, once per node.
 3. **Publish.** The node plugin bind-mounts the staging path into the pod's target path.
+
+The default `space` mode skips step 1. The Space VPC ACL already authorizes cluster connectivity, and Kubernetes creates no `VolumeAttachment`.
 
 ## 4. Share one volume between pods
 
@@ -225,7 +227,7 @@ NAME                                       HANDLE    TARGET                     
 pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   42/1337   fs-1337.us-ord.nfs.linode.com      us-ord
 ```
 
-The handle is `{space_id}/{filesystem_id}`. To see which nodes are currently authorized, read the filesystem's access policy:
+The handle is `{space_id}/{filesystem_id}`. The filesystem access policy depends on the configured mode:
 
 ```sh
 curl -sS \
@@ -233,7 +235,7 @@ curl -sS \
   https://api.linode.com/v4beta/nfs/spaces/42/filesystems/1337/access-policy
 ```
 
-The `linode_acl` array is what the driver maintains through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
+In `space` mode, the policy remains disabled with an empty `linode_acl`. In `node` mode, the driver maintains the array through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
 
 ## 🚫 What is not supported
 
