@@ -223,6 +223,8 @@ kubectl describe pod <name> | tail -30
 
 ### Attachment never completes
 
+This applies only when `accessPolicy.mode=node`:
+
 ```text
 Unable to attach or mount volumes: ... volume attachment is being created
 ```
@@ -234,7 +236,7 @@ kubectl get volumeattachment | grep <pv-name>
 kubectl -n kube-system logs deploy/csi-linode-nfs-controller -c csi-attacher --tail=50
 ```
 
-A `DeadlineExceeded` here means the access policy is not settling; the attacher retries.
+A `DeadlineExceeded` here means the access policy is not settling; the attacher retries. In `space` mode, no `VolumeAttachment` should exist. If one does after changing modes, verify that the `CSIDriver` was recreated with `spec.attachRequired: false`.
 
 ### Mount times out
 
@@ -363,7 +365,7 @@ kubectl get volumeattachment | grep <pv>
 | Pods still using the PVC | Delete them. `kubernetes.io/pvc-protection` holds the PVC while any pod references it |
 | The driver was uninstalled first | Reinstall it, let the deletes drain, then uninstall again. Nothing else can satisfy the CSI finalizers |
 | `DeleteVolume` returns `PermissionDenied` | Token problem. Fix the token, restart the controller, and the delete retries |
-| `VolumeAttachment` stuck | Check the attacher log. `ControllerUnpublishVolume` returns success for an already-deleted filesystem, so a genuine hang here is an API or ACL wait |
+| `VolumeAttachment` stuck in `node` mode | Check the attacher log. `ControllerUnpublishVolume` returns success for an already-deleted filesystem, so a genuine hang here is an API or ACL wait |
 
 Force-removing a finalizer leaks the backend filesystem. If you do it deliberately, note `spec.csi.volumeHandle` first so you can delete the filesystem by hand.
 

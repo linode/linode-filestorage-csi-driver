@@ -31,10 +31,11 @@ Reaching an NFS export is not like attaching a block device. The path from a pod
    ▼
   Linode NFS filesystem
       guarded by: space access policy   (VPC ACL)
-                  filesystem access policy (Linode ACL, squash policy)
+                  filesystem squash policy
+                  filesystem Linode ACL (node mode only)
 ```
 
-Two independent guards sit in front of the data. A request has to satisfy both: the **space** policy has to admit the VPC, and the **filesystem** policy has to admit the specific Linode. The driver maintains one entry in each.
+The selected access-policy mode determines whether the VPC ACL is the only network authorization layer or whether each filesystem also restricts access to published Linodes.
 
 ## 🔒 VPC requirement
 
@@ -70,7 +71,16 @@ curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
 
 Look for an interface with `"purpose": "vpc"` and a non-null `vpc_id`.
 
-## 🚧 Two layers of access policy
+## 🚧 Access-policy modes
+
+The Helm value `accessPolicy.mode` selects one installation-wide authorization model:
+
+| Mode | Space VPC ACL | Filesystem Linode ACL | CSI attachment |
+| --- | --- | --- | --- |
+| `space` (default) | maintained | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
+| `node` | maintained | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
+
+`node` mode is not currently recommended. Every publish and unpublish performs an asynchronous filesystem policy replacement and waits for it to become active. Those operations serialize for a volume, causing severe delays as the number of nodes grows. In performance testing, ten pods mounting one existing RWX volume across ten nodes reached Ready in 4.73 seconds with `space` mode versus 874.99 seconds with `node` mode. Removing them took 1.24 seconds with `space` mode versus 1,135.13 seconds with `node` mode. These are point-in-time measurements rather than service guarantees, but the per-node policy waits are inherent to the current implementation.
 
 ### Space access policy: the VPC ACL
 
@@ -91,11 +101,13 @@ curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
 
 The driver never removes a VPC from this policy, including at uninstall. Decommissioning a cluster leaves a stale VPC entry behind for you to clean up.
 
+In `space` mode, the controller does not advertise `PUBLISH_UNPUBLISH_VOLUME` and the `CSIDriver` has `attachRequired: false`. Kubernetes mounts a scheduled volume without creating a `VolumeAttachment`. The filesystem access policy stays disabled with an empty Linode ACL. The selected squash policy is still stored on the filesystem policy and enforced by the backend.
+
 ### Filesystem access policy: the Linode ACL
 
-Scope: one filesystem.
+Scope: one filesystem. This layer is used only in `node` mode.
 
-This is what `ControllerPublishVolume` and `ControllerUnpublishVolume` actually do. There is no block device to attach; "attach" means "add this node's Linode to the ACL".
+`ControllerPublishVolume` and `ControllerUnpublishVolume` maintain the ACL. There is no block device to attach; "attach" means "add this node's Linode to the ACL".
 
 **On publish:**
 
@@ -116,9 +128,9 @@ This is what `ControllerPublishVolume` and `ControllerUnpublishVolume` actually 
 
 Both operations preserve the policy's label, squash policy, and protocol list, because the backend's update endpoint is a full replace and dropping a field would reset it.
 
-Note that publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL, which admits nothing but leaves the switch on.
+Publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL, which admits nothing but leaves the switch on.
 
-`ControllerGetVolume` surfaces this state to Kubernetes: the volume status lists the Linode IDs currently in the ACL as published node IDs, which is how a `kubectl describe pv` can disagree with reality if someone edited the ACL by hand.
+In `node` mode, `ControllerGetVolume` surfaces the Linode IDs currently in the ACL as published node IDs. That status can disagree with reality if someone edits the ACL by hand.
 
 ## 🎭 Squash policy
 

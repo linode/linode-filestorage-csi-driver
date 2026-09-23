@@ -2,6 +2,13 @@ package driver
 
 import csi "github.com/container-storage-interface/spec/lib/go/csi"
 
+type AccessPolicyMode string
+
+const (
+	AccessPolicyModeSpace AccessPolicyMode = "space"
+	AccessPolicyModeNode  AccessPolicyMode = "node"
+)
+
 func pluginCapabilities(role Role) []*csi.PluginCapability {
 	var capabilities []csi.PluginCapability_Service_Type
 
@@ -27,12 +34,14 @@ func pluginCapabilities(role Role) []*csi.PluginCapability {
 	return pc
 }
 
-func controllerServiceCapabilities() []*csi.ControllerServiceCapability {
+func controllerServiceCapabilities(accessPolicyMode AccessPolicyMode) []*csi.ControllerServiceCapability {
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+	}
+	if accessPolicyMode == AccessPolicyModeNode {
+		capabilities = append(capabilities, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
 	}
 
 	// Future post-v1 capabilities once core filesystem lifecycle is complete.
