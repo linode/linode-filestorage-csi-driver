@@ -271,7 +271,7 @@ That produces, in `release/`:
 - `helm-chart-v0.1.0.tgz`, a packaged chart with `version` set to the tag without its leading `v` and `appVersion` set to the tag.
 - `linode-filestorage-csi-driver-v0.1.0.yaml`, the Kustomize base with the `:dev` image tag rewritten to the release tag.
 
-Both are what the release workflow attaches to a GitHub release. The chart is also published to the `gh-pages` branch as a Helm repository index by chart-releaser, which is the same branch that serves this documentation site.
+Both are attached to the GitHub release. Chart-releaser also publishes the versioned chart package and Helm repository index to the `gh-pages` branch, which is the same branch that serves this documentation site.
 
 ## 📚 Related pages
 

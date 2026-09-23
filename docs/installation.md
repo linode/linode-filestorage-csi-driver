@@ -90,7 +90,7 @@ helm repo add linode-nfs-csi https://linode.github.io/linode-filestorage-csi-dri
 helm repo update linode-nfs-csi
 ```
 
-Every tagged release publishes the chart to that repository, so this is the only step that needs repeating when a new version lands.
+Every tagged release publishes a versioned chart package and repository index to that site, so this is the only step that needs repeating when a new version lands. The GitHub Pages site must be publicly accessible for users without repository access.
 
 #### 🚀 Deploy the CSI driver
 
