@@ -18,7 +18,6 @@ import (
 const (
 	fakeSanitySpaceID                  = 1
 	fakeSanityFilesystemStartID        = 10000
-	fakeSanitySnapshotStartID          = 20000
 	fakeSanityFilesystemCapacity int64 = 1 << 30
 )
 
@@ -33,9 +32,7 @@ type fakeSanityLinodeClient struct {
 	filesystems      map[int]linodego.NFSFilesystem
 	filesystemByName map[string]int
 	filesystemPolicy map[int]linodego.NFSFilesystemAccessPolicy
-	snapshots        map[int]linodego.NFSSnapshot
 	nextFilesystemID int
-	nextSnapshotID   int
 }
 
 func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
@@ -61,9 +58,7 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 		filesystems:      make(map[int]linodego.NFSFilesystem),
 		filesystemByName: make(map[string]int),
 		filesystemPolicy: make(map[int]linodego.NFSFilesystemAccessPolicy),
-		snapshots:        make(map[int]linodego.NFSSnapshot),
 		nextFilesystemID: fakeSanityFilesystemStartID,
-		nextSnapshotID:   fakeSanitySnapshotStartID,
 	}
 }
 
@@ -148,7 +143,7 @@ func (c *fakeSanityLinodeClient) ListNFSFilesystems(_ context.Context, spaceID i
 	return result, nil
 }
 
-func (c *fakeSanityLinodeClient) GetNFSFilesystem(_ context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystem, error) {
+func (c *fakeSanityLinodeClient) GetNFSFilesystemInSpace(_ context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	filesystem, err := c.filesystemLocked(spaceID, filesystemID)
@@ -219,12 +214,7 @@ func (c *fakeSanityLinodeClient) DeleteNFSFilesystem(_ context.Context, spaceID,
 	delete(c.filesystems, filesystemID)
 	delete(c.filesystemByName, fakeSanityFilesystemName(spaceID, filesystem.Label))
 	delete(c.filesystemPolicy, filesystemID)
-	for snapshotID := range c.snapshots {
-		snapshot := c.snapshots[snapshotID]
-		if snapshot.SpaceID == spaceID && snapshot.FilesystemID == filesystemID {
-			delete(c.snapshots, snapshotID)
-		}
-	}
+	// TODO: Delete snapshots with their filesystem when upstream linodego exposes the NFS snapshot API.
 	return nil
 }
 
@@ -363,6 +353,8 @@ func (c *fakeSanityLinodeClient) WaitForNFSFilesystemAccessPolicyStatus(_ contex
 	return &result, nil
 }
 
+// TODO: Restore the NFS snapshot fake when upstream linodego exposes the API.
+/*
 func (c *fakeSanityLinodeClient) ListNFSSnapshots(_ context.Context, spaceID, filesystemID int, _ *linodego.ListOptions) ([]linodego.NFSSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -517,6 +509,7 @@ func (c *fakeSanityLinodeClient) CloneNFSSnapshot(_ context.Context, spaceID, fi
 	result := cloneSanityFilesystem(&filesystem)
 	return &result, nil
 }
+*/
 
 func (c *fakeSanityLinodeClient) requireSpaceLocked(spaceID int) error {
 	if spaceID != c.space.ID {
@@ -536,6 +529,8 @@ func (c *fakeSanityLinodeClient) filesystemLocked(spaceID, filesystemID int) (li
 	return filesystem, nil
 }
 
+// TODO: Restore this NFS snapshot helper when upstream linodego exposes the API.
+/*
 func (c *fakeSanityLinodeClient) snapshotLocked(spaceID, filesystemID, snapshotID int) (linodego.NFSSnapshot, error) {
 	if _, err := c.filesystemLocked(spaceID, filesystemID); err != nil {
 		return linodego.NFSSnapshot{}, err
@@ -546,6 +541,7 @@ func (c *fakeSanityLinodeClient) snapshotLocked(spaceID, filesystemID, snapshotI
 	}
 	return snapshot, nil
 }
+*/
 
 // These checks mirror the API's currently supported filesystem-create values so
 // the fake rejects requests production would reject.
@@ -623,7 +619,7 @@ func validateSanityFilesystemPolicy(opts linodego.NFSFilesystemAccessPolicyUpdat
 func newSanityFilesystem(id, spaceID int, opts linodego.NFSFilesystemCreateOptions, sourceSnapshotID *int) linodego.NFSFilesystem {
 	now := time.Now().UTC()
 	return linodego.NFSFilesystem{
-		ID: id, SpaceID: spaceID, Label: opts.Label, Region: opts.Region,
+		ID: id, SpaceID: spaceID, Label: opts.Label, Region: opts.Region, MaxCapacityBytes: opts.MaxCapacityBytes,
 		ProtocolVersions: append([]linodego.NFSProtocolVersion(nil), (*opts.ProtocolVersions)...),
 		Status:           linodego.NFSFilesystemStatusActive,
 		SourceSnapshotID: cloneSanityInt(sourceSnapshotID),
@@ -638,13 +634,11 @@ func activateSanityFilesystem(filesystem *linodego.NFSFilesystem) {
 	mountPath := fmt.Sprintf("/%s-%x", filesystem.Label, filesystem.ID)
 	mountTarget := fmt.Sprintf("sanity-space-%x.nfs.%s.linode.com:%s", filesystem.SpaceID, filesystem.Region, mountPath)
 	usedCapacity := int64(0)
-	maxCapacity := fakeSanityFilesystemCapacity
 	filesystem.Status = linodego.NFSFilesystemStatusActive
 	filesystem.MountTargetIPs = []string{fmt.Sprintf("[2001:db8::%x]:%s", filesystem.ID, mountPath)}
 	filesystem.MountTargetFQDN = &mountTarget
 	filesystem.Stats = linodego.NFSFilesystemStats{
 		UsedCapacityBytes: &usedCapacity,
-		MaxCapacityBytes:  &maxCapacity,
 		CollectedAt:       now,
 	}
 	filesystem.Updated = now
@@ -676,10 +670,13 @@ func sanityFilesystemCreateCompatible(filesystem *linodego.NFSFilesystem, opts l
 		slices.Equal(filesystem.Tags, cloneSanityStrings(opts.Tags))
 }
 
+// TODO: Restore this NFS snapshot helper when upstream linodego exposes the API.
+/*
 func sanitySnapshotCloneCompatible(filesystem *linodego.NFSFilesystem, snapshotID int, opts linodego.NFSSnapshotCloneOptions) bool {
 	return filesystem.SourceSnapshotID != nil && *filesystem.SourceSnapshotID == snapshotID &&
 		filesystem.Region == opts.Region && slices.Equal(filesystem.Tags, cloneSanityStrings(opts.Tags))
 }
+*/
 
 func fakeSanityFilesystemName(spaceID int, label string) string {
 	return fmt.Sprintf("%d/%s", spaceID, label)
@@ -721,12 +718,13 @@ func cloneSanityFilesystem(filesystem *linodego.NFSFilesystem) linodego.NFSFiles
 	result.Tags = append([]string(nil), filesystem.Tags...)
 	result.Stats = linodego.NFSFilesystemStats{
 		UsedCapacityBytes: cloneSanityInt64(filesystem.Stats.UsedCapacityBytes),
-		MaxCapacityBytes:  cloneSanityInt64(filesystem.Stats.MaxCapacityBytes),
 		CollectedAt:       cloneSanityTime(filesystem.Stats.CollectedAt),
 	}
 	return result
 }
 
+// TODO: Restore this NFS snapshot helper when upstream linodego exposes the API.
+/*
 func cloneSanitySnapshot(snapshot *linodego.NFSSnapshot) linodego.NFSSnapshot {
 	result := *snapshot
 	result.Created = cloneSanityTime(snapshot.Created)
@@ -735,6 +733,7 @@ func cloneSanitySnapshot(snapshot *linodego.NFSSnapshot) linodego.NFSSnapshot {
 	result.Tags = append([]string(nil), snapshot.Tags...)
 	return result
 }
+*/
 
 func cloneSanitySpacePolicy(policy *linodego.NFSSpaceAccessPolicy) linodego.NFSSpaceAccessPolicy {
 	result := *policy
