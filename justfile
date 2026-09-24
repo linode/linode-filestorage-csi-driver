@@ -9,7 +9,8 @@ LINODE_REGION := env('LINODE_REGION', 'us-ord')
 CLUSTER_NAME := env('CLUSTER_NAME', "nfs-csi-driver-dev")
 KUBECONFIG := env('KUBECONFIG', CLUSTER_NAME + "-kubeconfig")
 LINODE_CLI_API_VERSION := env('LINODE_CLI_API_VERSION', "v4beta")
-LINODE_CLI_API_HOST := env('LINODE_CLI_API_HOST', "api.linode.com")
+LINODE_URL := env('LINODE_URL', "https://api.linode.com")
+LINODE_CLI_API_HOST := trim_start_match(LINODE_URL, "https://")
 LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-2')
 STACK_TYPE := env('STACK_TYPE', 'ipv4-ipv6')
 NODEPOOL_SIZE := env('NODEPOOL_SIZE', '3')
@@ -116,6 +117,7 @@ helm-install:
     helm upgrade --install --namespace kube-system --create-namespace linode-nfs-csi-driver charts/linode-nfs-csi-driver \
         --set image.repository={{ IMAGE_REPO }} \
         --set image.tag={{ IMAGE_VERSION }} \
+        --set linodeURL={{ LINODE_URL }} \
         --set apiToken=$LINODE_TOKEN
 
 # Create an LKE test cluster
