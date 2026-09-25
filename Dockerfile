@@ -14,7 +14,7 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-w -s -X main.vendorVersion=${REV}" \
     -o /linode-filestorage-csi-driver .
 
-FROM alpine:3.23.3
+FROM alpine:3.24.2
 
 RUN apk add --no-cache ca-certificates nfs-utils
 
