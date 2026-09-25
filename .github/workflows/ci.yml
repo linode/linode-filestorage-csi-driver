@@ -9,6 +9,12 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   ci:
@@ -32,6 +38,9 @@ jobs:
             results-receiver.actions.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
             sum.golang.org:443
+            cli.codecov.io:443
+            api.codecov.io:443
+            ingest.codecov.io:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,3 +51,11 @@ jobs:
       - name: Run CI
         run: mise run ci
 
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: linode/linode-filestorage-csi-driver
