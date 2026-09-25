@@ -19,8 +19,8 @@
 <a href="https://github.com/linode/linode-filestorage-csi-driver/actions/workflows/release.yml">
 <img src="https://github.com/linode/linode-filestorage-csi-driver/actions/workflows/release.yml/badge.svg"></a>
 <!-- codecov badge -->
-<a href="https://codecov.io/github/linode/linode-filestorage-csi-driver-linode">
-<img src="https://codecov.io/github/linode/linode-filestorage-csi-driver-linode/graph/badge.svg?token=YQFKF86KJ6"/></a>
+<a href="https://codecov.io/gh/linode/linode-filestorage-csi-driver" >
+<img src="https://codecov.io/gh/linode/linode-filestorage-csi-driver/graph/badge.svg?token=Z2L8SN8K8R"/></a>
 </p>
 
 ## Table of Contents

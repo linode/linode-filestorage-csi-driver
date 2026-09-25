@@ -11,6 +11,7 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
+  id-token: write
 
 concurrency:
   group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
@@ -41,6 +42,7 @@ jobs:
             cli.codecov.io:443
             api.codecov.io:443
             ingest.codecov.io:443
+            storage.googleapis.com:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
