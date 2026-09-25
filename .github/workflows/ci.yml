@@ -42,6 +42,7 @@ jobs:
             cli.codecov.io:443
             api.codecov.io:443
             ingest.codecov.io:443
+            storage.googleapis.com:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
