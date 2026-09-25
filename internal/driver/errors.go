@@ -13,7 +13,6 @@ var (
 	errNilDriver                  = status.Error(codes.Internal, "nil driver")
 	errNilMounter                 = status.Error(codes.Internal, "nil mounter")
 	errNoVolumeName               = status.Error(codes.InvalidArgument, "volume name is required")
-	errNoSnapshotName             = status.Error(codes.InvalidArgument, "snapshot name is required")
 	errNoVolumeCapabilities       = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability         = status.Error(codes.InvalidArgument, "no volume capability set")
 	errNoMountVolumeCapability    = status.Error(codes.InvalidArgument, "no mount volume capability set")
@@ -29,6 +28,8 @@ var (
 	errClusterVPCNotFound         = errors.New("cluster VPC not found")
 	errLinodeClientNotFound       = errors.New("linode client not found or is nil")
 	ErrTokenRequired              = errors.New("linode token required for controller role")
+	// TODO: Restore the snapshot error when the NFS snapshot API is available.
+	// errNoSnapshotName = status.Error(codes.InvalidArgument, "snapshot name is required")
 )
 
 // errInternal is a convenience function to return a gRPC error with an

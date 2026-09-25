@@ -3,7 +3,6 @@ package driver
 import (
 	"context"
 	"errors"
-	"net/http"
 	"slices"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -51,6 +50,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
+	if snapshot != nil {
+		// TODO: Remove this block and uncomment the snapshot restore logic when supported.
+		return nil, status.Error(codes.Unimplemented, "snapshot-based volume creation is temporarily unavailable")
+	}
 
 	params, err := parseCreateVolumeParameters(req.GetParameters())
 	if err != nil {
@@ -81,15 +84,17 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return s.handleExistingFilesystem(ctx, existing, &params, cluster.VPCID, req.GetCapacityRange(), snapshot)
 	}
 
-	if snapshot != nil {
-		// Snapshot restores target the cluster's region. Source-region validation is
-		// deferred until cross-region CSI behavior is explicitly defined.
-		return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
-	}
+	// TODO: Remove the Unimplemented error above and uncomment this block when snapshot restore is supported.
+	// if snapshot != nil {
+	// 	// Snapshot restores target the cluster's region. Source-region validation is
+	// 	// deferred until cross-region CSI behavior is explicitly defined.
+	// 	return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
+	// }
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
 		Label:            label,
 		Region:           params.region,
+		MaxCapacityBytes: capacityBytes,
 		ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 	}
 	if params.tags != nil {
@@ -247,7 +252,7 @@ func (s *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *
 		}
 	}
 
-	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	filesystem, err := s.client.GetNFSFilesystemInSpace(ctx, handle.spaceID, handle.filesystemID)
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
 	}
@@ -311,7 +316,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 		return nil, err
 	}
 
-	filesystem, err := s.client.GetNFSFilesystem(ctx, handle.spaceID, handle.filesystemID)
+	filesystem, err := s.client.GetNFSFilesystemInSpace(ctx, handle.spaceID, handle.filesystemID)
 	if err != nil {
 		return nil, linodeError(err, "get NFS filesystem")
 	}
@@ -330,6 +335,8 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	}, nil
 }
 
+// TODO: Restore CSI snapshot RPCs when upstream linodego exposes the NFS snapshot API.
+/*
 func (s *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "CreateSnapshot")
 
@@ -442,3 +449,4 @@ func (s *ControllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnaps
 	}
 	return s.listSnapshotsBySourceVolume(ctx, sourceVolumeID, req.GetStartingToken(), maxEntries)
 }
+*/

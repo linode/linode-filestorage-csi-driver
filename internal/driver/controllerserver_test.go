@@ -2,31 +2,25 @@ package driver
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/linode/linodego/v2"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
-	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 const testVolumeID = "123/456"
 
-var (
-	timestamp = new(time.Now())
-)
+// TODO: Restore the snapshot timestamp and its time/timestamppb imports when snapshot tests are re-enabled.
+// var timestamp = new(time.Now())
 
 type controllerTestEnv struct {
 	client *mocks.MockLinodeClient
@@ -81,6 +75,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 					CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{
 						Label:            "pvc-abc",
 						Region:           "us-east",
+						MaxCapacityBytes: 1024,
 						ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 						Tags:             new([]string{"tag-a", "tag-b"}),
 					})).
@@ -137,6 +132,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 					CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{
 						Label:            "sanity-test-volume",
 						Region:           "us-east",
+						MaxCapacityBytes: 1024,
 						ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
 					})).
 					Return(&linodego.NFSFilesystem{
@@ -159,73 +155,76 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				})
 			},
 		},
-		{
-			name: "lowercases an uppercase name when cloning a snapshot",
-			request: &csi.CreateVolumeRequest{
-				Name:          "Sanity-TEST-Restore",
-				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
-				Parameters: map[string]string{
-					storageClassParamSpaceID: "1123",
-					storageClassParamTags:    "tag-a",
-				},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-				VolumeContentSource: &csi.VolumeContentSource{
-					Type: &csi.VolumeContentSource_Snapshot{
-						Snapshot: &csi.VolumeContentSource_SnapshotSource{
-							SnapshotId: "123/4567/890",
+		// TODO: Restore snapshot clone tests when upstream linodego exposes the NFS snapshot API.
+		/*
+			{
+				name: "lowercases an uppercase name when cloning a snapshot",
+				request: &csi.CreateVolumeRequest{
+					Name:          "Sanity-TEST-Restore",
+					CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
+					Parameters: map[string]string{
+						storageClassParamSpaceID: "1123",
+						storageClassParamTags:    "tag-a",
+					},
+					VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+					VolumeContentSource: &csi.VolumeContentSource{
+						Type: &csi.VolumeContentSource_Snapshot{
+							Snapshot: &csi.VolumeContentSource_SnapshotSource{
+								SnapshotId: "123/4567/890",
+							},
 						},
 					},
 				},
+				setup: func(t *testing.T, env controllerTestEnv) {
+					t.Helper()
+					filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "sanity-test-restore", "region": "us-east"})
+					expectSingleNodeCluster(env, 123456)
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), 1123).Return(&linodego.NFSSpace{ID: 1123}, nil)
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 1123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+					cloneFilesystem := env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
+						Label:   "sanity-test-restore",
+						Region:  "us-east",
+						SpaceID: new(new(1123)),
+						Tags:    new([]string{"tag-a"}),
+					}).Return(&linodego.NFSFilesystem{
+						ID:               890,
+						SourceSnapshotID: new(890),
+						SpaceID:          1123,
+						Label:            "sanity-test-restore",
+						Region:           "us-east",
+						Status:           linodego.NFSFilesystemStatusCreating,
+					}, nil)
+					waitForFilesystem := env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 1123, 890, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
+						ID:               890,
+						SourceSnapshotID: new(890),
+						SpaceID:          1123,
+						MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315"),
+						Label:            "sanity-test-restore",
+						Region:           "us-east",
+						Status:           linodego.NFSFilesystemStatusActive,
+						Tags:             []string{"tag-a"},
+					}, nil)
+					spacePolicyCalls := expectSpaceVPCAssociation(env, 1123, "space-policy", 123456, linodego.NFSMTLSModeOptional)
+					gomock.InOrder(
+						cloneFilesystem,
+						waitForFilesystem,
+						spacePolicyCalls[0],
+						spacePolicyCalls[1],
+						spacePolicyCalls[2],
+					)
+				},
+				assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
+					t.Helper()
+					assertCreateVolumeResponse(t, response, "1123/890", 3*1024*1024*1024, map[string]string{
+						volumeContextSpaceID:       "1123",
+						volumeContextFilesystemID:  "890",
+						volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315",
+						volumeContextRegion:        "us-east",
+						volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+					})
+				},
 			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "sanity-test-restore", "region": "us-east"})
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 1123).Return(&linodego.NFSSpace{ID: 1123}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 1123, gomock.Eq(filesystemOptions)).Return(nil, nil)
-				cloneFilesystem := env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
-					Label:   "sanity-test-restore",
-					Region:  "us-east",
-					SpaceID: new(new(1123)),
-					Tags:    new([]string{"tag-a"}),
-				}).Return(&linodego.NFSFilesystem{
-					ID:               890,
-					SourceSnapshotID: new(890),
-					SpaceID:          1123,
-					Label:            "sanity-test-restore",
-					Region:           "us-east",
-					Status:           linodego.NFSFilesystemStatusCreating,
-				}, nil)
-				waitForFilesystem := env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 1123, 890, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
-					ID:               890,
-					SourceSnapshotID: new(890),
-					SpaceID:          1123,
-					MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315"),
-					Label:            "sanity-test-restore",
-					Region:           "us-east",
-					Status:           linodego.NFSFilesystemStatusActive,
-					Tags:             []string{"tag-a"},
-				}, nil)
-				spacePolicyCalls := expectSpaceVPCAssociation(env, 1123, "space-policy", 123456, linodego.NFSMTLSModeOptional)
-				gomock.InOrder(
-					cloneFilesystem,
-					waitForFilesystem,
-					spacePolicyCalls[0],
-					spacePolicyCalls[1],
-					spacePolicyCalls[2],
-				)
-			},
-			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
-				t.Helper()
-				assertCreateVolumeResponse(t, response, "1123/890", 3*1024*1024*1024, map[string]string{
-					volumeContextSpaceID:       "1123",
-					volumeContextFilesystemID:  "890",
-					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315",
-					volumeContextRegion:        "us-east",
-					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
-				})
-			},
-		},
+		*/
 		{
 			name: "returns existing compatible filesystem",
 			request: &csi.CreateVolumeRequest{
@@ -435,11 +434,11 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
 				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
 					ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east",
-					Stats: linodego.NFSFilesystemStats{MaxCapacityBytes: &existingCapacity},
+					MaxCapacityBytes: existingCapacity,
 				}}, nil)
 				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
 					ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east",
-					Stats: linodego.NFSFilesystemStats{MaxCapacityBytes: &existingCapacity},
+					MaxCapacityBytes: existingCapacity,
 				}, nil)
 			},
 			wantCode: codes.AlreadyExists,
@@ -480,99 +479,102 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 			wantCode:    codes.InvalidArgument,
 			wantMessage: "snapshot id is required",
 		},
-		{
-			name: "returns not found for an unknown structured snapshot source",
-			request: &csi.CreateVolumeRequest{
-				Name:          "pvc-abc",
-				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
-				Parameters: map[string]string{
-					storageClassParamSpaceID: "123",
-					storageClassParamTags:    "tag-a",
-				},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-				VolumeContentSource: &csi.VolumeContentSource{
-					Type: &csi.VolumeContentSource_Snapshot{
-						Snapshot: &csi.VolumeContentSource_SnapshotSource{SnapshotId: "123/4567/890"},
+		// TODO: Restore snapshot clone tests when upstream linodego exposes the NFS snapshot API.
+		/*
+			{
+				name: "returns not found for an unknown structured snapshot source",
+				request: &csi.CreateVolumeRequest{
+					Name:          "pvc-abc",
+					CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
+					Parameters: map[string]string{
+						storageClassParamSpaceID: "123",
+						storageClassParamTags:    "tag-a",
 					},
-				},
-			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
-				env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, gomock.Any()).Return(nil, linodeAPIError(http.StatusNotFound))
-			},
-			wantCode: codes.NotFound,
-		},
-		{
-			name: "Gateway timeout while cloning",
-			request: &csi.CreateVolumeRequest{
-				Name:          "pvc-abc",
-				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
-				Parameters: map[string]string{
-					storageClassParamSpaceID: "123",
-					storageClassParamTags:    "tag-a",
-				},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-				VolumeContentSource: &csi.VolumeContentSource{
-					Type: &csi.VolumeContentSource_Snapshot{
-						Snapshot: &csi.VolumeContentSource_SnapshotSource{
-							SnapshotId: "123/4567/890",
+					VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+					VolumeContentSource: &csi.VolumeContentSource{
+						Type: &csi.VolumeContentSource_Snapshot{
+							Snapshot: &csi.VolumeContentSource_SnapshotSource{SnapshotId: "123/4567/890"},
 						},
 					},
 				},
-			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
-				env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
-					Label:   "pvc-abc",
-					Region:  "us-east",
-					SpaceID: new(new(123)),
-					Tags:    new([]string{"tag-a"}),
-				}).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout, Message: "unavailable"})
-			},
-			wantCode: codes.Unavailable,
-		},
-		{
-			name: "fails while waiting for cloned filesystem",
-			request: &csi.CreateVolumeRequest{
-				Name:          "pvc-abc",
-				CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
-				Parameters: map[string]string{
-					storageClassParamSpaceID: "123",
-					storageClassParamTags:    "tag-a",
+				setup: func(t *testing.T, env controllerTestEnv) {
+					t.Helper()
+					filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+					expectSingleNodeCluster(env, 123456)
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+					env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, gomock.Any()).Return(nil, linodeAPIError(http.StatusNotFound))
 				},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-				VolumeContentSource: &csi.VolumeContentSource{
-					Type: &csi.VolumeContentSource_Snapshot{
-						Snapshot: &csi.VolumeContentSource_SnapshotSource{
-							SnapshotId: "123/4567/890",
+				wantCode: codes.NotFound,
+			},
+			{
+				name: "Gateway timeout while cloning",
+				request: &csi.CreateVolumeRequest{
+					Name:          "pvc-abc",
+					CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
+					Parameters: map[string]string{
+						storageClassParamSpaceID: "123",
+						storageClassParamTags:    "tag-a",
+					},
+					VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+					VolumeContentSource: &csi.VolumeContentSource{
+						Type: &csi.VolumeContentSource_Snapshot{
+							Snapshot: &csi.VolumeContentSource_SnapshotSource{
+								SnapshotId: "123/4567/890",
+							},
 						},
 					},
 				},
+				setup: func(t *testing.T, env controllerTestEnv) {
+					t.Helper()
+					filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+					expectSingleNodeCluster(env, 123456)
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+					env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
+						Label:   "pvc-abc",
+						Region:  "us-east",
+						SpaceID: new(new(123)),
+						Tags:    new([]string{"tag-a"}),
+					}).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout, Message: "unavailable"})
+				},
+				wantCode: codes.Unavailable,
 			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
-				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
-				env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
-					Label:   "pvc-abc",
-					Region:  "us-east",
-					SpaceID: new(new(123)),
-					Tags:    new([]string{"tag-a"}),
-				}).Return(&linodego.NFSFilesystem{ID: 890, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 890, linodego.NFSFilesystemStatusActive).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout})
+			{
+				name: "fails while waiting for cloned filesystem",
+				request: &csi.CreateVolumeRequest{
+					Name:          "pvc-abc",
+					CapacityRange: &csi.CapacityRange{RequiredBytes: 3 * 1024 * 1024 * 1024},
+					Parameters: map[string]string{
+						storageClassParamSpaceID: "123",
+						storageClassParamTags:    "tag-a",
+					},
+					VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+					VolumeContentSource: &csi.VolumeContentSource{
+						Type: &csi.VolumeContentSource_Snapshot{
+							Snapshot: &csi.VolumeContentSource_SnapshotSource{
+								SnapshotId: "123/4567/890",
+							},
+						},
+					},
+				},
+				setup: func(t *testing.T, env controllerTestEnv) {
+					t.Helper()
+					filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+					expectSingleNodeCluster(env, 123456)
+					env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+					env.client.EXPECT().CloneNFSSnapshot(gomock.Any(), 123, 4567, 890, linodego.NFSSnapshotCloneOptions{
+						Label:   "pvc-abc",
+						Region:  "us-east",
+						SpaceID: new(new(123)),
+						Tags:    new([]string{"tag-a"}),
+					}).Return(&linodego.NFSFilesystem{ID: 890, SpaceID: 123, Label: "pvc-abc", Region: "us-east"}, nil)
+					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 890, linodego.NFSFilesystemStatusActive).Return(nil, &linodego.Error{Code: http.StatusGatewayTimeout})
+				},
+				wantCode: codes.Unavailable,
 			},
-			wantCode: codes.Unavailable,
-		},
+		*/
 	}
 
 	for _, tt := range tests {
@@ -582,6 +584,8 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 	}
 }
 
+// TODO: Restore snapshot clone contract tests when upstream linodego exposes the NFS snapshot API.
+/*
 func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 	newRequest := func() *csi.CreateVolumeRequest {
 		return &csi.CreateVolumeRequest{
@@ -736,6 +740,7 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 		runCreateVolumeTest(t, request, nil, codes.InvalidArgument, nil, "unsupported volume content source")
 	})
 }
+*/
 
 func runCreateVolumeTest(t *testing.T, request *csi.CreateVolumeRequest, setup func(*testing.T, controllerTestEnv), wantCode codes.Code, assert func(*testing.T, *csi.CreateVolumeResponse), wantMessage string) {
 	t.Helper()
@@ -1132,7 +1137,7 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
 			},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
+				env.client.EXPECT().GetNFSFilesystemInSpace(gomock.Any(), 123, 456).Return(nil, linodeAPIError(http.StatusNotFound))
 			},
 			wantCode: codes.NotFound,
 		},
@@ -1143,7 +1148,7 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
 			},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystemInSpace(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
@@ -1203,7 +1208,7 @@ func TestControllerGetVolume(t *testing.T) {
 			name:    "returns filesystem metadata",
 			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystemInSpace(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
@@ -1232,7 +1237,7 @@ func TestControllerGetVolume(t *testing.T) {
 			name:    "omits published nodes when policy disabled",
 			request: &csi.ControllerGetVolumeRequest{VolumeId: testVolumeID},
 			setup: func(env controllerTestEnv) {
-				env.client.EXPECT().GetNFSFilesystem(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
+				env.client.EXPECT().GetNFSFilesystemInSpace(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystem{
 					ID:              456,
 					SpaceID:         123,
 					Region:          "us-east",
@@ -1315,6 +1320,8 @@ func TestControllerGetCapabilities(t *testing.T) {
 	}
 }
 
+// TODO: Restore CSI snapshot tests when upstream linodego exposes the NFS snapshot API.
+/*
 func TestControllerServerCreateSnapshot(t *testing.T) {
 	snapshotListOptions := &linodego.ListOptions{
 		PageOptions: &linodego.PageOptions{},
@@ -1780,6 +1787,7 @@ func TestControllerServerListSnapshots(t *testing.T) {
 		})
 	}
 }
+*/
 
 func TestControllerServerUnimplementedRPCs(t *testing.T) {
 	tests := []struct {
@@ -1819,6 +1827,8 @@ func mountCapability(mode csi.VolumeCapability_AccessMode_Mode) *csi.VolumeCapab
 	}
 }
 
+// TODO: Restore snapshot test helpers when the NFS snapshot API is available.
+/*
 func listSnapshotsResponse(snapshots ...*csi.Snapshot) *csi.ListSnapshotsResponse {
 	return listSnapshotsResponseWithToken("", snapshots...)
 }
@@ -1844,6 +1854,7 @@ func csiSnapshotForTest(sizeBytes int64, snapshotID, sourceVolumeID string, read
 		ReadyToUse:     ready,
 	}
 }
+*/
 
 func linodeAPIError(code int) error {
 	return &linodego.Error{Code: code, Message: http.StatusText(code)}

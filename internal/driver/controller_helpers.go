@@ -15,9 +15,6 @@ import (
 	"github.com/linode/linodego/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
-	"github.com/linode/linode-filestorage-csi-driver/pkg/util"
 )
 
 const waitTimeout = 5 * time.Minute
@@ -220,11 +217,11 @@ func requestedCapacityBytes(capacityRange *csi.CapacityRange) int64 {
 }
 
 func validateExistingFilesystemCapacity(filesystem *linodego.NFSFilesystem, capacityRange *csi.CapacityRange) error {
-	if filesystem.Stats.MaxCapacityBytes == nil {
+	if filesystem.MaxCapacityBytes == 0 {
 		return nil
 	}
 
-	capacityBytes := *filesystem.Stats.MaxCapacityBytes
+	capacityBytes := filesystem.MaxCapacityBytes
 	if capacityRange.GetRequiredBytes() > capacityBytes || (capacityRange.GetLimitBytes() != 0 && capacityBytes > capacityRange.GetLimitBytes()) {
 		return status.Errorf(codes.AlreadyExists, "NFS filesystem %q already exists with incompatible capacity %d", filesystem.Label, capacityBytes)
 	}
@@ -601,6 +598,8 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 
+// TODO: Restore NFS snapshot helpers when upstream linodego exposes the API.
+/*
 func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID, vpcID int, params *createVolumeParameters, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
 	options := linodego.NFSSnapshotCloneOptions{
 		Label:   label,
@@ -634,6 +633,7 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 	}
 	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
+*/
 
 func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
 	if len(subnets) == 0 {
@@ -673,6 +673,8 @@ func (s *ControllerServer) waitForFilesystemAccessPolicyActive(ctx context.Conte
 	return nil
 }
 
+// TODO: Restore NFS snapshot helpers when upstream linodego exposes the API.
+/*
 func (s *ControllerServer) findSnapshotByLabel(ctx context.Context, handle volumeHandle, label string) (*linodego.NFSSnapshot, error) {
 	snapshots, err := s.client.ListNFSSnapshots(ctx, handle.spaceID, handle.filesystemID, &linodego.ListOptions{
 		PageOptions: &linodego.PageOptions{},
@@ -855,3 +857,4 @@ func paginateSnapshots(snapshots []linodego.NFSSnapshot, startingToken string, o
 
 	return snapshots[offset:end], nextToken, nil
 }
+*/
