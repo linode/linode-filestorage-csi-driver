@@ -31,6 +31,7 @@ jobs:
             release-assets.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
+            sum.golang.org:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
