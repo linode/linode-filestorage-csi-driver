@@ -2,7 +2,7 @@ module github.com/linode/linode-filestorage-csi-driver
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.27.1
 
 require (
 	github.com/container-storage-interface/spec v1.12.0
