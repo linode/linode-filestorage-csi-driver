@@ -11,6 +11,7 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
+  id-token: write
 
 concurrency:
   group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
