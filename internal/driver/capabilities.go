@@ -38,7 +38,8 @@ func controllerServiceCapabilities(accessPolicyMode AccessPolicyMode) []*csi.Con
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
-		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		// TODO: Advertise CREATE_DELETE_SNAPSHOT when upstream linodego exposes the NFS snapshot API.
+		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
 	if accessPolicyMode == AccessPolicyModeNode {
 		capabilities = append(capabilities, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
