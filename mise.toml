@@ -2,7 +2,7 @@
 minimum_release_age = "7d"  # only install versions released more than 7 days ago - https://mise.en.dev/security.html#minimum-release-age
 
 [tools]
-go = "1.26.8"
+go = "1.27.1"
 kubectl = "1.36.3"
 helm = "4.2.3"
 golangci-lint = "2.12.2"
