@@ -7,8 +7,8 @@ toolchain go1.26.8
 require (
 	github.com/container-storage-interface/spec v1.12.0
 	github.com/kubernetes-csi/csi-test/v5 v5.5.0
-	github.com/linode/go-metadata v0.3.0
-	github.com/linode/linodego/v2 v2.0.0-20260706173454-70f8a82f6bbd
+	github.com/linode/go-metadata v0.3.1
+	github.com/linode/linodego/v2 v2.7.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/sys v0.48.0
@@ -77,4 +77,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/linode/linodego/v2 => github.com/linode/linodego/v2 v2.6.1-0.20260922180641-82aa2b3a8819
+replace github.com/linode/linodego/v2 => github.com/linode/linodego/v2 v2.7.0
