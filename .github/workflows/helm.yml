@@ -43,18 +43,9 @@ jobs:
       - name: Set up Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
 
-      # Each job has a separate runner; helm-release repeats this tag lookup
-      # and metadata update in its own workspace before publishing.
-      - name: Set chart version from Git tag
-        run: |
-          TAG="$(git describe --tags --abbrev=0)"
-          TAG="${TAG#helm-}"
-          if [[ "$TAG" != v* ]]; then
-            TAG="v$TAG"
-          fi
-          CHART_VERSION="${TAG#v}"
-          export TAG CHART_VERSION
-          yq -i '.version = strenv(CHART_VERSION) | .appVersion = strenv(TAG)' charts/linode-nfs-csi-driver/Chart.yaml
+      # Each job has a separate runner, so each runs the same tag-versioning task.
+      - name: Set chart version
+        run: mise run set-chart-version
 
       - name: Lint chart
         run: mise run helm-lint
@@ -83,16 +74,8 @@ jobs:
       - name: Set up Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
 
-      - name: Set chart version from Git tag
-        run: |
-          TAG="$(git describe --tags --abbrev=0)"
-          TAG="${TAG#helm-}"
-          if [[ "$TAG" != v* ]]; then
-            TAG="v$TAG"
-          fi
-          CHART_VERSION="${TAG#v}"
-          export TAG CHART_VERSION
-          yq -i '.version = strenv(CHART_VERSION) | .appVersion = strenv(TAG)' charts/linode-nfs-csi-driver/Chart.yaml
+      - name: Set chart version
+        run: mise run set-chart-version
 
       - name: Configure Git
         run: |

@@ -261,7 +261,7 @@ Because the whole thing is in-process and hermetic, a sanity failure is a real p
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | Push to `main`, every PR | `mise run ci`: `fmt`, `gen-mock`, `vet`, `lint`, `test`, `build` |
-| `helm.yml` | PRs touching `charts/`, `deploy/kubernetes/`, the hack scripts, `justfile`, or `mise.toml`; GitHub release events | Lints the chart and verifies Kustomize output; publishes chart packages and the Helm index via chart-releaser. |
+| `helm.yml` | PRs touching `charts/`, `deploy/kubernetes/`, the hack scripts, `justfile`, or `mise.toml`; GitHub release events | Sets chart metadata via `mise run set-chart-version`, lints the chart, verifies Kustomize, and publishes chart packages and the Helm index. |
 | `actionlint.yml` | Workflow changes | Lints the workflow files. |
 | `image-build-push.yml` | See the workflow | Builds and publishes images. |
 | `release.yml` | Tags | Builds the image and attaches release artifacts. |
