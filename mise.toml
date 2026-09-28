@@ -56,6 +56,10 @@ run = "just docker-publish"
 description = "Lint Helm charts"
 run = "just helm-lint"
 
+[tasks.set-chart-version]
+description = "Set Helm chart metadata from the current Git tag"
+run = "just set-chart-version"
+
 [tasks.update-kustomize]
 description = "Render kustomize base from Helm chart"
 run = "just update-kustomize"

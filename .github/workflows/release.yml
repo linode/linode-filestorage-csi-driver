@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
   id-token: write
   packages: write
 
@@ -73,19 +72,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             REV=${{ github.ref_name }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Publish Helm chart
-        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
-        env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CR_RELEASE_NAME_TEMPLATE: "helm-{{ .Version }}"
-        with:
-          charts_dir: release/charts
-          packages_with_index: true
-          skip_existing: true
-          mark_as_latest: false
