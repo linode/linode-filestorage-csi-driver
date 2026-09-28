@@ -80,12 +80,13 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						Tags:             new([]string{"tag-a", "tag-b"}),
 					})).
 					Return(&linodego.NFSFilesystem{
-						ID:      456,
-						SpaceID: 123,
-						Label:   "pvc-abc",
-						Region:  "us-east",
+						ID:               456,
+						SpaceID:          123,
+						Label:            "pvc-abc",
+						Region:           "us-east",
+						MaxCapacityBytes: 2048,
 					}, nil)
-				waitForFilesystem := env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
+				waitForFilesystem := env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", MaxCapacityBytes: 2048, Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
 				spacePolicyCalls := expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeRequired)
 				getFilesystemPolicy := env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: false, SquashPolicy: linodego.NFSSquashPolicyNone}, nil)
 				updateFilesystemPolicy := env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Label: new(""), Enabled: new(false), LinodeIDs: new([]int(nil)), SquashPolicy: new(linodego.NFSSquashPolicyRootSquash)})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
@@ -103,7 +104,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				assertCreateVolumeResponse(t, response, testVolumeID, 1024, map[string]string{
+				assertCreateVolumeResponse(t, response, testVolumeID, 2048, map[string]string{
 					volumeContextSpaceID:       "123",
 					volumeContextFilesystemID:  "456",
 					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
@@ -141,7 +142,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						Label:   "sanity-test-volume",
 						Region:  "us-east",
 					}, nil)
-				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "sanity-test-volume", Region: "us-east", Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/sanity-test-volume-1c8")}, nil)
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "sanity-test-volume", Region: "us-east", MaxCapacityBytes: 1024, Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/sanity-test-volume-1c8")}, nil)
 				expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeRequired)
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
@@ -228,7 +229,8 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 		{
 			name: "returns existing compatible filesystem",
 			request: &csi.CreateVolumeRequest{
-				Name: "pvc-abc",
+				Name:          "pvc-abc",
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 1024},
 				Parameters: map[string]string{
 					storageClassParamSpaceID:    "123",
 					storageClassParamTags:       "tag-a",
@@ -243,22 +245,24 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				gomock.InOrder(
 					env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil),
 					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return([]linodego.NFSFilesystem{{
-						ID:              789,
-						SpaceID:         123,
-						Label:           "pvc-abc",
-						Region:          "us-east",
-						Status:          linodego.NFSFilesystemStatusActive,
-						MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
-						Tags:            []string{"tag-a"},
+						ID:               789,
+						SpaceID:          123,
+						Label:            "pvc-abc",
+						Region:           "us-east",
+						MaxCapacityBytes: 2048,
+						Status:           linodego.NFSFilesystemStatusActive,
+						MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
+						Tags:             []string{"tag-a"},
 					}}, nil),
 					env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 789, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{
-						ID:              789,
-						SpaceID:         123,
-						Label:           "pvc-abc",
-						Region:          "us-east",
-						Status:          linodego.NFSFilesystemStatusActive,
-						MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
-						Tags:            []string{"tag-a"},
+						ID:               789,
+						SpaceID:          123,
+						Label:            "pvc-abc",
+						Region:           "us-east",
+						MaxCapacityBytes: 2048,
+						Status:           linodego.NFSFilesystemStatusActive,
+						MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/pvc-abc-315"),
+						Tags:             []string{"tag-a"},
 					}, nil),
 					env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 789).Return(&linodego.NFSFilesystemAccessPolicy{
 						FilesystemID: 789,
@@ -287,7 +291,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			},
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
-				assertCreateVolumeResponse(t, response, "123/789", 0, map[string]string{
+				assertCreateVolumeResponse(t, response, "123/789", 2048, map[string]string{
 					volumeContextSpaceID:       "123",
 					volumeContextFilesystemID:  "789",
 					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-315",
@@ -345,6 +349,31 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 		wantCode    codes.Code
 		wantMessage string
 	}{
+		{
+			name: "returns create filesystem API errors",
+			request: &csi.CreateVolumeRequest{
+				Name:          "pvc-abc",
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 1024},
+				Parameters:    map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{
+					mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER),
+				},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				filesystemOptions := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(filesystemOptions)).Return(nil, nil)
+				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{
+					Label:            "pvc-abc",
+					Region:           "us-east",
+					MaxCapacityBytes: 1024,
+					ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
+				})).Return(nil, linodeAPIError(http.StatusServiceUnavailable))
+			},
+			wantCode: codes.Unavailable,
+		},
 		{
 			name: "fails when created filesystem lacks mount target",
 			request: &csi.CreateVolumeRequest{
