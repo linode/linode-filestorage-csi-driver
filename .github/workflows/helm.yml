@@ -10,6 +10,7 @@ on:
       - justfile
       - mise.toml
   workflow_dispatch:
+  release: {}
 
 permissions:
   contents: read
@@ -36,12 +37,73 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up Mise
         uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      # Each job has a separate runner; helm-release repeats this tag lookup
+      # and metadata update in its own workspace before publishing.
+      - name: Set chart version from Git tag
+        run: |
+          TAG="$(git describe --tags --abbrev=0)"
+          TAG="${TAG#helm-}"
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+          CHART_VERSION="${TAG#v}"
+          export TAG CHART_VERSION
+          yq -i '.version = strenv(CHART_VERSION) | .appVersion = strenv(TAG)' charts/linode-nfs-csi-driver/Chart.yaml
 
       - name: Lint chart
         run: mise run helm-lint
 
       - name: Verify kustomize base is generated from the chart
         run: mise run verify-kustomize
+
+  helm-release:
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: lint
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          disable-sudo: true
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+
+      - name: Set chart version from Git tag
+        run: |
+          TAG="$(git describe --tags --abbrev=0)"
+          TAG="${TAG#helm-}"
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+          CHART_VERSION="${TAG#v}"
+          export TAG CHART_VERSION
+          yq -i '.version = strenv(CHART_VERSION) | .appVersion = strenv(TAG)' charts/linode-nfs-csi-driver/Chart.yaml
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CR_RELEASE_NAME_TEMPLATE: "helm-{{ .Version }}"
+        with:
+          skip_existing: true
+          mark_as_latest: false
