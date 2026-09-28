@@ -111,7 +111,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
-	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID, capacityBytes)
+	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (s *ControllerServer) ControllerGetVolume(ctx context.Context, req *csi.Con
 	}
 
 	return &csi.ControllerGetVolumeResponse{
-		Volume: csiVolume(filesystem, 0, ""),
+		Volume: csiVolume(filesystem, ""),
 		Status: csiControllerVolumeStatus(policy),
 	}, nil
 }

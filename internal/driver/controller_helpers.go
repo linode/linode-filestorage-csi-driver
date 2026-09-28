@@ -277,10 +277,10 @@ func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLS
 	return values
 }
 
-func csiVolume(filesystem *linodego.NFSFilesystem, capacityBytes int64, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
+func csiVolume(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLSMode) *csi.Volume {
 	return &csi.Volume{
 		VolumeId:      formatVolumeHandle(filesystem.SpaceID, filesystem.ID),
-		CapacityBytes: capacityBytes,
+		CapacityBytes: filesystem.MaxCapacityBytes,
 		VolumeContext: volumeContext(filesystem, mtlsMode),
 	}
 }
@@ -548,7 +548,7 @@ func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID in
 // waited for the filesystem to become active. The API creates a space's backing
 // tenant lazily with its first filesystem, so reconciling the space policy
 // before filesystem activation can leave the policy blocked.
-func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityBytes int64) (*csi.Volume, error) {
+func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int) (*csi.Volume, error) {
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
@@ -564,7 +564,7 @@ func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesys
 	if err := s.ensureSpaceVPC(ctx, filesystem.SpaceID, vpcID, spacePolicy); err != nil {
 		return nil, err
 	}
-	return csiVolume(filesystem, capacityBytes, spacePolicy.MTLSMode), nil
+	return csiVolume(filesystem, spacePolicy.MTLSMode), nil
 }
 
 func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
@@ -591,7 +591,7 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err := validateExistingFilesystem(existing, params); err != nil {
 		return nil, err
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID, requestedCapacityBytes(capacityRange))
+	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +620,7 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID, capacityBytes)
+	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID)
 	if err != nil {
 		return nil, err
 	}

@@ -399,24 +399,25 @@ func TestVolumeContext(t *testing.T) {
 
 func TestCSIVolume(t *testing.T) {
 	filesystem := &linodego.NFSFilesystem{
-		ID:              456,
-		SpaceID:         123,
-		Region:          "us-east",
-		MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
+		ID:               456,
+		SpaceID:          123,
+		Region:           "us-east",
+		MaxCapacityBytes: 2048,
+		MountTargetFQDN:  new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
 	}
 
-	volume := csiVolume(filesystem, 1024, "")
+	volume := csiVolume(filesystem, "")
 	if volume.GetVolumeId() != "123/456" {
 		t.Fatalf("csiVolume() volume id = %q", volume.GetVolumeId())
 	}
-	if volume.GetCapacityBytes() != 1024 {
-		t.Fatalf("csiVolume() capacity = %d", volume.GetCapacityBytes())
+	if volume.GetCapacityBytes() != filesystem.MaxCapacityBytes {
+		t.Fatalf("csiVolume() capacity = %d, want filesystem capacity %d", volume.GetCapacityBytes(), filesystem.MaxCapacityBytes)
 	}
 	if len(volume.GetVolumeContext()) != 4 {
 		t.Fatalf("csiVolume() context = %#v", volume.GetVolumeContext())
 	}
 
-	volumeWithMTLS := csiVolume(filesystem, 1024, linodego.NFSMTLSModeOptional)
+	volumeWithMTLS := csiVolume(filesystem, linodego.NFSMTLSModeOptional)
 	if got := volumeWithMTLS.GetVolumeContext()[volumeContextSpaceMTLSMode]; got != string(linodego.NFSMTLSModeOptional) {
 		t.Fatalf("csiVolume() mtls mode = %q", got)
 	}
