@@ -1,5 +1,6 @@
 ignore:
   - "mocks/*"
+  - "tests/*"
 
 github_checks:
   annotations: false
