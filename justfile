@@ -91,6 +91,19 @@ update-kustomize:
 verify-kustomize:
     ./hack/verify-kustomize.sh
 
+
+# Set chart metadata from the nearest product or chart-release tag.
+set-chart-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag="$(git describe --tags --abbrev=0)"
+    tag="${tag#helm-}"
+    if [[ "$tag" != v* ]]; then
+        tag="v$tag"
+    fi
+    chart_version="${tag#v}"
+    TAG="$tag" CHART_VERSION="$chart_version" yq -i '.version = strenv(CHART_VERSION) | .appVersion = strenv(TAG)' charts/linode-nfs-csi-driver/Chart.yaml
+
 # Package a versioned Helm chart and Kustomize manifests for release
 release:
     rm -rf {{ RELEASE_DIR }}

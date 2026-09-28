@@ -261,16 +261,16 @@ Because the whole thing is in-process and hermetic, a sanity failure is a real p
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | Push to `main`, every PR | `mise run ci`: `fmt`, `gen-mock`, `vet`, `lint`, `test`, `build` |
-| `helm.yml` | PRs touching `charts/`, `deploy/kubernetes/`, the hack scripts, `justfile`, or `mise.toml` | `helm lint`, then `verify-kustomize` |
-| `actionlint.yml` | Workflow changes | Lints the workflow files |
-| `image-build-push.yml` | See the workflow | Builds and publishes images |
-| `release.yml` | Tags | Builds the image, publishes the chart via chart-releaser, attaches release artifacts |
+| `helm.yml` | PRs touching `charts/`, `deploy/kubernetes/`, the hack scripts, `justfile`, or `mise.toml`; GitHub release events | Sets chart metadata via `mise run set-chart-version`, lints the chart, verifies Kustomize, and publishes chart packages and the Helm index. |
+| `actionlint.yml` | Workflow changes | Lints the workflow files. |
+| `image-build-push.yml` | See the workflow | Builds and publishes images. |
+| `release.yml` | Tags | Builds the image and attaches release artifacts. |
 
 `mise run ci` locally is the same command CI runs, so a green local run means a green pipeline.
 
-Every workflow runs `step-security/harden-runner`, but the egress policy is not uniform. `ci.yml`, `helm.yml`, and `autoupdate-gh-pages.yml` use `egress-policy: block` with an explicit `allowed-endpoints` list; the rest use `audit`, which only records outbound connections. So in those three, adding a dependency that fetches from a new host fails the job in a way that looks unrelated to your change. If a build starts failing on a network error, check that workflow's `allowed-endpoints` before you suspect your code.
+Every workflow runs `step-security/harden-runner`, but policies vary by job. `ci.yml`, the `helm.yml` lint job, and `autoupdate-gh-pages.yml` use `egress-policy: block` with explicit allowlists; the `helm.yml` chart-release job and other workflows use `audit`. For block-mode jobs, downloads from new hosts fail unless added to the allowlist. Check that workflow's `allowed-endpoints` before suspecting the code.
 
-Note that `ci.yml` does **not** run `verify-kustomize`; that lives in `helm.yml` and only fires on the paths listed above. A chart change bundled into a PR that also touches Go code will still trigger it, since the path filter matches on any changed file.
+`ci.yml` does **not** run `verify-kustomize`; `helm.yml` does for matching chart-related PRs and published product releases.
 
 ## 📚 Related pages
 
