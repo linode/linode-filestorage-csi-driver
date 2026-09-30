@@ -87,6 +87,19 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-resizer
+          image: "registry.k8s.io/sig-storage/csi-resizer:v2.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
+            - --leader-election
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: liveness-probe
           image: "registry.k8s.io/sig-storage/livenessprobe:v2.15.0"
           imagePullPolicy: IfNotPresent
