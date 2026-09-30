@@ -87,7 +87,7 @@ NAME             READYTOUSE   SOURCEPVC   RESTORESIZE   SNAPSHOTCLASS          A
 nfs-pvc-snap-1   true         nfs-pvc     4194304       linode-nfs-snapshots   1m
 ```
 
-`READYTOUSE` goes `true` when the Linode snapshot reaches `active`. `RESTORESIZE` is the snapshot's real reported size in bytes, which is one of the few genuinely accurate size numbers this driver produces (unlike the PVC capacity, which is advisory).
+`READYTOUSE` goes `true` when the Linode snapshot reaches `active`. `RESTORESIZE` is the snapshot's real reported size in bytes. PVC capacity increases are enforced by the filesystem's root quota; the Linode API enforces its maximum customer-manageable capacity.
 
 The snapshot is not quiesced. Nothing pauses the writers, so it is a crash-consistent point-in-time copy of the export. If your workload needs application consistency, flush or freeze it yourself before creating the object.
 

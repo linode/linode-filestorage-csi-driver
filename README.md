@@ -83,7 +83,7 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 
 ### Current Limitations:
 
-- **Volume expansion** is currently not supported.
+- **Volume expansion** supports capacity increases through the NFS filesystem's root quota.
 - **Volume cloning:** cloning happens only through snapshot restore.
 
 ## 🚧 Disclaimers
@@ -91,7 +91,7 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - **The driver is in alpha.** Behavior and the interfaces it exposes may change between releases.
 - **A VPC is required.** `CreateVolume` fails with `FailedPrecondition` when the cluster's nodes are not attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - **Storage Spaces are not created by the driver.** You must create the NFS Storage Space yourself and reference it from every `StorageClass`. The driver creates and deletes filesystems inside that space, never the space itself.
-- **Capacity requests are advisory.** The Linode NFS API does not take a size on filesystem creation. The driver echoes the requested capacity back in the CSI response so Kubernetes can bind the PVC, but it does not enforce a quota. Do not treat `spec.resources.requests.storage` as a hard limit.
+- **Capacity increases are quota-backed.** The driver increases the NFS filesystem's root quota for PVC expansion and rejects reductions. The Linode API enforces the maximum customer-manageable capacity; rejected requests and the API's error are returned to Kubernetes.
 
 ## 💬 Join Us on Slack
 
