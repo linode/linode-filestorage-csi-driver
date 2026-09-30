@@ -75,6 +75,7 @@ func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 			want: []csi.ControllerServiceCapability_RPC_Type{
 				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 			},
 		},
 		{
@@ -83,6 +84,7 @@ func TestControllerServiceCapabilitiesByAccessPolicyMode(t *testing.T) {
 			want: []csi.ControllerServiceCapability_RPC_Type{
 				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 				csi.ControllerServiceCapability_RPC_GET_VOLUME,
+				csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 				csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 			},
 		},
@@ -181,6 +183,13 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 				Service: &csi.PluginCapability_Service{Type: csi.PluginCapability_Service_CONTROLLER_SERVICE},
 			},
 		},
+		{
+			Type: &csi.PluginCapability_VolumeExpansion_{
+				VolumeExpansion: &csi.PluginCapability_VolumeExpansion{
+					Type: csi.PluginCapability_VolumeExpansion_ONLINE,
+				},
+			},
+		},
 	}
 	if !reflect.DeepEqual(driver.pluginCaps, wantPluginCaps) {
 		t.Fatalf("unexpected plugin caps: %#v", driver.pluginCaps)
@@ -189,6 +198,7 @@ func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 	wantControllerCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 	}
 	if len(driver.controllerCaps) != len(wantControllerCaps) {
 		t.Fatalf("unexpected controller cap count: %d", len(driver.controllerCaps))

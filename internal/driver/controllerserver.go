@@ -277,9 +277,74 @@ func (s *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *c
 func (s *ControllerServer) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
 	klog.V(4).InfoS("handling controller rpc", "method", "ControllerExpandVolume")
 
-	// Future implementation will translate requested capacity into a backend quota or share-size update.
-	_ = req
-	return nil, errNotImplemented
+	if req.GetVolumeId() == "" {
+		return nil, errNoVolumeID
+	}
+	handle, err := parseVolumeHandle(req.GetVolumeId())
+	if err != nil {
+		return nil, err
+	}
+
+	capacityRange := req.GetCapacityRange()
+	if capacityRange == nil {
+		return nil, status.Error(codes.InvalidArgument, "capacity range is required")
+	}
+	requiredBytes := capacityRange.GetRequiredBytes()
+	limitBytes := capacityRange.GetLimitBytes()
+	if requiredBytes < 0 || limitBytes < 0 || (requiredBytes > 0 && limitBytes > 0 && requiredBytes > limitBytes) {
+		return nil, status.Error(codes.InvalidArgument, "capacity range is invalid")
+	}
+	capacityBytes := requestedCapacityBytes(capacityRange)
+	if capacityBytes <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "requested capacity must be greater than zero")
+	}
+
+	volumeID := req.GetVolumeId()
+	if acquired := s.volumeLocks.TryAcquire(volumeID); !acquired {
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer s.volumeLocks.Release(volumeID)
+
+	quotas, err := s.client.ListNFSQuotas(ctx, handle.spaceID, handle.filesystemID, nil)
+	if err != nil {
+		return nil, linodeError(err, "list NFS filesystem quotas")
+	}
+	var rootQuota *linodego.NFSQuota
+	for i := range quotas {
+		if quotas[i].IsRoot {
+			rootQuota = &quotas[i]
+			break
+		}
+	}
+	if rootQuota == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "NFS filesystem %d has no root quota", handle.filesystemID)
+	}
+	if rootQuota.MaxCapacityBytes == nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "NFS filesystem %d root quota has no capacity", handle.filesystemID)
+	}
+
+	currentCapacityBytes := *rootQuota.MaxCapacityBytes
+	if capacityBytes < currentCapacityBytes {
+		return nil, status.Errorf(codes.InvalidArgument, "requested capacity %d is smaller than the current root quota capacity %d", capacityBytes, currentCapacityBytes)
+	}
+	if capacityBytes == currentCapacityBytes {
+		return &csi.ControllerExpandVolumeResponse{
+			CapacityBytes:         currentCapacityBytes,
+			NodeExpansionRequired: false,
+		}, nil
+	}
+
+	_, err = s.client.UpdateNFSQuota(ctx, handle.spaceID, handle.filesystemID, rootQuota.ID, linodego.NFSQuotaUpdateOptions{
+		MaxCapacityBytes: new(capacityBytes),
+	})
+	if err != nil {
+		return nil, linodeError(err, "update NFS filesystem root quota")
+	}
+
+	return &csi.ControllerExpandVolumeResponse{
+		CapacityBytes:         capacityBytes,
+		NodeExpansionRequired: false,
+	}, nil
 }
 
 func (s *ControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
