@@ -143,7 +143,7 @@ provisioner: linodenfs.csi.linode.com
 parameters:
   linodenfs.csi.linode.com/space-id: "42"
 reclaimPolicy: Delete
-allowVolumeExpansion: false
+allowVolumeExpansion: true
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
