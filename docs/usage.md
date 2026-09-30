@@ -10,8 +10,9 @@
 6. [Mount options](#-mount-options)
 7. [Reclaim policy](#-reclaim-policy)
 8. [Inspecting a volume](#-inspecting-a-volume)
-9. [What is not supported](#-what-is-not-supported)
-10. [Connection count and endpoint spreading](#-connection-count-and-endpoint-spreading)
+9. [Volume expansion](#-volume-expansion)
+10. [What is not supported](#-what-is-not-supported)
+11. [Connection count and endpoint spreading](#-connection-count-and-endpoint-spreading)
 
 ## 1. Create a StorageClass
 
@@ -27,7 +28,7 @@ parameters:
   # Exactly one of space-id or space-label is required.
   linodenfs.csi.linode.com/space-id: "42"
 reclaimPolicy: Delete
-allowVolumeExpansion: false
+allowVolumeExpansion: true
 volumeBindingMode: Immediate
 ```
 
@@ -244,11 +245,14 @@ curl -sS \
 
 In `space` mode, an explicit `filesystem-root-squash` setting produces an enabled policy with an empty `linode_acl`; access continues through the Space's VPC policy. Omitting the setting or leaving it blank leaves the filesystem policy unchanged. In `node` mode, the driver maintains the ACL through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
 
+## 📏 Volume expansion
+
+Set `allowVolumeExpansion: true` in the `StorageClass` to allow PVC capacity increases. The controller expands the filesystem's root quota online; no node-side resize is needed. Equal-size retries succeed without changing the quota, while requests smaller than the current quota are rejected. The Linode API enforces the maximum customer-manageable capacity, and the driver returns API rejections to Kubernetes.
+
 ## 🚫 What is not supported
 
 | Operation | Status |
 | --- | --- |
-| **Volume expansion** | Not implemented. Set `allowVolumeExpansion: false`; editing a PVC's size does nothing |
 | **Volume cloning** (`dataSource` of kind `PersistentVolumeClaim`) | Rejected with `unsupported volume content source` |
 | **Raw block volumes** | Rejected. Mount capabilities only |
 | **`GetCapacity`** | Not implemented, so storage-capacity-aware scheduling has nothing to consume |
