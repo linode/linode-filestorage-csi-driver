@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -1323,12 +1324,14 @@ func TestControllerGetCapabilities(t *testing.T) {
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_EXPAND_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT}}},
 			},
 			wantCaps: []*csi.ControllerServiceCapability{
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_GET_VOLUME}}},
+				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_EXPAND_VOLUME}}},
 				{Type: &csi.ControllerServiceCapability_Rpc{Rpc: &csi.ControllerServiceCapability_RPC{Type: csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT}}},
 			},
 		},
@@ -1344,6 +1347,122 @@ func TestControllerGetCapabilities(t *testing.T) {
 			}
 			if !reflect.DeepEqual(response.GetCapabilities(), tt.wantCaps) {
 				t.Fatalf("ControllerGetCapabilities() = %#v, want %#v", response.GetCapabilities(), tt.wantCaps)
+			}
+		})
+	}
+}
+
+func TestControllerExpandVolume(t *testing.T) {
+	tests := []struct {
+		name              string
+		request           *csi.ControllerExpandVolumeRequest
+		setup             func(controllerTestEnv)
+		wantCode          codes.Code
+		wantCapacityBytes int64
+		wantMessage       string
+	}{
+		{
+			name: "increases the root quota capacity",
+			request: &csi.ControllerExpandVolumeRequest{
+				VolumeId:      testVolumeID,
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 2048},
+			},
+			setup: func(env controllerTestEnv) {
+				listQuotas := env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
+					{ID: 789, FilesystemID: 456, Path: "/user-data", MaxCapacityBytes: new(int64(512))},
+					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
+				}, nil)
+				updateQuota := env.client.EXPECT().UpdateNFSQuota(
+					gomock.Any(),
+					123,
+					456,
+					890,
+					gomock.Eq(linodego.NFSQuotaUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
+				).Return(&linodego.NFSQuota{ID: 890, FilesystemID: 456, IsRoot: true, MaxCapacityBytes: new(int64(2048))}, nil)
+				gomock.InOrder(listQuotas, updateQuota)
+			},
+			wantCapacityBytes: 2048,
+		},
+		{
+			name: "equal capacity succeeds without changing the quota",
+			request: &csi.ControllerExpandVolumeRequest{
+				VolumeId:      testVolumeID,
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 1024},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
+					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
+				}, nil)
+			},
+			wantCapacityBytes: 1024,
+		},
+		{
+			name: "smaller capacity is rejected",
+			request: &csi.ControllerExpandVolumeRequest{
+				VolumeId:      testVolumeID,
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 512},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
+					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
+				}, nil)
+			},
+			wantCode:    codes.InvalidArgument,
+			wantMessage: "smaller than the current root quota capacity",
+		},
+		{
+			name: "API rejection is returned to the caller",
+			request: &csi.ControllerExpandVolumeRequest{
+				VolumeId:      testVolumeID,
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 2048},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
+					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
+				}, nil)
+				env.client.EXPECT().UpdateNFSQuota(
+					gomock.Any(),
+					123,
+					456,
+					890,
+					gomock.Eq(linodego.NFSQuotaUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
+				).Return(nil, &linodego.Error{
+					Code:    http.StatusUnprocessableEntity,
+					Message: "requested capacity exceeds the customer-manageable limit",
+				})
+			},
+			wantCode:    codes.InvalidArgument,
+			wantMessage: "requested capacity exceeds the customer-manageable limit",
+		},
+		{
+			name:     "volume ID is required",
+			request:  &csi.ControllerExpandVolumeRequest{CapacityRange: &csi.CapacityRange{RequiredBytes: 2048}},
+			wantCode: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			if tt.setup != nil {
+				tt.setup(env)
+			}
+
+			response, err := env.server.ControllerExpandVolume(context.Background(), tt.request)
+			if got := status.Code(err); got != tt.wantCode {
+				t.Fatalf("ControllerExpandVolume() code = %v, want %v (err = %v)", got, tt.wantCode, err)
+			}
+			if err != nil {
+				if tt.wantMessage != "" && !strings.Contains(status.Convert(err).Message(), tt.wantMessage) {
+					t.Fatalf("ControllerExpandVolume() error = %q, want it to contain %q", status.Convert(err).Message(), tt.wantMessage)
+				}
+				return
+			}
+			if response.GetCapacityBytes() != tt.wantCapacityBytes {
+				t.Fatalf("ControllerExpandVolume() capacity = %d, want %d", response.GetCapacityBytes(), tt.wantCapacityBytes)
+			}
+			if response.GetNodeExpansionRequired() {
+				t.Fatal("ControllerExpandVolume() requested node expansion, want false")
 			}
 		})
 	}
@@ -1823,10 +1942,6 @@ func TestControllerServerUnimplementedRPCs(t *testing.T) {
 		name string
 		call func(*ControllerServer) error
 	}{
-		{name: "ControllerExpandVolume", call: func(server *ControllerServer) error {
-			_, err := server.ControllerExpandVolume(context.Background(), &csi.ControllerExpandVolumeRequest{})
-			return err
-		}},
 		{name: "GetCapacity", call: func(server *ControllerServer) error {
 			_, err := server.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 			return err

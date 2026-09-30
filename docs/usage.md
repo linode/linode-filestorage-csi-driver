@@ -10,7 +10,8 @@
 6. [Mount options](#-mount-options)
 7. [Reclaim policy](#-reclaim-policy)
 8. [Inspecting a volume](#-inspecting-a-volume)
-9. [What is not supported](#-what-is-not-supported)
+9. [Volume expansion](#-volume-expansion)
+10. [What is not supported](#-what-is-not-supported)
 
 ## 1. Create a StorageClass
 
@@ -26,7 +27,7 @@ parameters:
   # Exactly one of space-id or space-label is required.
   linodenfs.csi.linode.com/space-id: "42"
 reclaimPolicy: Delete
-allowVolumeExpansion: false
+allowVolumeExpansion: true
 volumeBindingMode: Immediate
 ```
 
@@ -237,11 +238,14 @@ curl -sS \
 
 In `space` mode, the policy remains disabled with an empty `linode_acl`. In `node` mode, the driver maintains the array through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
 
+## 📏 Volume expansion
+
+Set `allowVolumeExpansion: true` in the `StorageClass` to allow PVC capacity increases. The controller expands the filesystem's root quota online; no node-side resize is needed. Equal-size retries succeed without changing the quota, while requests smaller than the current quota are rejected. The Linode API enforces the maximum customer-manageable capacity, and the driver returns API rejections to Kubernetes.
+
 ## 🚫 What is not supported
 
 | Operation | Status |
 | --- | --- |
-| **Volume expansion** | Not implemented. Set `allowVolumeExpansion: false`; editing a PVC's size does nothing |
 | **Volume cloning** (`dataSource` of kind `PersistentVolumeClaim`) | Rejected with `unsupported volume content source`. Snapshot the source and restore from the snapshot instead |
 | **Raw block volumes** | Rejected. Mount capabilities only |
 | **`GetCapacity`** | Not implemented, so storage-capacity-aware scheduling has nothing to consume |

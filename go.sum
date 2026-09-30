@@ -90,8 +90,8 @@ github.com/kubernetes-csi/csi-test/v5 v5.5.0 h1:21NYP33XXfzsAGwFuFHJUIf60hY08B4A
 github.com/kubernetes-csi/csi-test/v5 v5.5.0/go.mod h1:5ZyneETi47SniZuPA9e8fIL6TTkkKv8/+jkaF0IHqKY=
 github.com/linode/go-metadata v0.3.0 h1:tWShLi5MOUCG/ifA3jphK26A2y0veQoWwUEMJziRzUQ=
 github.com/linode/go-metadata v0.3.0/go.mod h1:uc58+eNK4Y44wvounLIsx92zaMax32pWz+bQHerKvcs=
-github.com/linode/linodego/v2 v2.6.1-0.20260922180641-82aa2b3a8819 h1:gCgKsE5wfVAkilo1rCXzciJEQXpDvGPgoP8RPGFcsxQ=
-github.com/linode/linodego/v2 v2.6.1-0.20260922180641-82aa2b3a8819/go.mod h1:PYCnQa9auhd8uq62Xhsabt0QTQl0X5LLPTxyF6L++0Q=
+github.com/linode/linodego/v2 v2.6.1-0.20260929174108-eacaed0d81d2 h1:eebG9nctT08ku1gHf4q8YQTXXyBDcSSVCcf8lPJ/+/8=
+github.com/linode/linodego/v2 v2.6.1-0.20260929174108-eacaed0d81d2/go.mod h1:PYCnQa9auhd8uq62Xhsabt0QTQl0X5LLPTxyF6L++0Q=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
 github.com/maruel/natural v1.1.1/go.mod h1:v+Rfd79xlw1AgVBjbO0BEQmptqb5HvL/k9GRHB7ZKEg=
 github.com/mfridman/tparse v0.18.0 h1:wh6dzOKaIwkUGyKgOntDW4liXSo37qg5AXbIhkMV3vE=

@@ -33,6 +33,8 @@ type fakeSanityLinodeClient struct {
 	filesystemByName map[string]int
 	filesystemPolicy map[int]linodego.NFSFilesystemAccessPolicy
 	nextFilesystemID int
+	quotas           map[int]linodego.NFSQuota
+	nextQuotaID      int
 }
 
 func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
@@ -59,6 +61,8 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 		filesystemByName: make(map[string]int),
 		filesystemPolicy: make(map[int]linodego.NFSFilesystemAccessPolicy),
 		nextFilesystemID: fakeSanityFilesystemStartID,
+		quotas:           make(map[int]linodego.NFSQuota),
+		nextQuotaID:      20000,
 	}
 }
 
@@ -154,6 +158,49 @@ func (c *fakeSanityLinodeClient) GetNFSFilesystemInSpace(_ context.Context, spac
 	return &result, nil
 }
 
+func (c *fakeSanityLinodeClient) ListNFSQuotas(_ context.Context, spaceID, filesystemID int, _ *linodego.ListOptions) ([]linodego.NFSQuota, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, err := c.filesystemLocked(spaceID, filesystemID); err != nil {
+		return nil, err
+	}
+	result := make([]linodego.NFSQuota, 0)
+	for quotaID := range c.quotas {
+		quota := c.quotas[quotaID]
+		if quota.FilesystemID == filesystemID {
+			result = append(result, cloneSanityQuota(&quota))
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result, nil
+}
+
+func (c *fakeSanityLinodeClient) UpdateNFSQuota(_ context.Context, spaceID, filesystemID, quotaID int, opts linodego.NFSQuotaUpdateOptions) (*linodego.NFSQuota, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	filesystem, err := c.filesystemLocked(spaceID, filesystemID)
+	if err != nil {
+		return nil, err
+	}
+	quota, ok := c.quotas[quotaID]
+	if !ok || quota.FilesystemID != filesystemID {
+		return nil, fakeSanityNotFound("NFS quota", quotaID)
+	}
+	if opts.MaxCapacityBytes != nil {
+		if quota.MaxCapacityBytes != nil && *opts.MaxCapacityBytes < *quota.MaxCapacityBytes {
+			return nil, fakeSanityInvalid("NFS quota capacity cannot be decreased")
+		}
+		quota.MaxCapacityBytes = cloneSanityInt64(opts.MaxCapacityBytes)
+		filesystem.MaxCapacityBytes = *opts.MaxCapacityBytes
+		filesystem.Updated = sanityNow()
+		c.filesystems[filesystemID] = filesystem
+	}
+	quota.Updated = sanityNow()
+	c.quotas[quotaID] = quota
+	result := cloneSanityQuota(&quota)
+	return &result, nil
+}
+
 // CreateNFSFilesystem models the API's create idempotency contract: retries
 // with the same space, label, and parameters return the existing filesystem;
 // incompatible parameters return a conflict.
@@ -184,6 +231,7 @@ func (c *fakeSanityLinodeClient) CreateNFSFilesystem(_ context.Context, spaceID 
 	c.filesystems[filesystem.ID] = filesystem
 	c.filesystemByName[name] = filesystem.ID
 	c.filesystemPolicy[filesystem.ID] = newSanityFilesystemPolicy(&filesystem)
+	c.createSanityRootQuotaLocked(&filesystem)
 	result := cloneSanityFilesystem(&filesystem)
 	return &result, nil
 }
@@ -214,6 +262,11 @@ func (c *fakeSanityLinodeClient) DeleteNFSFilesystem(_ context.Context, spaceID,
 	delete(c.filesystems, filesystemID)
 	delete(c.filesystemByName, fakeSanityFilesystemName(spaceID, filesystem.Label))
 	delete(c.filesystemPolicy, filesystemID)
+	for quotaID := range c.quotas {
+		if c.quotas[quotaID].FilesystemID == filesystemID {
+			delete(c.quotas, quotaID)
+		}
+	}
 	// TODO: Delete snapshots with their filesystem when upstream linodego exposes the NFS snapshot API.
 	return nil
 }
@@ -529,6 +582,25 @@ func (c *fakeSanityLinodeClient) filesystemLocked(spaceID, filesystemID int) (li
 	return filesystem, nil
 }
 
+func (c *fakeSanityLinodeClient) createSanityRootQuotaLocked(filesystem *linodego.NFSFilesystem) {
+	now := time.Now().UTC()
+	capacityBytes := filesystem.MaxCapacityBytes
+	usedCapacityBytes := int64(0)
+	quota := linodego.NFSQuota{
+		ID:                c.nextQuotaID,
+		FilesystemID:      filesystem.ID,
+		Path:              "/",
+		IsRoot:            true,
+		MaxCapacityBytes:  &capacityBytes,
+		UsedCapacityBytes: &usedCapacityBytes,
+		Status:            linodego.NFSQuotaStatusActive,
+		Created:           &now,
+		Updated:           &now,
+	}
+	c.quotas[quota.ID] = quota
+	c.nextQuotaID++
+}
+
 // TODO: Restore this NFS snapshot helper when upstream linodego exposes the API.
 /*
 func (c *fakeSanityLinodeClient) snapshotLocked(spaceID, filesystemID, snapshotID int) (linodego.NFSSnapshot, error) {
@@ -720,6 +792,18 @@ func cloneSanityFilesystem(filesystem *linodego.NFSFilesystem) linodego.NFSFiles
 		UsedCapacityBytes: cloneSanityInt64(filesystem.Stats.UsedCapacityBytes),
 		CollectedAt:       cloneSanityTime(filesystem.Stats.CollectedAt),
 	}
+	return result
+}
+
+func cloneSanityQuota(quota *linodego.NFSQuota) linodego.NFSQuota {
+	result := *quota
+	result.MaxCapacityBytes = cloneSanityInt64(quota.MaxCapacityBytes)
+	result.UsedCapacityBytes = cloneSanityInt64(quota.UsedCapacityBytes)
+	result.MaxFileCount = cloneSanityInt64(quota.MaxFileCount)
+	result.UsedFileCount = cloneSanityInt64(quota.UsedFileCount)
+	result.Created = cloneSanityTime(quota.Created)
+	result.Updated = cloneSanityTime(quota.Updated)
+	result.CollectedAt = cloneSanityTime(quota.CollectedAt)
 	return result
 }
 

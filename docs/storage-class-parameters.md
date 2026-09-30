@@ -33,7 +33,7 @@ parameters:
   linodenfs.csi.linode.com/tags: "team-platform,env-prod"
   linodenfs.csi.linode.com/filesystem-root-squash: "root_squash"
 reclaimPolicy: Delete
-allowVolumeExpansion: false
+allowVolumeExpansion: true
 volumeBindingMode: Immediate
 mountOptions:
   - hard
@@ -110,7 +110,7 @@ Fields that Kubernetes itself interprets, and what they mean for this driver:
 | --- | --- |
 | `provisioner` | Must be exactly `linodenfs.csi.linode.com` |
 | `reclaimPolicy` | `Delete` or `Retain`. See [reclaim policy](./usage.md#-reclaim-policy) |
-| `allowVolumeExpansion` | Set `false`. Expansion is unimplemented; `true` produces failing resize attempts |
+| `allowVolumeExpansion` | Set `true` to allow capacity increases. Reductions are rejected, and the Linode API enforces its maximum customer-manageable capacity |
 | `volumeBindingMode` | `Immediate`. `WaitForFirstConsumer` also works but buys nothing: the driver publishes no accessible topology |
 | `mountOptions` | Passed through to the NFS mount and the pod bind-mount. See [mount options](./usage.md#-mount-options) |
 | `allowedTopologies` | Not useful. The driver returns no `accessible_topology` on created volumes |

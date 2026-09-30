@@ -72,8 +72,8 @@ sidecars:
         cpu: 25m
         memory: 64Mi
   resizer:
-    # Enable once the driver advertises volume expansion support.
-    enabled: false
+    # Resize PVCs through the controller's root-quota expansion support.
+    enabled: true
     # CSI resizer sidecar image.
     repository: registry.k8s.io/sig-storage/csi-resizer
     tag: v2.1.0

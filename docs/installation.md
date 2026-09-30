@@ -198,12 +198,12 @@ You should see the controller Deployment and one node pod per node:
 
 ```text
 NAME                                       READY   STATUS    RESTARTS   AGE
-csi-linode-nfs-controller-6b8f9c4d7-x2klm  4/4     Running   0          45s
+csi-linode-nfs-controller-6b8f9c4d7-x2klm  5/5     Running   0          45s
 csi-linode-nfs-node-2rq8w                  3/3     Running   0          45s
 csi-linode-nfs-node-9fzp4                  3/3     Running   0          45s
 ```
 
-The controller has 4 containers by default (`plugin`, `csi-provisioner`, `csi-attacher`, `liveness-probe`), plus `csi-resizer` and `csi-snapshotter` if you enabled them. Each node pod has 3 (`plugin`, `node-driver-registrar`, `liveness-probe`).
+The controller has 5 containers by default (`plugin`, `csi-provisioner`, `csi-attacher`, `csi-resizer`, `liveness-probe`), plus `csi-snapshotter` if you enabled it. Each node pod has 3 (`plugin`, `node-driver-registrar`, `liveness-probe`).
 
 Confirm the node plugins registered with their kubelets:
 
@@ -291,15 +291,15 @@ sidecars:
 
 You also need the `snapshot.storage.k8s.io` CRDs installed in the cluster. See [Snapshots](./snapshots.md).
 
-### The resizer stays off
+### PVC expansion
 
 ```yaml
 sidecars:
   resizer:
-    enabled: false   # leave it here
+    enabled: true
 ```
 
-`ControllerExpandVolume` returns `Unimplemented` and `EXPAND_VOLUME` is not advertised. Enabling `csi-resizer` produces a sidecar that logs errors against every expansion attempt without accomplishing anything.
+The resizer is enabled by default and handles PVC capacity increases. Set `allowVolumeExpansion: true` in the `StorageClass` as well. The driver rejects reductions; the Linode API enforces its maximum customer-manageable capacity and returns any rejection reason to Kubernetes.
 
 ### ServiceAccount and RBAC toggles
 
