@@ -262,10 +262,100 @@ func TestGetFilesystemPolicyForVolumeAndNode(t *testing.T) {
 	}
 }
 
+func TestSetInitialSquashPolicyReconcilesSpaceMode(t *testing.T) {
+	for _, squash := range []linodego.NFSSquashPolicy{
+		linodego.NFSSquashPolicyNone,
+		linodego.NFSSquashPolicyRootSquash,
+		linodego.NFSSquashPolicyAllSquash,
+	} {
+		t.Run(string(squash), func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			policy := &linodego.NFSFilesystemAccessPolicy{
+				Label:        "policy-a",
+				FilesystemID: 456,
+				SquashPolicy: squash,
+				Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+				Status:       linodego.NFSAccessPolicyStatusActive,
+			}
+			want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
+				Label:        new(policy.Label),
+				Enabled:      new(true),
+				LinodeIDs:    new([]int{}),
+				SquashPolicy: new(squash),
+				Protocols:    new(policy.Protocols),
+			}
+			gomock.InOrder(
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil),
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, want).Return(&linodego.NFSFilesystemAccessPolicy{Status: linodego.NFSAccessPolicyStatusUpdating}, nil),
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{Enabled: true, SquashPolicy: squash, Status: linodego.NFSAccessPolicyStatusActive}, nil),
+			)
+			if err := env.server.setInitialSquashPolicy(t.Context(), 123, 456, squash); err != nil {
+				t.Fatalf("setInitialSquashPolicy() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestSetInitialSquashPolicyNodeACL(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        AccessPolicyMode
+		enabled     bool
+		squash      linodego.NFSSquashPolicy
+		wantEnabled bool
+		wantIDs     []int
+	}{
+		{
+			name: "space mode clears stale node ACL even when squash matches",
+			mode: AccessPolicyModeSpace, enabled: true, squash: linodego.NFSSquashPolicyRootSquash,
+			wantEnabled: true, wantIDs: []int{},
+		},
+		{
+			name: "node mode preserves disabled policy and node ACL",
+			mode: AccessPolicyModeNode, squash: linodego.NFSSquashPolicyNone,
+			wantIDs: []int{101},
+		},
+		{
+			name: "node mode preserves enabled policy and node ACL",
+			mode: AccessPolicyModeNode, enabled: true, squash: linodego.NFSSquashPolicyNone,
+			wantEnabled: true, wantIDs: []int{101},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			env.server.driver.accessPolicyMode = tt.mode
+			policy := &linodego.NFSFilesystemAccessPolicy{
+				Label:        "policy-a",
+				Enabled:      tt.enabled,
+				LinodeACL:    testLinodeACL(101),
+				SquashPolicy: tt.squash,
+				Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
+			}
+			want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
+				Label:        new(policy.Label),
+				Enabled:      new(tt.wantEnabled),
+				LinodeIDs:    new(tt.wantIDs),
+				SquashPolicy: new(linodego.NFSSquashPolicyRootSquash),
+				Protocols:    new(policy.Protocols),
+			}
+			gomock.InOrder(
+				env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(policy, nil),
+				env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, want).Return(&linodego.NFSFilesystemAccessPolicy{Status: linodego.NFSAccessPolicyStatusUpdating}, nil),
+				env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{Status: linodego.NFSAccessPolicyStatusActive}, nil),
+			)
+			if err := env.server.setInitialSquashPolicy(t.Context(), 123, 456, linodego.NFSSquashPolicyRootSquash); err != nil {
+				t.Fatalf("setInitialSquashPolicy() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestSetInitialSquashPolicyWaitsForMatchingUpdatingPolicy(t *testing.T) {
 	env := newControllerTestEnv(t)
 	policy := &linodego.NFSFilesystemAccessPolicy{
 		FilesystemID: 456,
+		Enabled:      true,
 		SquashPolicy: linodego.NFSSquashPolicyRootSquash,
 		Status:       linodego.NFSAccessPolicyStatusUpdating,
 	}
@@ -516,27 +606,5 @@ func TestListOptionsForExactFields(t *testing.T) {
 	want := map[string]string{"label": "pvc-abc", "region": "us-east"}
 	if !reflect.DeepEqual(filter, want) {
 		t.Fatalf("listOptionsForExactFields() filter = %#v, want %#v", filter, want)
-	}
-}
-
-func TestFilesystemPolicySquashPolicyUpdate(t *testing.T) {
-	policy := &linodego.NFSFilesystemAccessPolicy{
-		Label:        "policy-a",
-		Enabled:      false,
-		LinodeACL:    []linodego.NFSFilesystemAccessPolicyLinode{{ID: 101}},
-		SquashPolicy: linodego.NFSSquashPolicyNone,
-		Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
-	}
-
-	got := filesystemPolicySquashPolicyUpdate(policy, linodego.NFSSquashPolicyRootSquash)
-	want := linodego.NFSFilesystemAccessPolicyUpdateOptions{
-		Label:        new("policy-a"),
-		Enabled:      new(false),
-		LinodeIDs:    new([]int{101}),
-		SquashPolicy: new(linodego.NFSSquashPolicyRootSquash),
-		Protocols:    new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("filesystemPolicySquashPolicyUpdate() = %#v, want %#v", got, want)
 	}
 }

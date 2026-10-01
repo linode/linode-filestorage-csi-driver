@@ -397,12 +397,6 @@ func filesystemPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, enabled 
 	return options
 }
 
-func filesystemPolicySquashPolicyUpdate(policy *linodego.NFSFilesystemAccessPolicy, squashPolicy linodego.NFSSquashPolicy) linodego.NFSFilesystemAccessPolicyUpdateOptions {
-	options := filesystemPolicyUpdate(policy, policy.Enabled, filesystemPolicyLinodeIDs(policy))
-	options.SquashPolicy = new(squashPolicy)
-	return options
-}
-
 func (s *ControllerServer) resolveSpace(ctx context.Context, params *createVolumeParameters) (*linodego.NFSSpace, error) {
 	if params.spaceID != 0 {
 		space, err := s.client.GetNFSSpace(ctx, params.spaceID)
@@ -654,8 +648,15 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 	if err != nil {
 		return linodeError(err, "get NFS filesystem access policy")
 	}
-	if policy.SquashPolicy != squashPolicy {
-		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, filesystemPolicySquashPolicyUpdate(policy, squashPolicy)); err != nil {
+	enabled, linodeIDs := policy.Enabled, filesystemPolicyLinodeIDs(policy)
+	if s.driver.accessPolicyMode == AccessPolicyModeSpace {
+		// An enabled policy with an empty node ACL keeps admission at the Space's VPC policy.
+		enabled, linodeIDs = true, []int{}
+	}
+	if policy.SquashPolicy != squashPolicy || enabled != policy.Enabled || len(linodeIDs) != len(policy.LinodeACL) {
+		options := filesystemPolicyUpdate(policy, enabled, linodeIDs)
+		options.SquashPolicy = new(squashPolicy)
+		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, options); err != nil {
 			return linodeError(err, "update NFS filesystem squash policy")
 		}
 	}

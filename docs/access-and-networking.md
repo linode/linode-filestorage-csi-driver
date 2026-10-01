@@ -101,11 +101,11 @@ curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
 
 The driver never removes a VPC from this policy, including at uninstall. Decommissioning a cluster leaves a stale VPC entry behind for you to clean up.
 
-In `space` mode, the controller does not advertise `PUBLISH_UNPUBLISH_VOLUME` and the `CSIDriver` has `attachRequired: false`. Kubernetes mounts a scheduled volume without creating a `VolumeAttachment`. The filesystem access policy stays disabled with an empty Linode ACL. The selected squash policy is still stored on the filesystem policy and enforced by the backend.
+In `space` mode, the controller does not advertise `PUBLISH_UNPUBLISH_VOLUME` and the `CSIDriver` has `attachRequired: false`. Kubernetes mounts a scheduled volume without creating a `VolumeAttachment`. When the StorageClass explicitly sets `filesystem-root-squash`, provisioning enables the filesystem access policy with an empty Linode ACL so the squash setting takes effect. The empty ACL uses Space-level VPC admission, without adding node IDs. When the parameter is omitted or blank, the driver leaves the filesystem policy unchanged.
 
 ### Filesystem access policy: the Linode ACL
 
-Scope: one filesystem. This layer is used only in `node` mode.
+Scope: one filesystem. The node ACL is maintained only in `node` mode; the squash setting is configurable in both modes.
 
 `ControllerPublishVolume` and `ControllerUnpublishVolume` maintain the ACL. There is no block device to attach; "attach" means "add this node's Linode to the ACL".
 
@@ -128,7 +128,7 @@ Scope: one filesystem. This layer is used only in `node` mode.
 
 Both operations preserve the policy's label, squash policy, and protocol list, because the backend's update endpoint is a full replace and dropping a field would reset it.
 
-Publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL, which admits nothing but leaves the switch on.
+Publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL. An empty ACL uses Space-level VPC admission, so it must not be treated as a deny-all policy.
 
 In `node` mode, `ControllerGetVolume` surfaces the Linode IDs currently in the ACL as published node IDs. That status can disagree with reality if someone edits the ACL by hand.
 

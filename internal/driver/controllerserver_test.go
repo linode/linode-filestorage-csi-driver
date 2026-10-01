@@ -39,7 +39,7 @@ func newControllerTestEnv(t *testing.T) controllerTestEnv {
 		client: client,
 		kube:   kubeClient,
 		server: &ControllerServer{
-			driver:      &LinodeDriver{metadata: metadataSvc},
+			driver:      &LinodeDriver{metadata: metadataSvc, accessPolicyMode: AccessPolicyModeSpace},
 			client:      client,
 			volumeLocks: util.NewVolumeLocks(),
 		},
@@ -89,7 +89,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 				waitForFilesystem := env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&linodego.NFSFilesystem{ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east", MaxCapacityBytes: 2048, Status: linodego.NFSFilesystemStatusActive, MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8")}, nil)
 				spacePolicyCalls := expectSpaceVPCAssociation(env, 123, "space-policy", 123456, linodego.NFSMTLSModeRequired)
 				getFilesystemPolicy := env.client.EXPECT().GetNFSFilesystemAccessPolicy(gomock.Any(), 123, 456).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Enabled: false, SquashPolicy: linodego.NFSSquashPolicyNone}, nil)
-				updateFilesystemPolicy := env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Label: new(""), Enabled: new(false), LinodeIDs: new([]int(nil)), SquashPolicy: new(linodego.NFSSquashPolicyRootSquash)})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
+				updateFilesystemPolicy := env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 456, gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{Label: new(""), Enabled: new(true), LinodeIDs: new([]int{}), SquashPolicy: new(linodego.NFSSquashPolicyRootSquash)})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456}, nil)
 				waitForFilesystemPolicy := env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 456, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 456, Status: linodego.NFSAccessPolicyStatusActive}, nil)
 				gomock.InOrder(
 					createFilesystem,
@@ -270,8 +270,8 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 					}, nil),
 					env.client.EXPECT().UpdateNFSFilesystemAccessPolicy(gomock.Any(), 123, 789, gomock.Eq(linodego.NFSFilesystemAccessPolicyUpdateOptions{
 						Label:        new(""),
-						Enabled:      new(false),
-						LinodeIDs:    new([]int(nil)),
+						Enabled:      new(true),
+						LinodeIDs:    new([]int{}),
 						SquashPolicy: new(linodego.NFSSquashPolicyRootSquash),
 					})).Return(&linodego.NFSFilesystemAccessPolicy{FilesystemID: 789}, nil),
 					env.client.EXPECT().WaitForNFSFilesystemAccessPolicyStatus(gomock.Any(), 123, 789, linodego.NFSAccessPolicyStatusActive).Return(&linodego.NFSFilesystemAccessPolicy{

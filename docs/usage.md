@@ -235,7 +235,7 @@ curl -sS \
   https://api.linode.com/v4beta/nfs/spaces/42/filesystems/1337/access-policy
 ```
 
-In `space` mode, the policy remains disabled with an empty `linode_acl`. In `node` mode, the driver maintains the array through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
+In `space` mode, an explicit `filesystem-root-squash` setting produces an enabled policy with an empty `linode_acl`; access continues through the Space's VPC policy. Omitting the setting or leaving it blank leaves the filesystem policy unchanged. In `node` mode, the driver maintains the ACL through `ControllerPublishVolume` and `ControllerUnpublishVolume`.
 
 ## 🚫 What is not supported
 
