@@ -128,7 +128,7 @@ Scope: one filesystem. The node ACL is maintained only in `node` mode; the squas
 
 Both operations preserve the policy's label, squash policy, and protocol list, because the backend's update endpoint is a full replace and dropping a field would reset it.
 
-Publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL. An empty ACL uses Space-level VPC admission, so it must not be treated as a deny-all policy.
+Publish **enables** the policy but unpublish does not disable it. A filesystem whose last node has detached keeps an enabled policy with an empty ACL. **An empty ACL uses Space-level VPC admission, so it must not be treated as a deny-all policy.**
 
 In `node` mode, `ControllerGetVolume` surfaces the Linode IDs currently in the ACL as published node IDs. That status can disagree with reality if someone edits the ACL by hand.
 

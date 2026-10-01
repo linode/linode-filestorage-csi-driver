@@ -653,7 +653,10 @@ func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, 
 		// An enabled policy with an empty node ACL keeps admission at the Space's VPC policy.
 		enabled, linodeIDs = true, []int{}
 	}
-	if policy.SquashPolicy != squashPolicy || enabled != policy.Enabled || len(linodeIDs) != len(policy.LinodeACL) {
+	linodeIDsMatch := slices.EqualFunc(linodeIDs, policy.LinodeACL, func(id int, linode linodego.NFSFilesystemAccessPolicyLinode) bool {
+		return id == linode.ID
+	})
+	if policy.SquashPolicy != squashPolicy || enabled != policy.Enabled || !linodeIDsMatch {
 		options := filesystemPolicyUpdate(policy, enabled, linodeIDs)
 		options.SquashPolicy = new(squashPolicy)
 		if _, err := s.client.UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, options); err != nil {

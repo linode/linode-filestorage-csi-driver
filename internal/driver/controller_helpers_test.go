@@ -302,23 +302,25 @@ func TestSetInitialSquashPolicyNodeACL(t *testing.T) {
 		mode        AccessPolicyMode
 		enabled     bool
 		squash      linodego.NFSSquashPolicy
+		ids         []int
 		wantEnabled bool
 		wantIDs     []int
 	}{
 		{
 			name: "space mode clears stale node ACL even when squash matches",
 			mode: AccessPolicyModeSpace, enabled: true, squash: linodego.NFSSquashPolicyRootSquash,
+			ids:         []int{101},
 			wantEnabled: true, wantIDs: []int{},
 		},
 		{
 			name: "node mode preserves disabled policy and node ACL",
 			mode: AccessPolicyModeNode, squash: linodego.NFSSquashPolicyNone,
-			wantIDs: []int{101},
+			ids: []int{101, 202}, wantIDs: []int{101, 202},
 		},
 		{
 			name: "node mode preserves enabled policy and node ACL",
 			mode: AccessPolicyModeNode, enabled: true, squash: linodego.NFSSquashPolicyNone,
-			wantEnabled: true, wantIDs: []int{101},
+			ids: []int{303, 404}, wantEnabled: true, wantIDs: []int{303, 404},
 		},
 	}
 	for _, tt := range tests {
@@ -328,7 +330,7 @@ func TestSetInitialSquashPolicyNodeACL(t *testing.T) {
 			policy := &linodego.NFSFilesystemAccessPolicy{
 				Label:        "policy-a",
 				Enabled:      tt.enabled,
-				LinodeACL:    testLinodeACL(101),
+				LinodeACL:    testLinodeACL(tt.ids...),
 				SquashPolicy: tt.squash,
 				Protocols:    []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4},
 			}

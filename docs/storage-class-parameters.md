@@ -92,7 +92,7 @@ In `space` mode, explicitly setting any of these values enables the filesystem a
 
 These are the backend's own spellings, so use the underscore forms exactly. Anything else fails with `InvalidArgument: unsupported linodenfs.csi.linode.com/filesystem-root-squash value "..."`.
 
-Omitting the parameter, or leaving it blank, is not the same as setting `none`. The driver leaves the filesystem policy unchanged, including its enabled flag and squash setting, so backend defaults still apply.
+Omitting the parameter, or leaving it blank, is not the same as setting `none`. **The driver leaves the filesystem policy unchanged, including its enabled flag and squash setting, so backend defaults still apply.**
 
 A note on `root_squash` and container images: many images run as `root` and expect to `chown` their data directory on startup. Under `root_squash` those writes land as the anonymous user and `chown` fails with `EPERM`. Either run the workload as a non-root UID that owns the directory, or use `none`.
 
