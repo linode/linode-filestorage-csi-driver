@@ -23,8 +23,9 @@ const (
 )
 
 type LinodeDriver struct {
-	name          string
-	vendorVersion string
+	name             string
+	vendorVersion    string
+	accessPolicyMode AccessPolicyMode
 
 	ids *IdentityServer
 	cs  *ControllerServer
@@ -43,8 +44,9 @@ type LinodeDriver struct {
 func GetLinodeDriver(ctx context.Context) *LinodeDriver {
 	klog.V(2).InfoS("creating LinodeDriver")
 	return &LinodeDriver{
-		controllerCaps: controllerServiceCapabilities(AccessPolicyModeSpace),
-		nodeCaps:       nodeServiceCapabilities(),
+		accessPolicyMode: AccessPolicyModeSpace,
+		controllerCaps:   controllerServiceCapabilities(AccessPolicyModeSpace),
+		nodeCaps:         nodeServiceCapabilities(),
 	}
 }
 
@@ -72,6 +74,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 
 	d.name = name
 	d.vendorVersion = vendorVersion
+	d.accessPolicyMode = accessPolicyMode
 	d.pluginCaps = pluginCapabilities(role)
 	d.controllerCaps = controllerServiceCapabilities(accessPolicyMode)
 	klog.V(2).InfoS("configuring driver", "role", role, "name", name)
