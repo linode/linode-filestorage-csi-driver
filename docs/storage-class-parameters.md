@@ -82,6 +82,8 @@ parameters:
 
 Sets the squash policy on the new filesystem's access policy. Squashing remaps incoming UIDs so a client's `root` does not get `root` on the export.
 
+In `space` mode, explicitly setting any of these values enables the filesystem access policy with an empty node ACL. Access continues through the Space's VPC policy; the driver does not add Linode IDs. Provisioning retries reconcile the enabled flag, empty ACL, and requested squash value, then wait for the policy to become active. In `node` mode, setting squash preserves the existing enabled flag and node ACL.
+
 | Value | Effect |
 | --- | --- |
 | `none` | No remapping. A client's `root` is `root` on the export |
@@ -90,7 +92,7 @@ Sets the squash policy on the new filesystem's access policy. Squashing remaps i
 
 These are the backend's own spellings, so use the underscore forms exactly. Anything else fails with `InvalidArgument: unsupported linodenfs.csi.linode.com/filesystem-root-squash value "..."`.
 
-Omitting the parameter is not the same as setting `none`. When it is absent the driver never touches the squash setting, leaving whatever the backend defaults to.
+Omitting the parameter, or leaving it blank, is not the same as setting `none`. **The driver leaves the filesystem policy unchanged, including its enabled flag and squash setting, so backend defaults still apply.**
 
 A note on `root_squash` and container images: many images run as `root` and expect to `chown` their data directory on startup. Under `root_squash` those writes land as the anonymous user and `chown` fails with `EPERM`. Either run the workload as a non-root UID that owns the directory, or use `none`.
 
