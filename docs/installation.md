@@ -32,8 +32,8 @@
 Generate a Personal Access Token (PAT) in the [Linode Cloud Manager](https://cloud.linode.com/profile/tokens). The controller uses it for every Linode API call, so scope it to what the driver actually touches:
 
 - **Linodes**: read/write, to resolve instance interfaces and configs when finding the cluster VPC
-- **VPCs**: read, to attach the cluster VPC to the space access policy
-- **NFS / file storage**: read/write, to create and delete filesystems, snapshots, and access policies
+- **VPCs**: read, to find the cluster VPC
+- **NFS / file storage**: read/write, to create and delete filesystems and manage filesystem access policies; read access to Storage Space access policies
 
 Give it an expiry long enough for continued use, and plan to rotate it. The token is injected as the `LINODE_TOKEN` environment variable, so a rotation requires restarting the controller pod.
 
@@ -42,6 +42,8 @@ The node DaemonSet does not receive the token and does not call the Linode API.
 ## 📂 Create an NFS Storage Space
 
 The driver never creates a Storage Space. Create one for your cluster, then note either its numeric ID or its label; every `StorageClass` must name one or the other.
+
+Before creating a PVC, ask the Space owner to enable the Space access policy and add the cluster VPC to its `vpc_acl`. The driver checks this policy during provisioning but never changes it. A PVC stays pending with a `FailedPrecondition` event until the policy admits the cluster VPC.
 
 Create it in the Cloud Manager, or against the API directly:
 
@@ -272,7 +274,7 @@ helm uninstall linode-nfs-csi-driver -n kube-system
 Uninstalling does not remove:
 
 - The NFS Storage Space, which the driver never owned.
-- The cluster VPC entry the driver added to the space access policy. Remove it by hand if you are decommissioning the cluster.
+- The Space access policy, which the driver never changes.
 - Filesystems whose PVs used the `Retain` reclaim policy.
 
 *See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command documentation.*

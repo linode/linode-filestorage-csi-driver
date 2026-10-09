@@ -160,7 +160,7 @@ EOF
 kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/test-pvc --timeout=10m
 ```
 
-Ten minutes, not one: provisioning includes up to two 5-minute backend waits (the space access policy and the filesystem).
+Provisioning may wait up to 5 minutes for the filesystem to become active. The driver reads, but does not wait on or update, the Space access policy.
 
 **3. Mounting, and the multi-node case that matters most.**
 

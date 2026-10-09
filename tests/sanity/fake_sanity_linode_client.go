@@ -48,7 +48,7 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 		spacePolicy: linodego.NFSSpaceAccessPolicy{
 			SpaceID:  fakeSanitySpaceID,
 			Label:    "sanity-space-policy",
-			Enabled:  false,
+			Enabled:  true,
 			VPCACL:   []linodego.NFSSpaceAccessPolicyVPC{{ID: sanityVPCID}},
 			MTLSMode: linodego.NFSMTLSModeDisabled,
 			Status:   linodego.NFSAccessPolicyStatusActive,
@@ -226,64 +226,6 @@ func (c *fakeSanityLinodeClient) GetNFSSpaceAccessPolicy(_ context.Context, spac
 	}
 	policy := cloneSanitySpacePolicy(&c.spacePolicy)
 	return &policy, nil
-}
-
-// Access-policy updates are asynchronous in the API; expose Updating until the
-// corresponding wait operation observes Active.
-func (c *fakeSanityLinodeClient) UpdateNFSSpaceAccessPolicy(_ context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.requireSpaceLocked(spaceID); err != nil {
-		return nil, err
-	}
-	if err := validateSanitySpacePolicy(opts); err != nil {
-		return nil, err
-	}
-	policy := c.spacePolicy
-	if opts.Label != nil {
-		policy.Label = *opts.Label
-	}
-	if opts.Enabled != nil {
-		policy.Enabled = *opts.Enabled
-	}
-	if opts.VPCs != nil {
-		policy.VPCACL = make([]linodego.NFSSpaceAccessPolicyVPC, 0, len(*opts.VPCs))
-		for i := range *opts.VPCs {
-			vpc := &(*opts.VPCs)[i]
-			subnets := make([]linodego.NFSSpaceAccessPolicyVPCSubnet, 0, len(vpc.Subnets))
-			for _, subnetID := range vpc.Subnets {
-				subnets = append(subnets, linodego.NFSSpaceAccessPolicyVPCSubnet{ID: subnetID})
-			}
-			policy.VPCACL = append(policy.VPCACL, linodego.NFSSpaceAccessPolicyVPC{ID: vpc.ID, Subnets: subnets})
-		}
-	}
-	if opts.MTLSCACert != nil {
-		policy.MTLSCACert = cloneSanityString(opts.MTLSCACert)
-	}
-	if opts.MTLSMode != nil {
-		policy.MTLSMode = *opts.MTLSMode
-	}
-	policy.Status = linodego.NFSAccessPolicyStatusUpdating
-	policy.Updated = sanityNow()
-	c.spacePolicy = policy
-	result := cloneSanitySpacePolicy(&policy)
-	return &result, nil
-}
-
-func (c *fakeSanityLinodeClient) WaitForNFSSpaceAccessPolicyStatus(_ context.Context, spaceID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.requireSpaceLocked(spaceID); err != nil {
-		return nil, err
-	}
-	if status != linodego.NFSAccessPolicyStatusActive {
-		return nil, fakeSanityInvalid("NFS space access policy is only available in active status")
-	}
-	policy := c.spacePolicy
-	policy.Status = linodego.NFSAccessPolicyStatusActive
-	c.spacePolicy = policy
-	result := cloneSanitySpacePolicy(&policy)
-	return &result, nil
 }
 
 func (c *fakeSanityLinodeClient) GetNFSFilesystemAccessPolicy(_ context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error) {
@@ -554,38 +496,6 @@ func validateSanityFilesystemCreate(opts linodego.NFSFilesystemCreateOptions) er
 	}
 	if opts.ProtocolVersions == nil || !slices.Equal(*opts.ProtocolVersions, []linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}) {
 		return fakeSanityInvalid("NFS filesystem protocol_versions must be [nfsv4]")
-	}
-	return nil
-}
-
-// Keep API enum and uniqueness validation in the fake so invalid policy updates
-// do not silently mutate stored state.
-func validateSanitySpacePolicy(opts linodego.NFSSpaceAccessPolicyUpdateOptions) error {
-	if opts.MTLSMode != nil {
-		switch *opts.MTLSMode {
-		case linodego.NFSMTLSModeDisabled, linodego.NFSMTLSModeOptional, linodego.NFSMTLSModeRequired:
-		default:
-			return fakeSanityInvalid("invalid NFS space mTLS mode %q", *opts.MTLSMode)
-		}
-	}
-	if opts.VPCs == nil {
-		return nil
-	}
-	seen := make(map[int]struct{}, len(*opts.VPCs))
-	for i := range *opts.VPCs {
-		vpc := &(*opts.VPCs)[i]
-		if vpc.ID != sanityVPCID {
-			return fakeSanityInvalid("VPC %d is unavailable", vpc.ID)
-		}
-		if _, duplicate := seen[vpc.ID]; duplicate {
-			return fakeSanityInvalid("VPC %d is specified more than once", vpc.ID)
-		}
-		seen[vpc.ID] = struct{}{}
-		for _, subnetID := range vpc.Subnets {
-			if subnetID <= 0 {
-				return fakeSanityInvalid("VPC subnet ID must be positive")
-			}
-		}
 	}
 	return nil
 }

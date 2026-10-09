@@ -167,6 +167,23 @@ FailedPrecondition: multiple NFS spaces match label "..."
 
 Two spaces share the label. Switch the `StorageClass` to `space-id`, which cannot be ambiguous.
 
+### Cluster VPC is not admitted by the Storage Space
+
+```text
+FailedPrecondition: Storage Space 42 does not admit cluster VPC 123
+(no enabled vpc_acl entry). Ask the Space owner to add the VPC to the
+Space access policy.
+```
+
+The PVC event means the Space access policy is disabled or its `vpc_acl` does not include the cluster VPC. The driver checks this before looking up or creating a filesystem and never changes the policy. Ask the Space owner to enable the policy and admit the cluster VPC, then let Kubernetes retry provisioning. Subnet coverage is the Space owner's responsibility.
+
+Inspect the policy with read access:
+
+```sh
+curl -sS -H "Authorization: ******" \
+  https://api.linode.com/v4beta/nfs/spaces/42/access-policy
+```
+
 ### Token rejected
 
 ```text
@@ -372,7 +389,7 @@ Force-removing a finalizer leaks the backend filesystem. If you do it deliberate
 Cleanup that survives a normal uninstall, by design:
 
 - The Storage Space, which the driver never created.
-- The cluster VPC entry in the space access policy, which the driver never removes.
+- The Space access policy, which the driver never changes.
 - Filesystems whose PVs used `Retain`. `ListVolumes` is unimplemented, so the filesystem label (the old PV name) is your only breadcrumb for finding them.
 
 ## 🚫 Permission denied inside the pod

@@ -90,6 +90,60 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 	}
 }
 
+func TestValidateSpaceVPC(t *testing.T) {
+	tests := []struct {
+		name        string
+		vpcID       int
+		policy      *linodego.NFSSpaceAccessPolicy
+		wantCode    codes.Code
+		wantMessage string
+	}{
+		{
+			name:   "admitted",
+			vpcID:  123,
+			policy: &linodego.NFSSpaceAccessPolicy{Enabled: true, VPCACL: []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}}},
+		},
+		{
+			name:        "policy disabled",
+			vpcID:       123,
+			policy:      &linodego.NFSSpaceAccessPolicy{VPCACL: []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}}},
+			wantCode:    codes.FailedPrecondition,
+			wantMessage: "Storage Space 42 does not admit cluster VPC 123 (access policy is disabled). Ask the Space owner to enable the access policy and add the VPC.",
+		},
+		{
+			name:        "VPC not admitted",
+			vpcID:       123,
+			policy:      &linodego.NFSSpaceAccessPolicy{Enabled: true},
+			wantCode:    codes.FailedPrecondition,
+			wantMessage: "Storage Space 42 does not admit cluster VPC 123 (no enabled vpc_acl entry). Ask the Space owner to add the VPC to the Space access policy.",
+		},
+		{
+			name:        "policy missing",
+			vpcID:       123,
+			wantCode:    codes.Internal,
+			wantMessage: "get NFS space access policy for Space 42 returned no policy",
+		},
+		{
+			name:        "cluster VPC unavailable",
+			policy:      &linodego.NFSSpaceAccessPolicy{Enabled: true},
+			wantCode:    codes.FailedPrecondition,
+			wantMessage: "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSpaceVPC(42, tt.vpcID, tt.policy)
+			if status.Code(err) != tt.wantCode {
+				t.Fatalf("validateSpaceVPC() code = %v, want %v", status.Code(err), tt.wantCode)
+			}
+			if tt.wantMessage != "" && status.Convert(err).Message() != tt.wantMessage {
+				t.Fatalf("validateSpaceVPC() message = %q, want %q", status.Convert(err).Message(), tt.wantMessage)
+			}
+		})
+	}
+}
+
 func TestParseVolumeHandle(t *testing.T) {
 	tests := []struct {
 		name     string

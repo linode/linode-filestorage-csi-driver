@@ -30,8 +30,6 @@ type LinodeClient interface {
 	DeleteNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) error
 
 	GetNFSSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error)
-	UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error)
-	WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error)
 	GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID int, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error)
 	UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID int, filesystemID int, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error)
 	WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID int, filesystemID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error)

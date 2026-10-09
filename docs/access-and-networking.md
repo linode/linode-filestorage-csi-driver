@@ -77,8 +77,8 @@ The Helm value `accessPolicy.mode` selects one installation-wide authorization m
 
 | Mode | Space VPC ACL | Filesystem Linode ACL | CSI attachment |
 | --- | --- | --- | --- |
-| `space` (default) | maintained | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
-| `node` | maintained | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
+| `space` (default) | validated, never changed | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
+| `node` | validated, never changed | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
 
 `node` mode is not currently recommended. Every publish and unpublish performs an asynchronous filesystem policy replacement and waits for it to become active. Those operations serialize for a volume, causing severe delays as the number of nodes grows. In performance testing, ten pods mounting one existing RWX volume across ten nodes reached Ready in 4.73 seconds with `space` mode versus 874.99 seconds with `node` mode. Removing them took 1.24 seconds with `space` mode versus 1,135.13 seconds with `node` mode. These are point-in-time measurements rather than service guarantees, but the per-node policy waits are inherent to the current implementation.
 
@@ -86,20 +86,19 @@ The Helm value `accessPolicy.mode` selects one installation-wide authorization m
 
 Scope: the whole Storage Space, and therefore every filesystem in it.
 
-The driver adds the cluster VPC to this policy the first time it provisions a volume in the space, inside `CreateVolume`:
+The Space owner configures this policy in Cloud Manager, through the API, Terraform, or another management tool. Before looking up or creating a filesystem, `CreateVolume` reads the policy and requires it to be enabled with the cluster VPC in `vpc_acl`:
 
-- Read the current policy. If the VPC is already in `vpc_acl`, do nothing.
-- Otherwise rewrite the policy with the existing VPC entries plus the cluster VPC, preserving each entry's label, enabled flag, and subnets.
-- Wait up to 5 minutes for the policy to go `active`.
+- If the policy is disabled or does not include the cluster VPC, provisioning fails with `FailedPrecondition`. The PVC event identifies the Space and cluster VPC and asks the Space owner to admit the VPC.
+- Kubernetes retries provisioning. After the Space owner corrects the policy, provisioning succeeds without further action.
 
-The VPC is added **without subnet restrictions**, meaning all subnets of that VPC are admitted. If you need subnet-level narrowing, set it yourself in the Cloud Manager; the driver preserves subnets it did not create, so a manual narrowing survives later provisioning as long as the VPC entry stays present.
+The driver does not change or wait for the Space access policy. Validation covers VPC admission only, not subnet coverage; the Space owner is responsible for including the subnets used by cluster nodes.
 
 ```sh
 curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
   https://api.linode.com/v4beta/nfs/spaces/42/access-policy
 ```
 
-The driver never removes a VPC from this policy, including at uninstall. Decommissioning a cluster leaves a stale VPC entry behind for you to clean up.
+Because the policy is managed by the Space owner, provisioning and uninstalling the driver never add or remove VPC entries. If the policy changes after a volume is provisioned, connectivity can fail at mount time.
 
 In `space` mode, the controller does not advertise `PUBLISH_UNPUBLISH_VOLUME` and the `CSIDriver` has `attachRequired: false`. Kubernetes mounts a scheduled volume without creating a `VolumeAttachment`. When the StorageClass explicitly sets `filesystem-root-squash`, provisioning enables the filesystem access policy with an empty Linode ACL so the squash setting takes effect. The empty ACL uses Space-level VPC admission, without adding node IDs. When the parameter is omitted or blank, the driver leaves the filesystem policy unchanged.
 

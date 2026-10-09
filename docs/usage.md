@@ -77,7 +77,9 @@ NAME      STATUS   VOLUME                                     CAPACITY   ACCESS 
 nfs-pvc   Bound    pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   10Gi       RWX            linode-nfs     35s
 ```
 
-Behind the bound PVC, the controller has created an NFS filesystem in your Storage Space labelled after the PV name (lowercased, truncated to 63 bytes), attached your cluster VPC to the space access policy, and waited for the filesystem to reach `active`.
+Behind the bound PVC, the controller has created an NFS filesystem in your Storage Space labelled after the PV name (lowercased, truncated to 63 bytes), after checking that the Space owner enabled the access policy and admitted the cluster VPC. The driver does not change the Space policy.
+
+If the cluster VPC is not admitted, provisioning fails with a `FailedPrecondition` event on the PVC. Ask the Space owner to update the policy; Kubernetes retries provisioning after the policy is corrected.
 
 Provisioning waits on the Linode API, so first-time creation is not instant. The driver allows up to 5 minutes per wait before returning `DeadlineExceeded` and letting `csi-provisioner` retry.
 
@@ -113,7 +115,7 @@ After scheduling, the sequence depends on `accessPolicy.mode`:
 2. **Stage.** The node plugin mounts the filesystem's DNS name over NFSv4 at the kubelet staging path, once per node.
 3. **Publish.** The node plugin bind-mounts the staging path into the pod's target path.
 
-The default `space` mode skips step 1. The Space VPC ACL already authorizes cluster connectivity, and Kubernetes creates no `VolumeAttachment`.
+The default `space` mode skips step 1. The Space VPC ACL authorizes cluster connectivity, and Kubernetes creates no `VolumeAttachment`.
 
 ## 4. Share one volume between pods
 
