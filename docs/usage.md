@@ -8,6 +8,7 @@
 4. [Share one volume between pods](#4-share-one-volume-between-pods)
 5. [Access modes](#-access-modes)
 6. [Mount options](#-mount-options)
+   - [Connection count and endpoint spreading](#connection-count-and-endpoint-spreading)
 7. [Reclaim policy](#-reclaim-policy)
 8. [Inspecting a volume](#-inspecting-a-volume)
 9. [What is not supported](#-what-is-not-supported)
@@ -198,6 +199,36 @@ Notes:
 
 - The filesystem type is always `nfs4`. There is no `fsType` parameter, and setting `csi.storage.k8s.io/fstype` has no effect.
 - `NodeStageVolume` passes these flags to the NFS mount. `NodePublishVolume` passes them again alongside `bind`, and adds `ro` when the pod mounts the PVC read-only.
+
+### Connection count and endpoint spreading
+
+Use `StorageClass.mountOptions` to pass connection and multipath options to the NFS client on each worker node. For example, add these entries to the class:
+
+```yaml
+mountOptions:
+  - hard
+  - nconnect=8
+  - remoteports=dns
+  - pconnect=1
+```
+
+These options control different parts of the connection layout:
+
+- `nconnect=<N>` requests `<N>` connections for the mount. It controls the total connection count; it does not by itself spread connections across different server IP addresses. `8` is an example, not a universal recommendation or driver limit. Availability and accepted values depend on the node's Linux kernel and NFS client.
+- `remoteports=dns` tells a compatible NFS client to use the IP addresses returned when it resolves the mount target as remote endpoints. Multipath can spread connections only when the node's resolver returns multiple distinct addresses.
+- `pconnect=<N>` controls how many connections are grouped into each NFS client context. With `nconnect=8,pconnect=1`, the client can use up to eight remote addresses. With `nconnect=8,pconnect=2`, it groups connections in pairs and can use at most four remote addresses. The actual spread also depends on the addresses returned by DNS and the client implementation.
+
+`remoteports` and `pconnect` are not portable Linux NFS mount options. They require a compatible NFS client on every node where the volume may be mounted; the CSI driver passes the options through but does not install or configure that client. An unsupported option causes the node mount to fail. Check the node client's documentation for supported NFS versions, kernel requirements, and option limits before using them.
+
+The driver mounts using the worker node's resolver, not CoreDNS. Check the mount target's answers from a worker node; one returned address cannot provide endpoint spreading. After mounting, inspect the effective NFS mount options on that node:
+
+```sh
+findmnt -t nfs4 -o SOURCE,TARGET,OPTIONS
+```
+
+That confirms the mount options, not how many connections reached each endpoint. Use the node client's diagnostics or inspect its established NFS connections to verify the actual distribution. In one CSI test with a compatible node client, `nconnect=8,remoteports=dns,pconnect=1` produced eight TCP connections across eight distinct IPv6 endpoints. This is an observed connection layout, not a performance guarantee; benchmark with your workload and node configuration.
+
+Mount options are copied to the PV when it is provisioned. Editing the `StorageClass` does not change options on existing PVs; newly provisioned volumes use the updated options. See [StorageClass parameters](./storage-class-parameters.md#-standard-storageclass-fields).
 
 ## 🔄 Reclaim policy
 
