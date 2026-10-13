@@ -236,7 +236,7 @@ Standard Kubernetes semantics apply, and the choice matters more than usual beca
 
 | `reclaimPolicy` | On PVC deletion |
 | --- | --- |
-| `Delete` | The PV is removed and `DeleteVolume` deletes the NFS filesystem. Snapshots of it are affected by backend rules, not by the driver |
+| `Delete` | The PV is removed and `DeleteVolume` deletes the NFS filesystem |
 | `Retain` | The PV stays `Released` and the NFS filesystem stays in your Storage Space |
 
 With `Retain`, cleanup is manual. Since `ListVolumes` is not implemented, the driver will not help you find orphans later; the filesystem label carries the old PV name, which is your only breadcrumb. Delete retained filesystems through the Cloud Manager or the API when you are done with them.
@@ -273,7 +273,7 @@ In `space` mode, an explicit `filesystem-root-squash` setting produces an enable
 | Operation | Status |
 | --- | --- |
 | **Volume expansion** | Not implemented. Set `allowVolumeExpansion: false`; editing a PVC's size does nothing |
-| **Volume cloning** (`dataSource` of kind `PersistentVolumeClaim`) | Rejected with `unsupported volume content source`. Snapshot the source and restore from the snapshot instead |
+| **Volume cloning** (`dataSource` of kind `PersistentVolumeClaim`) | Rejected with `unsupported volume content source` |
 | **Raw block volumes** | Rejected. Mount capabilities only |
 | **`GetCapacity`** | Not implemented, so storage-capacity-aware scheduling has nothing to consume |
 | **Listing volumes** | `ListVolumes` is not implemented and the capability is not advertised, so the external-provisioner never calls it |
@@ -281,6 +281,5 @@ In `space` mode, an explicit `filesystem-root-squash` setting produces an enable
 ## 📚 Related pages
 
 - [StorageClass parameters](./storage-class-parameters.md)
-- [Snapshots and restore](./snapshots.md)
 - [Access and Networking](./access-and-networking.md)
 - [Troubleshooting](./troubleshooting.md)

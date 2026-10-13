@@ -395,6 +395,8 @@ An image that `chown`s its data directory at startup will fail under `root_squas
 
 ## 📸 Snapshot problems
 
+> Snapshot support is not yet available. This section is for early testing of the planned feature.
+
 ### The VolumeSnapshot never becomes ready
 
 ```sh
@@ -415,7 +417,7 @@ kubectl -n kube-system logs deploy/csi-linode-nfs-controller -c csi-snapshotter 
 InvalidArgument: unsupported volume content source
 ```
 
-You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is not supported. Snapshot the source, then restore from the snapshot. See [restore into a new PVC](./snapshots.md#3-restore-into-a-new-pvc).
+You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is not supported.
 
 ### Unfiltered ListSnapshots rejected
 

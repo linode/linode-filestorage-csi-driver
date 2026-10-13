@@ -206,9 +206,7 @@ The anti-affinity forces one replica per node, so `shared.log` containing three 
 kubectl exec deploy/test-writers -- df -h /data
 ```
 
-**5. Snapshot and restore**, if you enabled the snapshotter. See [Snapshots](./snapshots.md).
-
-**6. Cleanup, in order.**
+**5. Cleanup, in order.**
 
 ```sh
 kubectl delete deploy test-writers
