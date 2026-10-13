@@ -208,8 +208,8 @@ sequenceDiagram
     C->>L: resolve the cluster region and VPC
     C->>L: resolve the Storage Space (by ID or label)
     C->>L: read the Space access policy and validate cluster VPC admission
-    alt policy disabled or cluster VPC missing
-        C-->>P: FailedPrecondition: ask the Space owner to admit the VPC
+    alt policy disabled, not active, or cluster VPC missing
+        C-->>P: FailedPrecondition: check the Space policy and retry
     else VPC admitted
         C->>L: look for a filesystem already carrying this label
         alt one already exists

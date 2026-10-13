@@ -170,9 +170,9 @@ Two spaces share the label. Switch the `StorageClass` to `space-id`, which canno
 ### Cluster VPC is not admitted by the Storage Space
 
 ```text
-FailedPrecondition: Storage Space 42 does not admit cluster VPC 123
-(no enabled vpc_acl entry). Ask the Space owner to add the VPC to the
-Space access policy.
+FailedPrecondition: Storage Space 42 does not admit cluster VPC 123.
+Please check the space access policy to enable the access policy
+and add the VPC.
 ```
 
 The PVC event means the Space access policy is disabled or its `vpc_acl` does not include the cluster VPC. The driver checks this before looking up or creating a filesystem and never changes the policy. Ask the Space owner to enable the policy and admit the cluster VPC, then let Kubernetes retry provisioning. Subnet coverage is the Space owner's responsibility.
@@ -180,7 +180,7 @@ The PVC event means the Space access policy is disabled or its `vpc_acl` does no
 Inspect the policy with read access:
 
 ```sh
-curl -sS -H "Authorization: ******" \
+curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
   https://api.linode.com/v4beta/nfs/spaces/42/access-policy
 ```
 

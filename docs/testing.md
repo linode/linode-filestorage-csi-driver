@@ -160,7 +160,7 @@ EOF
 kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/test-pvc --timeout=10m
 ```
 
-Provisioning may wait up to 5 minutes for the filesystem to become active. The driver reads, but does not wait on or update, the Space access policy.
+The filesystem activation wait has a five-minute timeout; this is not the expected provisioning duration. The driver reads, but does not wait on or update, the Space access policy. If that policy is not yet active, provisioning fails with `FailedPrecondition` and Kubernetes retries.
 
 **3. Mounting, and the multi-node case that matters most.**
 

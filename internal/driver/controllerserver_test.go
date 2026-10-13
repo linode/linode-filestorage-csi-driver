@@ -371,10 +371,31 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{
 					Enabled: true,
 					VPCACL:  []linodego.NFSSpaceAccessPolicyVPC{{ID: 654321}},
+					Status:  linodego.NFSAccessPolicyStatusActive,
 				}, nil)
 			},
 			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 123 does not admit cluster VPC 123456 (no enabled vpc_acl entry). Ask the Space owner to add the VPC to the Space access policy.",
+			wantMessage: "Storage Space 123 does not admit cluster VPC 123456. Please check the space access policy to enable the access policy and add the VPC.",
+		},
+		{
+			name: "rejects updating Space access policy before filesystem lookup",
+			request: &csi.CreateVolumeRequest{
+				Name:               "pvc-abc",
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			},
+			setup: func(t *testing.T, env controllerTestEnv) {
+				t.Helper()
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{
+					Enabled: true,
+					VPCACL:  []linodego.NFSSpaceAccessPolicyVPC{{ID: 123456}},
+					Status:  linodego.NFSAccessPolicyStatusUpdating,
+				}, nil)
+			},
+			wantCode:    codes.FailedPrecondition,
+			wantMessage: "Storage Space 123 access policy is not active (status \"updating\"); cluster VPC 123456 admission is not ready. Provisioning will retry when the policy is active.",
 		},
 		{
 			name: "returns create filesystem API errors",
@@ -853,6 +874,7 @@ func expectSpaceVPCAdmission(env controllerTestEnv, spaceID int, label string, v
 		Enabled:  true,
 		VPCACL:   []linodego.NFSSpaceAccessPolicyVPC{{ID: vpcID}},
 		MTLSMode: mtlsMode,
+		Status:   linodego.NFSAccessPolicyStatusActive,
 	}, nil)
 }
 

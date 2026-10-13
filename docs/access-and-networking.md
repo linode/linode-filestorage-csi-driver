@@ -86,9 +86,10 @@ The Helm value `accessPolicy.mode` selects one installation-wide authorization m
 
 Scope: the whole Storage Space, and therefore every filesystem in it.
 
-The Space owner configures this policy in Cloud Manager, through the API, Terraform, or another management tool. Before looking up or creating a filesystem, `CreateVolume` reads the policy and requires it to be enabled with the cluster VPC in `vpc_acl`:
+The Space owner configures this policy in Cloud Manager, through the API, Terraform, or another management tool. Before looking up or creating a filesystem, `CreateVolume` reads the policy and requires it to be enabled and `active`, with the cluster VPC in `vpc_acl`:
 
-- If the policy is disabled or does not include the cluster VPC, provisioning fails with `FailedPrecondition`. The PVC event identifies the Space and cluster VPC and asks the Space owner to admit the VPC.
+- If the policy is disabled or does not include the cluster VPC, provisioning fails with `FailedPrecondition`. The PVC event identifies the Space and cluster VPC and asks the user to check the policy. Ask the Space owner to enable the policy and admit the VPC.
+- If the policy is not `active`, provisioning fails with `FailedPrecondition` identifying its status. Requested VPC entries can be visible while an update is still being applied; Kubernetes retries until the policy is active.
 - Kubernetes retries provisioning. After the Space owner corrects the policy, provisioning succeeds without further action.
 
 The driver does not change or wait for the Space access policy. Validation covers VPC admission only, not subnet coverage; the Space owner is responsible for including the subnets used by cluster nodes.
