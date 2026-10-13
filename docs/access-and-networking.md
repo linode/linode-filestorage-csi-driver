@@ -6,7 +6,7 @@ Reaching an NFS export is not like attaching a block device. The path from a pod
 
 1. [The data path](#-the-data-path)
 2. [VPC requirement](#-vpc-requirement)
-3. [Two layers of access policy](#-two-layers-of-access-policy)
+3. [Access-policy modes](#-access-policy-modes)
 4. [Squash policy](#-squash-policy)
 5. [Node identity](#-node-identity)
 6. [Firewalls and ports](#-firewalls-and-ports)

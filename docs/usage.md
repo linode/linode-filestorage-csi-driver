@@ -156,7 +156,7 @@ spec:
 kubectl exec deploy/nfs-writers -- tail -n 10 /data/shared.log
 ```
 
-Every replica writes to the same filesystem, and each node the replicas land on gets its Linode added to the filesystem's ACL on first attach.
+Every replica writes to the same filesystem. In the default `space` mode there is no per-node ACL and no `VolumeAttachment`; the Space access policy that the Space owner configured admits the cluster VPC, which covers every node. In `node` mode, each node the replicas land on also gets its Linode added to the filesystem's ACL on first attach.
 
 Pods sharing a volume on one node do not serialize behind each other: `NodePublishVolume` locks the pod target path, not the volume ID, so concurrent pod starts proceed in parallel. The one-per-node NFS mount is shared and staged only once.
 

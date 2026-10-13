@@ -50,7 +50,7 @@
   - [StorageClass parameters](docs/storage-class-parameters.md)
 - [Access and Networking](docs/access-and-networking.md)
   - [VPC requirement](docs/access-and-networking.md#-vpc-requirement)
-  - [Access policies](docs/access-and-networking.md#-two-layers-of-access-policy)
+  - [Access-policy modes](docs/access-and-networking.md#-access-policy-modes)
   - [Squash policy](docs/access-and-networking.md#-squash-policy)
 - [Reference](docs/configuration-reference.md)
   - [Environment variables](docs/configuration-reference.md#-driver-environment-variables)
