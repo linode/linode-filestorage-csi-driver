@@ -28,6 +28,9 @@
 - [Overview](#-overview)
   - [What the driver does](#what-the-driver-does)
   - [Current limitations](#current-limitations)
+- [Before you begin](#-before-you-begin)
+- [Quickstart](#-quickstart)
+- [Disclaimers](#-disclaimers)
 - [Architecture](docs/architecture.md)
   - [Component layout](docs/architecture.md#-component-layout)
   - [Volume and snapshot identity](docs/architecture.md#-volume-and-snapshot-identity)
@@ -62,7 +65,6 @@
   - [Testing](docs/testing.md)
   - [Contributing](.github/CONTRIBUTING.md)
 - [License](#license)
-- [Disclaimers](#-disclaimers)
 - [Community](#-join-us-on-slack)
 
 ## 📚 Overview
@@ -85,6 +87,60 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 
 - **Volume expansion** is currently not supported.
 - **Volume cloning:** cloning happens only through snapshot restore.
+
+## 🧭 Before you begin
+
+- The driver is in alpha. See the [disclaimers](#-disclaimers).
+- Every node must be attached to a VPC with IPv6 connectivity, and all nodes must be in one region. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
+- The [Linode Cloud Controller Manager](https://github.com/linode/linode-cloud-controller-manager) must be installed and running, because the driver reads each node's `providerID` and region label.
+- You create the NFS Storage Space yourself. See [Create an NFS Storage Space](docs/installation.md#-create-an-nfs-storage-space).
+- The Space access policy must be enabled and list your cluster VPC. The driver only checks it, and a PVC stays `Pending` until it passes. See [Admit the cluster VPC](docs/installation.md#-admit-the-cluster-vpc-on-the-space).
+- You need a Linode API token. See [Secure a Linode API access token](docs/installation.md#-secure-a-linode-api-access-token).
+
+## ⚡ Quickstart
+
+First create the NFS Storage Space and admit your cluster VPC on its access policy. You can do both in Cloud Manager or directly against the API with `curl`. The steps are in [Create an NFS Storage Space](docs/installation.md#-create-an-nfs-storage-space) and [Admit the cluster VPC](docs/installation.md#-admit-the-cluster-vpc-on-the-space).
+
+Then install the driver and create a StorageClass and a claim:
+
+```sh
+helm repo add linode-nfs-csi https://linode.github.io/linode-filestorage-csi-driver/
+helm install linode-nfs-csi-driver -n kube-system --set apiToken="${LINODE_API_TOKEN}" linode-nfs-csi/linode-nfs-csi-driver
+kubectl apply -f - <<EOF
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: linode-nfs
+provisioner: linodenfs.csi.linode.com
+parameters:
+  linodenfs.csi.linode.com/space-id: "42" # your Space ID
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: linode-nfs
+  resources:
+    requests:
+      storage: 10Gi
+EOF
+```
+
+Check that the claim binds:
+
+```sh
+kubectl get pvc nfs-pvc
+```
+
+```text
+NAME      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+nfs-pvc   Bound    pvc-a1b2c3d4-5e6f-7890-abcd-ef1234567890   10Gi       RWX            linode-nfs     35s
+```
+
+Then mount `nfs-pvc` from a pod as shown in [Consume it from a pod](docs/usage.md#3-consume-it-from-a-pod). The first volume in a region can be slow because backend resources are provisioned on first use. See [Installation](docs/installation.md) and [Usage](docs/usage.md) for the full steps.
 
 ## 🚧 Disclaimers
 
