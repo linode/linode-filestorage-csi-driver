@@ -275,16 +275,6 @@ Uninstalling does not remove:
 
 ## 🧩 Optional configuration
 
-### The snapshotter stays off
-
-Snapshot support is not yet available, so the `csi-snapshotter` sidecar ships disabled. Leave it that way:
-
-```yaml
-sidecars:
-  snapshotter:
-    enabled: false   # leave it here
-```
-
 ### The resizer stays off
 
 ```yaml

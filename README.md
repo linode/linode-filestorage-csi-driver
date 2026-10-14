@@ -81,8 +81,9 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 
 ### Current Limitations:
 
-- **Volume expansion** is currently not supported.
-- **Volume cloning** is currently not supported.
+- **Volume expansion** is planned, but not available yet.
+- **Volume cloning** is planned, through snapshots, but not available yet.
+- **Snapshots and restores** are planned, but not available yet.
 
 ## 🚧 Disclaimers
 

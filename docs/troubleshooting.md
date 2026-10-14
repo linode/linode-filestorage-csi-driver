@@ -11,7 +11,7 @@ Start by finding out which half of the driver is unhappy. Provisioning problems 
 5. [The node plugin never registers](#-the-node-plugin-never-registers)
 6. [A PVC or PV will not delete](#-a-pvc-or-pv-will-not-delete)
 7. [Permission denied inside the pod](#-permission-denied-inside-the-pod)
-8. [Snapshot problems](#-snapshot-problems)
+8. [Unsupported requests](#-unsupported-requests)
 9. [Error message index](#-error-message-index)
 10. [Collecting a bug report](#-collecting-a-bug-report)
 
@@ -44,7 +44,6 @@ Which container to blame:
 | PVC `Pending`, no PV | `csi-provisioner`, then `plugin` in the controller |
 | PV bound, pod stuck at `ContainerCreating` with an attach error | `csi-attacher`, then `plugin` in the controller |
 | Pod stuck at `ContainerCreating` with a mount error | `plugin` in the node pod on that node |
-| `VolumeSnapshot` not ready | `csi-snapshotter`, then `plugin` in the controller |
 | Node missing from `csinodes` | `node-driver-registrar` in the node pod |
 
 ## 📢 Increase log verbosity
@@ -393,23 +392,7 @@ kubectl exec <pod> -- id
 
 An image that `chown`s its data directory at startup will fail under `root_squash`. That is what squashing is for, not a driver bug. See [squash policy](./access-and-networking.md#-squash-policy).
 
-## 📸 Snapshot problems
-
-> Snapshot support is not yet available. This section is for early testing of the planned feature.
-
-### The VolumeSnapshot never becomes ready
-
-```sh
-kubectl describe volumesnapshot <name>
-kubectl -n kube-system logs deploy/csi-linode-nfs-controller -c csi-snapshotter --tail=50
-```
-
-| Cause | Fix |
-| --- | --- |
-| No `csi-snapshotter` container in the controller | The sidecar is disabled by default. `--set sidecars.snapshotter.enabled=true` |
-| `no matches for kind "VolumeSnapshot"` | The `snapshot.storage.k8s.io` CRDs are not installed |
-| CRDs present, nothing happens | The cluster-wide snapshot controller is missing. The sidecar alone is not enough |
-| `readyToUse: false` for a while | The snapshot is still settling. The driver returns it with `ReadyToUse: false` and the controller polls |
+## 🚫 Unsupported requests
 
 ### Unsupported volume content source
 
@@ -418,14 +401,6 @@ InvalidArgument: unsupported volume content source
 ```
 
 You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is not supported.
-
-### Unfiltered ListSnapshots rejected
-
-```text
-InvalidArgument: snapshot id or source volume id is required
-```
-
-Something called `ListSnapshots` with no filter, which the driver refuses. `external-snapshotter` never does this, so the caller is a CSI test harness or a custom client.
 
 ## 📇 Error message index
 
