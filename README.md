@@ -113,7 +113,7 @@ metadata:
   name: linode-nfs
 provisioner: linodenfs.csi.linode.com
 parameters:
-  linodenfs.csi.linode.com/space-id: "42" # your Space ID
+  linodenfs.csi.linode.com/space-id: "${SPACE_ID}"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

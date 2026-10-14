@@ -118,17 +118,17 @@ Read the current policy first. A new policy is disabled by default.
 ```sh
 curl -sS \
   -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
-  https://api.linode.com/v4beta/nfs/spaces/42/access-policy
+  https://api.linode.com/v4beta/nfs/spaces/${SPACE_ID}/access-policy
 ```
 
-Then enable it and add the VPC ID from the [cluster check](#-check-your-cluster-first) (`123` below). You can also do this in Cloud Manager; the `curl` commands call the API directly.
+Then enable it and add the VPC ID from the [cluster check](#-check-your-cluster-first). You can also do this in Cloud Manager; the `curl` commands call the API directly.
 
 ```sh
 curl -sS -X PUT \
   -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"enabled": true, "vpcs": [{"id": 123}]}' \
-  https://api.linode.com/v4beta/nfs/spaces/42/access-policy
+  -d "{\"enabled\": true, \"vpcs\": [{\"id\": ${VPC_ID}}]}" \
+  https://api.linode.com/v4beta/nfs/spaces/${SPACE_ID}/access-policy
 ```
 
 The PUT replaces the whole VPC list. If `vpc_acl` in the earlier response already has entries, include them in `vpcs` too, with their subnet IDs if they have any. Leaving `subnets` out admits every subnet in the VPC.
