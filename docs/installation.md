@@ -4,14 +4,16 @@
 
 1. [Requirements](#-requirements)
 2. [Secure a Linode API access token](#-secure-a-linode-api-access-token)
-3. [Create an NFS Storage Space](#-create-an-nfs-storage-space)
-4. [Deployment methods](#-deployment-methods)
+3. [Check your cluster first](#-check-your-cluster-first)
+4. [Create an NFS Storage Space](#-create-an-nfs-storage-space)
+    - [Admit the cluster VPC on the Space](#-admit-the-cluster-vpc-on-the-space)
+5. [Deployment methods](#-deployment-methods)
     - [Using Helm](#1-using-helm)
     - [Using kubectl](#2-using-kubectl)
-5. [Verify the installation](#-verify-the-installation)
-6. [Upgrading the driver](#-upgrading-the-driver)
-7. [Uninstalling the driver](#-uninstalling-the-driver)
-8. [Optional configuration](#-optional-configuration)
+6. [Verify the installation](#-verify-the-installation)
+7. [Upgrading the driver](#-upgrading-the-driver)
+8. [Uninstalling the driver](#-uninstalling-the-driver)
+9. [Optional configuration](#-optional-configuration)
 
 ## 🔧 Requirements
 
@@ -39,6 +41,25 @@ Give it an expiry long enough for continued use, and plan to rotate it. The toke
 
 The node DaemonSet does not receive the token and does not call the Linode API.
 
+## 🩺 Check your cluster first
+
+Before you create anything, confirm that every node has a `spec.providerID`, a region label, and a VPC interface. The driver needs all three (see [Requirements](#-requirements) and the [VPC requirement](./access-and-networking.md#-vpc-requirement)).
+
+```sh
+kubectl get nodes -o custom-columns=\
+NAME:.metadata.name,\
+PROVIDER:.spec.providerID,\
+REGION:'.metadata.labels.topology\.kubernetes\.io/region'
+
+# then, for one Linode ID from above
+curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
+  https://api.linode.com/v4/linode/instances/12345/configs
+```
+
+Every node should show a `linode://` provider ID and the same region. In the configs response, look for an interface with `"purpose": "vpc"` and a non-null `vpc_id`. If any of these is missing, fix it first: install the Linode Cloud Controller Manager for the provider ID and region, and attach the node to a VPC.
+
+Note the `vpc_id`. You need it to admit the cluster on the Storage Space. It is also shown on the VPC's page in Cloud Manager.
+
 ## 📂 Create an NFS Storage Space
 
 The driver never creates a Storage Space. Create one for your cluster, then note either its numeric ID or its label; every `StorageClass` must name one or the other.
@@ -55,7 +76,23 @@ curl -sS -X POST \
   https://api.linode.com/v4beta/nfs/spaces
 ```
 
-List the spaces on the account to find the ID:
+The response is the new Space, and its `id` is the Space ID. A response looks like this (the values are examples):
+
+```json
+{
+  "id": 42,
+  "label": "my-cluster-space",
+  "description": null,
+  "status": "active",
+  "created": "2026-05-01T12:00:00Z",
+  "updated": "2026-05-01T12:00:00Z",
+  "tags": []
+}
+```
+
+Creating a Space does not provision backend resources right away. They are provisioned when the first filesystem is created in a region, so the first volume you provision there can take longer than later ones.
+
+To find the ID of an existing Space, list the Spaces on the account:
 
 ```sh
 curl -sS \
@@ -73,6 +110,32 @@ parameters:
 ```
 
 The two are mutually exclusive, and one of them is required. See [StorageClass parameters](./storage-class-parameters.md).
+
+### 🔓 Admit the cluster VPC on the Space
+
+The driver reads the Space access policy when it provisions a volume and never changes it. Until the policy is enabled and lists your cluster VPC, a PVC stays `Pending` with a `FailedPrecondition` event. If you own the Space, do the steps below yourself. If someone else does, send them these steps along with the VPC ID.
+
+Read the current policy first. A new policy is disabled by default.
+
+```sh
+curl -sS \
+  -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
+  https://api.linode.com/v4beta/nfs/spaces/${SPACE_ID}/access-policy
+```
+
+Then enable it and add the VPC ID from the [cluster check](#-check-your-cluster-first). You can also do this in Cloud Manager; the `curl` commands call the API directly.
+
+```sh
+curl -sS -X PUT \
+  -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"enabled\": true, \"vpcs\": [{\"id\": ${VPC_ID}}]}" \
+  https://api.linode.com/v4beta/nfs/spaces/${SPACE_ID}/access-policy
+```
+
+The PUT replaces the whole VPC list. If `vpc_acl` in the earlier response already has entries, include them in `vpcs` too, with their subnet IDs if they have any. Leaving `subnets` out admits every subnet in the VPC.
+
+The Linode API applies the update asynchronously. The PUT response already lists your VPC ID in `vpc_acl`, but the policy's `status` can read `updating` for a while. The driver waits for `status` to be `active` during provisioning, so a new PVC stays Pending until the policy settles. Run the GET again to check progress.
 
 ## 🧰 Deployment methods
 
