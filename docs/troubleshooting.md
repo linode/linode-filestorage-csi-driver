@@ -238,16 +238,33 @@ kubectl -n kube-system logs deploy/csi-linode-nfs-controller -c csi-attacher --t
 
 A `DeadlineExceeded` here means the access policy is not settling; the attacher retries. In `space` mode, no `VolumeAttachment` should exist. If one does after changing modes, verify that the `CSIDriver` was recreated with `spec.attachRequired: false`.
 
-### Mount times out
+### Mount times out or is denied
 
 ```text
 mount.nfs4: Connection timed out
 mount.nfs4: No route to host
+mount.nfs4: access denied by server while mounting ...
 ```
 
-The node cannot reach the mount target. Check in this order, cheapest first:
+The node cannot reach the mount target, or the server refused it. Provisioning succeeding tells you nothing here: the driver does not validate the Space access policy, so a PVC can bind against a Space that will never admit the cluster. Check in this order, cheapest first:
 
-1. **The Linode ACL.** Is the node's Linode actually in it, and is the policy enabled?
+1. **The Space access policy.** This is the most common cause, and in `space` mode it is the only authorization layer. The Space owner maintains it, and the driver never checks or changes it.
+
+   ```sh
+   curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
+     https://api.linode.com/v4beta/nfs/spaces/<space>/access-policy
+   ```
+
+   Confirm all of the following:
+
+   - `enabled` is `true`.
+   - `status` is `active`. While it is anything else (for example `updating`), entries you just added may be visible but not yet applied.
+   - The cluster VPC ID is in `vpc_acl`. Find it from any node's Linode interfaces; it is the VPC the driver infers for the cluster (see [No cluster VPC found](#no-cluster-vpc-found)).
+   - The VPC entry covers the subnets every node pool uses. A node in an uncovered subnet fails while others mount fine.
+
+   Fix the policy (or ask the Space owner to), wait for `status` to return to `active`, and the kubelet's next mount retry succeeds without any change to the PVC.
+
+2. **The Linode ACL (`node` mode only).** Is the node's Linode actually in it, and is the policy enabled?
 
    ```sh
    curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
@@ -255,13 +272,6 @@ The node cannot reach the mount target. Check in this order, cheapest first:
    ```
 
    Compare `linode_acl` against the node's Linode ID and confirm `enabled` is `true`.
-
-2. **The space VPC ACL.** Is the cluster VPC in `vpc_acl`?
-
-   ```sh
-   curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
-     https://api.linode.com/v4beta/nfs/spaces/<space>/access-policy
-   ```
 
 3. **DNS.** The mount target FQDN has to resolve from the **host**, not from CoreDNS, because the node plugin uses `hostNetwork` and mounts in the host namespace.
 
@@ -291,7 +301,7 @@ The PV's `volumeAttributes` lost its `mount-target`, which normally means someon
 
 ### Mounts work on some nodes only
 
-That is the signature of a node outside the cluster VPC. The VPC is inferred from the **first** node alone, so a second node pool created outside it provisions fine and never mounts. Compare each node's Linode interfaces.
+That is the signature of a node outside the cluster VPC, or in a subnet the Space access policy does not cover. The VPC is inferred from the **first** node alone, so a second node pool created outside it provisions fine and never mounts. Compare each node's Linode interfaces against the Space policy's `vpc_acl`; see [Mount times out or is denied](#mount-times-out-or-is-denied).
 
 ### Benign lock contention
 
@@ -372,7 +382,7 @@ Force-removing a finalizer leaks the backend filesystem. If you do it deliberate
 Cleanup that survives a normal uninstall, by design:
 
 - The Storage Space, which the driver never created.
-- The cluster VPC entry in the space access policy, which the driver never removes.
+- The Space access policy, which the driver never validates or changes.
 - Filesystems whose PVs used `Retain`. `ListVolumes` is unimplemented, so the filesystem label (the old PV name) is your only breadcrumb for finding them.
 
 ## 🚫 Permission denied inside the pod
@@ -446,6 +456,7 @@ Something called `ListSnapshots` with no filter, which the driver refuses. `exte
 | `only mount volume capabilities are supported` | `volumeMode: Block` requested | [Access modes](./usage.md#-access-modes) |
 | `volume access mode is required` | No access mode on the PVC | [Access modes](./usage.md#-access-modes) |
 | `unsupported volume content source` | PVC-to-PVC clone attempted | [Unsupported volume content source](#unsupported-volume-content-source) |
+| `mount.nfs4: Connection timed out` or `access denied by server` | Space access policy disabled, not `active`, or missing the cluster VPC; or network/DNS | [Mount times out or is denied](#mount-times-out-or-is-denied) |
 | `mount-target is required in volume context` | PV attributes were edited | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
 | `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#-the-node-plugin-never-registers) |
 | `An operation with the given volume key` | Lock contention; retried automatically | [Benign lock contention](#benign-lock-contention) |
