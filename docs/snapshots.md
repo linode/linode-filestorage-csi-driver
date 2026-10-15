@@ -1,4 +1,6 @@
-# 📸 Snapshots and restore
+# 📸 Snapshots and restore (not yet available)
+
+> **Snapshot support is not yet available.** This page describes planned behavior and may change before release.
 
 A `VolumeSnapshot` maps to a Linode NFS snapshot, taken on the filesystem behind the source PVC. Restoring means cloning that snapshot into a brand new filesystem; snapshots are never restored in place.
 
