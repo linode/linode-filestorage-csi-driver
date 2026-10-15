@@ -1,4 +1,4 @@
-IMAGE_VERSION := env("IMAGE_VERSION", "dev")
+IMAGE_VERSION := env("IMAGE_VERSION", shell("git branch --show-current"))
 IMAGE_TAGS := env("IMAGE_TAGS", IMAGE_VERSION)
 IMAGE_REPO := env("IMAGE_REPO", "docker.io/linode/linode-filestorage-csi-driver")
 PLATFORM := env("PLATFORM", "linux/amd64")
@@ -127,7 +127,7 @@ ci: fmt gen-mock vet lint test build
 # Install the Helm chart
 helm-install:
     @if [ -z "$LINODE_TOKEN" ]; then echo "Error: LINODE_TOKEN environment variable is not set."; exit 1; fi
-    helm upgrade --install --namespace kube-system --create-namespace linode-nfs-csi-driver charts/linode-nfs-csi-driver \
+    helm upgrade --install --namespace kube-system --force-conflicts --create-namespace linode-nfs-csi-driver charts/linode-nfs-csi-driver \
         --set image.repository={{ IMAGE_REPO }} \
         --set image.tag={{ IMAGE_VERSION }} \
         --set linodeURL={{ LINODE_URL }} \
