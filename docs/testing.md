@@ -126,7 +126,7 @@ export KUBECONFIG="$(pwd)/nfs-csi-driver-dev-kubeconfig"
 ```sh
 kubectl -n kube-system get pods -l role=csi-linode
 kubectl get csidrivers linodenfs.csi.linode.com
-kubectl get csinodes -o custom-columns=NODE:.metadata.name,DRIVERS:.spec.drivers[*].name
+kubectl get csinodes
 ```
 
 Every node must list the driver. A node that does not will never mount anything.
@@ -143,7 +143,7 @@ provisioner: linodenfs.csi.linode.com
 parameters:
   linodenfs.csi.linode.com/space-id: "42"
 reclaimPolicy: Delete
-allowVolumeExpansion: false
+allowVolumeExpansion: true
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
