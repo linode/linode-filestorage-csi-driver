@@ -76,7 +76,7 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 ### What the driver does
 
 - **Provisions filesystems.** A `PersistentVolumeClaim` becomes a Linode NFS filesystem inside an NFS Storage Space that you pre-create and name in the `StorageClass`.
-- **Validates cluster access.** Before provisioning, the controller checks that the Storage Space access policy is enabled and admits the cluster VPC. The Space owner must configure this policy; the driver never changes it. `accessPolicy.mode=node` enables per-filesystem Linode ACL management, but is not currently recommended because every publish and unpublish waits for an asynchronous policy update and scales poorly.
+- **Leaves Space access to you.** The Storage Space access policy must be enabled and admit the cluster VPC. The Space owner maintains it; the driver neither validates nor changes it, so a misconfigured policy surfaces as mount failures. `accessPolicy.mode=node` enables per-filesystem Linode ACL management, but is not currently recommended because every publish and unpublish waits for an asynchronous policy update and scales poorly.
 - **Mounts over NFSv4.** The node plugin mounts filesystem DNS name at the kubelet staging path, then bind-mounts it into each pod.
 - **Snapshots and restores.** `VolumeSnapshot` objects map to Linode NFS snapshots, and a new PVC can be restored from a snapshot by cloning it into a filesystem.
 - **Reports usage.** `NodeGetVolumeStats` reports byte and inode usage read from the mounted filesystem.

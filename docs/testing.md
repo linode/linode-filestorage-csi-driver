@@ -160,7 +160,7 @@ EOF
 kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/test-pvc --timeout=10m
 ```
 
-The filesystem activation wait has a five-minute timeout; this is not the expected provisioning duration. The driver reads, but does not wait on or update, the Space access policy. If that policy is not yet active, provisioning fails with `FailedPrecondition` and Kubernetes retries.
+The filesystem activation wait has a five-minute timeout; this is not the expected provisioning duration. The driver reads the Space access policy only for its mTLS mode; it does not validate, wait on, or update it. Make sure the policy is enabled, `active`, and admits the test cluster's VPC before this step, or the PVC binds and the mount in the next step fails.
 
 **3. Mounting, and the multi-node case that matters most.**
 

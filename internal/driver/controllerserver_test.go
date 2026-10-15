@@ -333,6 +333,55 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 	}
 }
 
+func TestCreateVolumeWithInactiveSpacePolicy(t *testing.T) {
+	for _, policyStatus := range []linodego.NFSAccessPolicyStatus{"blocked", linodego.NFSAccessPolicyStatusUpdating} {
+		t.Run(string(policyStatus), func(t *testing.T) {
+			env := newControllerTestEnv(t)
+			expectSingleNodeCluster(env, 123456)
+			filesystem := &linodego.NFSFilesystem{
+				ID:              456,
+				SpaceID:         123,
+				Label:           "pvc-abc",
+				Region:          "us-east",
+				Status:          linodego.NFSFilesystemStatusActive,
+				MountTargetFQDN: new("prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8"),
+			}
+			gomock.InOrder(
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil),
+				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{
+					Enabled:  true,
+					VPCACL:   []linodego.NFSSpaceAccessPolicyVPC{{ID: 123456}},
+					Status:   policyStatus,
+					MTLSMode: linodego.NFSMTLSModeDisabled,
+				}, nil),
+				env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"}))).Return(nil, nil),
+				env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), 123, gomock.Eq(linodego.NFSFilesystemCreateOptions{
+					Label:            "pvc-abc",
+					Region:           "us-east",
+					ProtocolVersions: new([]linodego.NFSProtocolVersion{linodego.NFSProtocolVersionV4}),
+				})).Return(filesystem, nil),
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(filesystem, nil),
+			)
+
+			response, err := env.server.CreateVolume(t.Context(), &csi.CreateVolumeRequest{
+				Name:               "pvc-abc",
+				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
+				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+			})
+			if err != nil {
+				t.Fatalf("CreateVolume() error = %v", err)
+			}
+			assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
+				volumeContextSpaceID:       "123",
+				volumeContextFilesystemID:  "456",
+				volumeContextMountTarget:   *filesystem.MountTargetFQDN,
+				volumeContextRegion:        "us-east",
+				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeDisabled),
+			})
+		})
+	}
+}
+
 func TestCreateVolumeFailureCases(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -356,46 +405,6 @@ func TestCreateVolumeFailureCases(t *testing.T) {
 			},
 			wantCode:    codes.PermissionDenied,
 			wantMessage: status.Convert(linodeError(linodeAPIError(http.StatusForbidden), "get NFS space access policy")).Message(),
-		},
-		{
-			name: "rejects cluster VPC absent from Space access policy before filesystem lookup",
-			request: &csi.CreateVolumeRequest{
-				Name:               "pvc-abc",
-				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123, Label: "prod-space"}, nil)
-				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{
-					Enabled: true,
-					VPCACL:  []linodego.NFSSpaceAccessPolicyVPC{{ID: 654321}},
-					Status:  linodego.NFSAccessPolicyStatusActive,
-				}, nil)
-			},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 123 does not admit cluster VPC 123456. Please check the space access policy to enable the access policy and add the VPC.",
-		},
-		{
-			name: "rejects updating Space access policy before filesystem lookup",
-			request: &csi.CreateVolumeRequest{
-				Name:               "pvc-abc",
-				Parameters:         map[string]string{storageClassParamSpaceID: "123"},
-				VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
-			},
-			setup: func(t *testing.T, env controllerTestEnv) {
-				t.Helper()
-				expectSingleNodeCluster(env, 123456)
-				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
-				env.client.EXPECT().GetNFSSpaceAccessPolicy(gomock.Any(), 123).Return(&linodego.NFSSpaceAccessPolicy{
-					Enabled: true,
-					VPCACL:  []linodego.NFSSpaceAccessPolicyVPC{{ID: 123456}},
-					Status:  linodego.NFSAccessPolicyStatusUpdating,
-				}, nil)
-			},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 123 access policy is not active (status \"updating\"); cluster VPC 123456 admission is not ready. Provisioning will retry when the policy is active.",
 		},
 		{
 			name: "returns create filesystem API errors",

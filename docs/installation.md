@@ -43,7 +43,7 @@ The node DaemonSet does not receive the token and does not call the Linode API.
 
 The driver never creates a Storage Space. Create one for your cluster, then note either its numeric ID or its label; every `StorageClass` must name one or the other.
 
-Before creating a PVC, ask the Space owner to enable the Space access policy and add the cluster VPC to its `vpc_acl`. The driver checks this policy during provisioning but never changes it. A PVC stays pending with a `FailedPrecondition` event until the policy admits the cluster VPC.
+Before creating a PVC, ask the Space owner to enable the Space access policy and add the cluster VPC to its `vpc_acl`. The driver neither validates nor changes this policy. If it is wrong, PVCs still bind, but pods stay `ContainerCreating` with `mount.nfs4` errors. See [Space access policy](./access-and-networking.md#space-access-policy-the-vpc-acl).
 
 Create it in the Cloud Manager, or against the API directly:
 
@@ -238,7 +238,7 @@ Upgrades roll the controller Deployment and the node DaemonSet. Mounted volumes 
 Set one authorization model for the installation:
 
 ```sh
-# Default: Space VPC ACL only, without CSI attachment.
+# Default: Space access policy only, without CSI attachment.
 helm upgrade linode-nfs-csi-driver \
   --namespace kube-system \
   --reuse-values \
@@ -274,7 +274,7 @@ helm uninstall linode-nfs-csi-driver -n kube-system
 Uninstalling does not remove:
 
 - The NFS Storage Space, which the driver never owned.
-- The Space access policy, which the driver never changes.
+- The Space access policy, which the driver never validates or changes.
 - Filesystems whose PVs used the `Retain` reclaim policy.
 
 *See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command documentation.*

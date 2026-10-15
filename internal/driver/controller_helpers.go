@@ -498,16 +498,7 @@ func validateSpaceVPC(spaceID, vpcID int, policy *linodego.NFSSpaceAccessPolicy)
 	if policy == nil {
 		return status.Errorf(codes.Internal, "get NFS space access policy for Space %d returned no policy", spaceID)
 	}
-	if policy.Status != linodego.NFSAccessPolicyStatusActive {
-		return status.Errorf(codes.FailedPrecondition, "Storage Space %d access policy is not active (status %q); cluster VPC %d admission is not ready. Provisioning will retry when the policy is active.", spaceID, policy.Status, vpcID)
-	}
-	vpcAllowed := slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
-		return vpc.ID == vpcID
-	})
 
-	if !policy.Enabled || !vpcAllowed {
-		return status.Errorf(codes.FailedPrecondition, "Storage Space %d does not admit cluster VPC %d. Please check the space access policy to enable the access policy and add the VPC.", spaceID, vpcID)
-	}
 	return nil
 }
 

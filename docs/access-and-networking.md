@@ -35,7 +35,7 @@ Reaching an NFS export is not like attaching a block device. The path from a pod
                   filesystem Linode ACL (node mode only)
 ```
 
-The selected access-policy mode determines whether the VPC ACL is the only network authorization layer or whether each filesystem also restricts access to published Linodes.
+The selected access-policy mode determines whether the Space access policy is the only network authorization layer or whether each filesystem also restricts access to published Linodes.
 
 ## 🔒 VPC requirement
 
@@ -75,10 +75,10 @@ Look for an interface with `"purpose": "vpc"` and a non-null `vpc_id`.
 
 The Helm value `accessPolicy.mode` selects one installation-wide authorization model:
 
-| Mode | Space VPC ACL | Filesystem Linode ACL | CSI attachment |
+| Mode | Space access policy | Filesystem Linode ACL | CSI attachment |
 | --- | --- | --- | --- |
-| `space` (default) | validated, never changed | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
-| `node` | validated, never changed | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
+| `space` (default) | owner-managed; not validated or changed | disabled | `attachRequired: false`; no `VolumeAttachment` objects |
+| `node` | owner-managed; not validated or changed | maintained | `attachRequired: true`; publish and unpublish authorize nodes |
 
 `node` mode is not currently recommended. Every publish and unpublish performs an asynchronous filesystem policy replacement and waits for it to become active. Those operations serialize for a volume, causing severe delays as the number of nodes grows. In performance testing, ten pods mounting one existing RWX volume across ten nodes reached Ready in 4.73 seconds with `space` mode versus 874.99 seconds with `node` mode. Removing them took 1.24 seconds with `space` mode versus 1,135.13 seconds with `node` mode. These are point-in-time measurements rather than service guarantees, but the per-node policy waits are inherent to the current implementation.
 
@@ -86,20 +86,22 @@ The Helm value `accessPolicy.mode` selects one installation-wide authorization m
 
 Scope: the whole Storage Space, and therefore every filesystem in it.
 
-The Space owner configures this policy in Cloud Manager, through the API, Terraform, or another management tool. Before looking up or creating a filesystem, `CreateVolume` reads the policy and requires it to be enabled and `active`, with the cluster VPC in `vpc_acl`:
+The Space owner configures and maintains this policy in Cloud Manager, through the API, Terraform, or another management tool. For volumes to mount, the policy must be:
 
-- If the policy is disabled or does not include the cluster VPC, provisioning fails with `FailedPrecondition`. The PVC event identifies the Space and cluster VPC and asks the user to check the policy. Ask the Space owner to enable the policy and admit the VPC.
-- If the policy is not `active`, provisioning fails with `FailedPrecondition` identifying its status. Requested VPC entries can be visible while an update is still being applied; Kubernetes retries until the policy is active.
-- Kubernetes retries provisioning. After the Space owner corrects the policy, provisioning succeeds without further action.
+- **Enabled** (`enabled: true`).
+- **Active** (`status: active`). Requested VPC entries can be visible while an update is still being applied.
+- **Admitting the cluster VPC**, with the cluster VPC in `vpc_acl` and covering the subnets used by every node pool.
 
-The driver does not change or wait for the Space access policy. Validation covers VPC admission only, not subnet coverage; the Space owner is responsible for including the subnets used by cluster nodes.
+The driver does not validate any of this. `CreateVolume` reads the policy only to learn its mTLS mode, so it still needs read access, but it provisions regardless of whether the policy is enabled, active, or admits the cluster VPC. A misconfigured policy therefore does not leave the PVC `Pending`. The PVC binds, and the failure surfaces later when a pod mounts the volume, as a `mount.nfs4` timeout or `access denied by server` from `NodeStageVolume`. See [Mount times out or is denied](./troubleshooting.md#mount-times-out-or-is-denied).
+
+Check the policy before creating PVCs, and again whenever a mount fails:
 
 ```sh
 curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
   https://api.linode.com/v4beta/nfs/spaces/42/access-policy
 ```
 
-Because the policy is managed by the Space owner, provisioning and uninstalling the driver never add or remove VPC entries. If the policy changes after a volume is provisioned, connectivity can fail at mount time.
+Provisioning and uninstalling the driver never add or remove VPC entries. If the policy changes after a volume is provisioned, mounts that were working can start failing. After the Space owner corrects the policy and it returns to `active`, the kubelet's mount retries succeed without changes on the Kubernetes side.
 
 In `space` mode, the controller does not advertise `PUBLISH_UNPUBLISH_VOLUME` and the `CSIDriver` has `attachRequired: false`. Kubernetes mounts a scheduled volume without creating a `VolumeAttachment`. When the StorageClass explicitly sets `filesystem-root-squash`, provisioning enables the filesystem access policy with an empty Linode ACL so the squash setting takes effect. The empty ACL uses Space-level VPC admission, without adding node IDs. When the parameter is omitted or blank, the driver leaves the filesystem policy unchanged.
 
@@ -178,7 +180,7 @@ The node needs outbound NFSv4 to the mount target inside the VPC:
 | Node → `api.linode.com` | TCP | 443 | Controller only, for the Linode API |
 | Node → link-local metadata | TCP | 80 | Node plugin only, optional; falls back to the Kubernetes API |
 
-If you run a Linode Cloud Firewall or in-cluster egress policy, TCP 2049 to the VPC has to be permitted. A blocked port produces a `NodeStageVolume` that hangs and then fails with a `mount.nfs4` timeout, which looks identical to an ACL problem in the kubelet's logs. Check the ACL first, since it is cheaper to verify.
+If you run a Linode Cloud Firewall or in-cluster egress policy, TCP 2049 to the VPC has to be permitted. A blocked port produces a `NodeStageVolume` that hangs and then fails with a `mount.nfs4` timeout, which looks identical to an access policy problem in the kubelet's logs. Check the Space access policy first, since it is cheaper to verify.
 
 DNS matters too: the filesystem's DNS name has to resolve from the node, using the host's resolver rather than the cluster's. The node plugin runs with `hostNetwork: true` and mounts in the host mount namespace, so `/etc/resolv.conf` on the node is what counts, not CoreDNS.
 

@@ -36,7 +36,7 @@ NFS Storage Space              (you create it; the driver never creates or delet
 | **Filesystem access policy** | The driver mutates it | Node authorization, squash policy |
 | **Snapshot** | The driver creates and deletes it | One `VolumeSnapshot` |
 
-The important consequence: the driver is a tenant inside a space you own. It checks that the Space access policy admits your cluster's VPC, but never changes that policy. In `node` mode it also adds individual node Linodes to each filesystem's Linode ACL. The driver will not create a space for you or delete one. Deleting the space is always your call.
+The important consequence: the driver is a tenant inside a space you own. It neither validates nor changes the Space access policy; keeping it enabled and admitting your cluster's VPC is up to you, and a wrong policy shows up as mount failures rather than provisioning failures. In `node` mode it also adds individual node Linodes to each filesystem's Linode ACL. The driver will not create a space for you or delete one. Deleting the space is always your call.
 
 ## 🧩 Component layout
 
@@ -207,25 +207,21 @@ sequenceDiagram
     C->>C: validate the request, parse the parameters
     C->>L: resolve the cluster region and VPC
     C->>L: resolve the Storage Space (by ID or label)
-    C->>L: read the Space access policy and validate cluster VPC admission
-    alt policy disabled, not active, or cluster VPC missing
-        C-->>P: FailedPrecondition: check the Space policy and retry
-    else VPC admitted
-        C->>L: look for a filesystem already carrying this label
-        alt one already exists
-            C->>L: wait until active, re-check it matches the request
-            C-->>P: the existing volume
-        else nothing to reuse
-            C->>L: create the filesystem, wait until active
-            C->>L: apply the squash policy, if the class asked for one
-            C-->>P: volume {handle, mount target, region}
-        end
+    C->>L: read the Space access policy (for its mTLS mode)
+    C->>L: look for a filesystem already carrying this label
+    alt one already exists
+        C->>L: wait until active, re-check it matches the request
+        C-->>P: the existing volume
+    else nothing to reuse
+        C->>L: create the filesystem, wait until active
+        C->>L: apply the squash policy, if the class asked for one
+        C-->>P: volume {handle, mount target, region}
     end
 ```
 
 The lookup by label is what makes this idempotent. `csi-provisioner` retries `CreateVolume` freely, and a retry after a partial failure re-finds the filesystem instead of leaking a second one. A restore from a snapshot follows the same shape, with a clone in place of the create.
 
-The Space owner must add the cluster VPC to the access policy before provisioning. The driver applies this validation before looking up an existing filesystem as well as before creating one, so retries, reuse, and future snapshot restores cannot bypass admission.
+The Space access policy is read only to carry its mTLS mode into the volume context. The driver does not check whether it is enabled, `active`, or admits the cluster VPC, so `CreateVolume` succeeds against a Space the cluster cannot reach. The Space owner must add the cluster VPC to the policy before workloads mount; otherwise `NodeStageVolume` fails. See [Mount times out or is denied](./troubleshooting.md#mount-times-out-or-is-denied).
 
 ### DeleteVolume
 

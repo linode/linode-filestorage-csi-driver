@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
@@ -100,39 +99,6 @@ func TestValidateSpaceVPC(t *testing.T) {
 		wantMessage string
 	}{
 		{
-			name:   "admitted",
-			vpcID:  123,
-			policy: &linodego.NFSSpaceAccessPolicy{Enabled: true, VPCACL: []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}}, Status: linodego.NFSAccessPolicyStatusActive},
-		},
-		{
-			name:        "policy disabled",
-			vpcID:       123,
-			policy:      &linodego.NFSSpaceAccessPolicy{VPCACL: []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}}, Status: linodego.NFSAccessPolicyStatusActive},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 42 does not admit cluster VPC 123. Please check the space access policy to enable the access policy and add the VPC.",
-		},
-		{
-			name:        "VPC not admitted",
-			vpcID:       123,
-			policy:      &linodego.NFSSpaceAccessPolicy{Enabled: true, Status: linodego.NFSAccessPolicyStatusActive},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 42 does not admit cluster VPC 123. Please check the space access policy to enable the access policy and add the VPC.",
-		},
-		{
-			name:        "updating policy is disabled",
-			vpcID:       123,
-			policy:      &linodego.NFSSpaceAccessPolicy{VPCACL: []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}}, Status: linodego.NFSAccessPolicyStatusUpdating},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 42 access policy is not active (status \"updating\"); cluster VPC 123 admission is not ready. Provisioning will retry when the policy is active.",
-		},
-		{
-			name:        "updating policy does not admit VPC",
-			vpcID:       123,
-			policy:      &linodego.NFSSpaceAccessPolicy{Enabled: true, Status: linodego.NFSAccessPolicyStatusUpdating},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "Storage Space 42 access policy is not active (status \"updating\"); cluster VPC 123 admission is not ready. Provisioning will retry when the policy is active.",
-		},
-		{
 			name:        "policy missing",
 			vpcID:       123,
 			wantCode:    codes.Internal,
@@ -159,12 +125,13 @@ func TestValidateSpaceVPC(t *testing.T) {
 	}
 }
 
-func TestValidateSpaceVPCRejectsInactivePolicy(t *testing.T) {
+func TestValidateSpaceVPCIgnoresPolicyStatus(t *testing.T) {
 	for _, policyStatus := range []linodego.NFSAccessPolicyStatus{
 		linodego.NFSAccessPolicyStatusCreating,
 		linodego.NFSAccessPolicyStatusUpdating,
 		linodego.NFSAccessPolicyStatusDeleting,
 		linodego.NFSAccessPolicyStatusError,
+		"blocked",
 		"",
 		"unknown",
 	} {
@@ -175,12 +142,8 @@ func TestValidateSpaceVPCRejectsInactivePolicy(t *testing.T) {
 				Status:  policyStatus,
 			}
 			err := validateSpaceVPC(42, 123, policy)
-			if status.Code(err) != codes.FailedPrecondition {
-				t.Fatalf("validateSpaceVPC() code = %v, want FailedPrecondition", status.Code(err))
-			}
-			wantMessage := fmt.Sprintf("Storage Space 42 access policy is not active (status %q); cluster VPC 123 admission is not ready. Provisioning will retry when the policy is active.", policyStatus)
-			if got := status.Convert(err).Message(); got != wantMessage {
-				t.Fatalf("validateSpaceVPC() message = %q, want %q", got, wantMessage)
+			if err != nil {
+				t.Fatalf("validateSpaceVPC() error = %v, want nil", err)
 			}
 		})
 	}
