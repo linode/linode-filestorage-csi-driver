@@ -48,7 +48,6 @@
   - [Consume it from a pod](docs/usage.md#3-consume-it-from-a-pod)
   - [Share one volume between pods](docs/usage.md#4-share-one-volume-between-pods)
   - [StorageClass parameters](docs/storage-class-parameters.md)
-  - [Snapshots and restore](docs/snapshots.md)
 - [Access and Networking](docs/access-and-networking.md)
   - [VPC requirement](docs/access-and-networking.md#-vpc-requirement)
   - [Access policies](docs/access-and-networking.md#-two-layers-of-access-policy)
@@ -69,7 +68,7 @@
 
 ## 📚 Overview
 
-This is the Container Storage Interface ([CSI](https://github.com/container-storage-interface/spec)) driver for **Linode managed NFS file storage**. It lets Kubernetes provision, share, snapshot, and mount NFSv4 filesystems from a Linode NFS Storage Space as `PersistentVolumes`.
+This is the Container Storage Interface ([CSI](https://github.com/container-storage-interface/spec)) driver for **Linode managed NFS file storage**. It lets Kubernetes provision, share, and mount NFSv4 filesystems from a Linode NFS Storage Space as `PersistentVolumes`.
 
 The volumes are network filesystems rather than block devices, so a single volume can be mounted read-write by pods on many nodes at the same time. That makes it suitable for shared caches, shared media, CI artifacts, and any workload that needs `ReadWriteMany`.
 
@@ -80,13 +79,13 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - **Provisions filesystems.** A `PersistentVolumeClaim` becomes a Linode NFS filesystem inside an NFS Storage Space that you pre-create and name in the `StorageClass`.
 - **Leaves Space access to you.** The Storage Space access policy must be enabled and admit the cluster VPC. The Space owner maintains it; the driver neither validates nor changes it, so a misconfigured policy surfaces as mount failures. `accessPolicy.mode=node` enables per-filesystem Linode ACL management, but is not currently recommended because every publish and unpublish waits for an asynchronous policy update and scales poorly.
 - **Mounts over NFSv4.** The node plugin mounts filesystem DNS name at the kubelet staging path, then bind-mounts it into each pod.
-- **Snapshots and restores.** `VolumeSnapshot` objects map to Linode NFS snapshots, and a new PVC can be restored from a snapshot by cloning it into a filesystem.
 - **Reports usage.** `NodeGetVolumeStats` reports byte and inode usage read from the mounted filesystem.
 
 ### Current Limitations:
 
-- **Volume expansion** is currently not supported.
-- **Volume cloning:** cloning happens only through snapshot restore.
+- **Volume expansion** is planned, but not available yet.
+- **Volume cloning** is planned, through snapshots, but not available yet.
+- **Snapshots and restores** are planned, but not available yet.
 
 ## 🧭 Before you begin
 

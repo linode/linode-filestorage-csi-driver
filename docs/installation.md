@@ -19,7 +19,7 @@
 
 | Requirement | Detail |
 | --- | --- |
-| **Kubernetes** | A cluster with the CSI feature set enabled and `snapshot.storage.k8s.io` CRDs installed if you want snapshots |
+| **Kubernetes** | A cluster with the CSI feature set enabled |
 | **Linode Cloud Controller Manager** | Required. The driver reads `spec.providerID` (`linode://12345`) off node objects to resolve Linode IDs |
 | **Region topology labels** | Nodes must carry `topology.kubernetes.io/region` (or the beta label). The CCM sets these |
 | **A VPC** | Every node must be attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets |
@@ -235,18 +235,14 @@ The Secret name and key are not configurable in the raw manifests: the controlle
 
 #### 🚀 Apply the manifest
 
-Apply a released manifest:
+Apply the manifest attached to a release. It carries the release image tag:
 
 ```sh
 export VERSION="v0.0.1"
 kubectl apply -f https://github.com/linode/linode-filestorage-csi-driver/releases/download/${VERSION}/linode-filestorage-csi-driver-${VERSION}.yaml
 ```
 
-Or build it from a checkout with Kustomize:
-
-```sh
-kustomize build deploy/kubernetes/base | kubectl apply -f -
-```
+> **Development only:** `kustomize build deploy/kubernetes/base | kubectl apply -f -` builds from a checkout, but the base pins the `:dev` image tag. The release workflow does not push that tag, so the image will not pull unless you build and push your own. Use the released manifest for normal installs.
 
 There are also `deploy/kubernetes/overlays/ci` and `deploy/kubernetes/overlays/dev` overlays, both of which currently just include the base.
 
@@ -343,18 +339,6 @@ Uninstalling does not remove:
 *See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command documentation.*
 
 ## 🧩 Optional configuration
-
-### Enable the snapshotter
-
-Snapshot RPCs are implemented and `CREATE_DELETE_SNAPSHOT` is advertised, but the sidecar ships disabled. Turn it on to use `VolumeSnapshot` objects:
-
-```yaml
-sidecars:
-  snapshotter:
-    enabled: true
-```
-
-You also need the `snapshot.storage.k8s.io` CRDs installed in the cluster. See [Snapshots](./snapshots.md).
 
 ### The resizer stays off
 

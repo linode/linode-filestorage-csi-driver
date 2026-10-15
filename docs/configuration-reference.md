@@ -133,7 +133,7 @@ The node DaemonSet always uses `hostNetwork: true`; it is not a value. It has no
 | `sidecars.attacher.*` | `registry.k8s.io/sig-storage/csi-attacher:v4.12.0` | ✅ always |
 | `sidecars.resizer.enabled` | `false` | ❌ leave off; expansion is unimplemented |
 | `sidecars.resizer.*` | `registry.k8s.io/sig-storage/csi-resizer:v2.1.0` | |
-| `sidecars.snapshotter.enabled` | `false` | ❌ turn on to use snapshots |
+| `sidecars.snapshotter.enabled` | `false` | ❌ leave off; snapshots are not yet available |
 | `sidecars.snapshotter.*` | `registry.k8s.io/sig-storage/csi-snapshotter:v8.2.0` | |
 | `sidecars.livenessProbe.*` | `registry.k8s.io/sig-storage/livenessprobe:v2.15.0` | ✅ always |
 
@@ -194,7 +194,7 @@ For reference when matching against your cluster's Kubernetes version:
 | --- | --- | --- |
 | `csi-provisioner` | v6.2.0 | Watches PVCs, calls `CreateVolume` and `DeleteVolume` |
 | `csi-attacher` | v4.12.0 | Watches `VolumeAttachment`s and calls publish/unpublish in `node` mode. It remains deployed but has no attachments to process in `space` mode |
-| `csi-snapshotter` | v8.2.0 | Watches `VolumeSnapshotContent`s, calls the snapshot RPCs. Disabled by default |
+| `csi-snapshotter` | v8.2.0 | Watches `VolumeSnapshotContent`s, calls the snapshot RPCs. Disabled by default; snapshots are not yet available |
 | `csi-resizer` | v2.1.0 | Would call `ControllerExpandVolume`. Disabled, and unimplemented |
 | `csi-node-driver-registrar` | v2.16.0 | Registers the plugin with the kubelet |
 | `livenessprobe` | v2.15.0 | Probes the driver's own `Probe` RPC. Runs in both workloads |
