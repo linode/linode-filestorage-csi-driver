@@ -72,6 +72,13 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
+	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateSpaceVPC(space.ID, cluster.VPCID, spacePolicy); err != nil {
+		return nil, err
+	}
 	label := truncateNFSLabelToMaxBytes(normalizeLabel(req.GetName()))
 
 	existing, found, err := s.findExistingFilesystem(ctx, space.ID, label, params.region)
@@ -81,14 +88,14 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	capacityBytes := requestedCapacityBytes(req.GetCapacityRange())
 
 	if found {
-		return s.handleExistingFilesystem(ctx, existing, &params, cluster.VPCID, req.GetCapacityRange(), snapshot)
+		return s.handleExistingFilesystem(ctx, existing, &params, spacePolicy, req.GetCapacityRange(), snapshot)
 	}
 
 	// TODO: Remove the Unimplemented error above and uncomment this block when snapshot restore is supported.
 	// if snapshot != nil {
 	// 	// Snapshot restores target the cluster's region. Source-region validation is
 	// 	// deferred until cross-region CSI behavior is explicitly defined.
-	// 	return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, cluster.VPCID, &params, capacityBytes)
+	// 	return s.restoreFromSnapshot(ctx, label, *snapshot, space.ID, spacePolicy, &params, capacityBytes)
 	// }
 
 	createOptions := linodego.NFSFilesystemCreateOptions{
@@ -111,7 +118,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		return nil, linodeWaitError(err, "wait for NFS filesystem active")
 	}
 
-	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, cluster.VPCID)
+	volume, err := s.finalizeFilesystemVolume(ctx, filesystem, &params, spacePolicy)
 	if err != nil {
 		return nil, err
 	}

@@ -21,7 +21,7 @@ The binary is configured entirely through the environment. There is no config fi
 | `DRIVER_ROLE` | `controller` | both | `controller` or `node`. Anything else is a startup error: `invalid driver role "..."` |
 | `CSI_ENDPOINT` | `unix:///csi/csi.sock` | both | gRPC listen address. The chart overrides it to `unix:///var/lib/csi/sockets/pluginproxy/csi.sock` for the controller |
 | `LINODE_TOKEN` | none | controller | Linode API token. **Required** for the controller; the process exits with `ErrTokenRequired` without it. The node plugin ignores it |
-| `NFS_ACCESS_POLICY_MODE` | `space` | controller | `space` disables CSI attachment and relies on the Space VPC ACL; `node` enables publish/unpublish and maintains each filesystem's Linode ACL. Any other value is a startup error |
+| `NFS_ACCESS_POLICY_MODE` | `space` | controller | `space` disables CSI attachment and relies on the Space access policy; `node` enables publish/unpublish and maintains each filesystem's Linode ACL. Any other value is a startup error |
 | `NODE_NAME` | none | node | The node's Kubernetes name, injected from `spec.nodeName`. Metadata resolution fails without it |
 | `TIMEOUT` | `10s` | controller | Per-request Linode API client timeout, as a Go duration. An unparseable value logs a warning and falls back to 10s |
 | `LINODE_URL` | `https://api.linode.com` | controller | Linode API base URL. Read by `linodego`, not by the driver's own config loading |
@@ -68,7 +68,7 @@ The levels the driver actually uses:
 | `secretRef.name` | unset | Use an existing Secret instead of creating one |
 | `secretRef.apiTokenRef` | `token` | Key within that Secret |
 | `driver.name` | `linodenfs.csi.linode.com` | The CSI driver name. Changing it changes the `CSIDriver` object, the socket path, and the `provisioner` every `StorageClass` must use |
-| `accessPolicy.mode` | `space` | Authorization model. `space` uses the Space VPC ACL without CSI attachment. `node` maintains per-filesystem Linode ACLs and requires CSI attachment, but is not currently recommended because its asynchronous per-node policy updates cause severe scheduling and cleanup delays |
+| `accessPolicy.mode` | `space` | Authorization model. `space` uses the Space access policy without CSI attachment. `node` maintains per-filesystem Linode ACLs and requires CSI attachment, but is not currently recommended because its asynchronous per-node policy updates cause severe scheduling and cleanup delays |
 | `podAnnotations` | `{}` | Applied to controller and node pods |
 | `podLabels` | `{}` | Applied to controller and node pods |
 

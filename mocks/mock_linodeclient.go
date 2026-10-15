@@ -220,21 +220,6 @@ func (mr *MockLinodeClientMockRecorder) UpdateNFSFilesystemAccessPolicy(ctx, spa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSFilesystemAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSFilesystemAccessPolicy), ctx, spaceID, filesystemID, opts)
 }
 
-// UpdateNFSSpaceAccessPolicy mocks base method.
-func (m *MockLinodeClient) UpdateNFSSpaceAccessPolicy(ctx context.Context, spaceID int, opts linodego.NFSSpaceAccessPolicyUpdateOptions) (*linodego.NFSSpaceAccessPolicy, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNFSSpaceAccessPolicy", ctx, spaceID, opts)
-	ret0, _ := ret[0].(*linodego.NFSSpaceAccessPolicy)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateNFSSpaceAccessPolicy indicates an expected call of UpdateNFSSpaceAccessPolicy.
-func (mr *MockLinodeClientMockRecorder) UpdateNFSSpaceAccessPolicy(ctx, spaceID, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSSpaceAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSSpaceAccessPolicy), ctx, spaceID, opts)
-}
-
 // WaitForNFSFilesystemAccessPolicyStatus mocks base method.
 func (m *MockLinodeClient) WaitForNFSFilesystemAccessPolicyStatus(ctx context.Context, spaceID, filesystemID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
@@ -263,19 +248,4 @@ func (m *MockLinodeClient) WaitForNFSFilesystemStatus(ctx context.Context, space
 func (mr *MockLinodeClientMockRecorder) WaitForNFSFilesystemStatus(ctx, spaceID, filesystemID, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForNFSFilesystemStatus", reflect.TypeOf((*MockLinodeClient)(nil).WaitForNFSFilesystemStatus), ctx, spaceID, filesystemID, status)
-}
-
-// WaitForNFSSpaceAccessPolicyStatus mocks base method.
-func (m *MockLinodeClient) WaitForNFSSpaceAccessPolicyStatus(ctx context.Context, spaceID int, status linodego.NFSAccessPolicyStatus) (*linodego.NFSSpaceAccessPolicy, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForNFSSpaceAccessPolicyStatus", ctx, spaceID, status)
-	ret0, _ := ret[0].(*linodego.NFSSpaceAccessPolicy)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WaitForNFSSpaceAccessPolicyStatus indicates an expected call of WaitForNFSSpaceAccessPolicyStatus.
-func (mr *MockLinodeClientMockRecorder) WaitForNFSSpaceAccessPolicyStatus(ctx, spaceID, status any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForNFSSpaceAccessPolicyStatus", reflect.TypeOf((*MockLinodeClient)(nil).WaitForNFSSpaceAccessPolicyStatus), ctx, spaceID, status)
 }

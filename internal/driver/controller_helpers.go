@@ -491,58 +491,20 @@ func (s *ControllerServer) getSpaceAccessPolicy(ctx context.Context, spaceID int
 	return policy, nil
 }
 
-func (s *ControllerServer) ensureSpaceVPC(ctx context.Context, spaceID, vpcID int, policy *linodego.NFSSpaceAccessPolicy) error {
+func validateSpaceVPC(spaceID, vpcID int, policy *linodego.NFSSpaceAccessPolicy) error {
 	if vpcID == 0 {
 		return status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
 	}
-
 	if policy == nil {
-		var err error
-		policy, err = s.getSpaceAccessPolicy(ctx, spaceID)
-		if err != nil {
-			return err
-		}
+		return status.Errorf(codes.Internal, "get NFS space access policy for Space %d returned no policy", spaceID)
 	}
-	vpcAllowed := slices.ContainsFunc(policy.VPCACL, func(vpc linodego.NFSSpaceAccessPolicyVPC) bool {
-		return vpc.ID == vpcID
-	})
 
-	if !policy.Enabled || !vpcAllowed {
-		vpcs := make([]linodego.NFSSpaceAccessPolicyVPCOptions, 0, len(policy.VPCACL)+1)
-		for i := range policy.VPCACL {
-			vpc := &policy.VPCACL[i]
-			vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{
-				ID:      vpc.ID,
-				Subnets: spaceAccessPolicySubnetIDs(vpc.Subnets),
-			})
-		}
-		if !vpcAllowed {
-			vpcs = append(vpcs, linodego.NFSSpaceAccessPolicyVPCOptions{ID: vpcID})
-		}
-		if _, err := s.client.UpdateNFSSpaceAccessPolicy(ctx, spaceID, linodego.NFSSpaceAccessPolicyUpdateOptions{
-			Label:    new(policy.Label),
-			Enabled:  new(true),
-			VPCs:     new(vpcs),
-			MTLSMode: new(policy.MTLSMode),
-		}); err != nil {
-			return linodeError(err, "update NFS space access policy")
-		}
-	}
-	// Always wait for the policy status. A retried CreateVolume can observe the
-	// requested VPC fields while an earlier asynchronous update is still pending.
-	waitCtx, cancel := waitContext(ctx)
-	defer cancel()
-	if _, err := s.client.WaitForNFSSpaceAccessPolicyStatus(waitCtx, spaceID, linodego.NFSAccessPolicyStatusActive); err != nil {
-		return linodeWaitError(err, "wait for NFS space access policy active")
-	}
 	return nil
 }
 
 // finalizeFilesystemVolume completes backend initialization after the caller has
-// waited for the filesystem to become active. The API creates a space's backing
-// tenant lazily with its first filesystem, so reconciling the space policy
-// before filesystem activation can leave the policy blocked.
-func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int) (*csi.Volume, error) {
+// waited for the filesystem to become active.
+func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesystem *linodego.NFSFilesystem, params *createVolumeParameters, spacePolicy *linodego.NFSSpaceAccessPolicy) (*csi.Volume, error) {
 	if err := validateFilesystemMountTarget(filesystem); err != nil {
 		return nil, err
 	}
@@ -551,17 +513,10 @@ func (s *ControllerServer) finalizeFilesystemVolume(ctx context.Context, filesys
 			return nil, err
 		}
 	}
-	spacePolicy, err := s.getSpaceAccessPolicy(ctx, filesystem.SpaceID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.ensureSpaceVPC(ctx, filesystem.SpaceID, vpcID, spacePolicy); err != nil {
-		return nil, err
-	}
 	return csiVolume(filesystem, spacePolicy.MTLSMode), nil
 }
 
-func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, vpcID int, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existing *linodego.NFSFilesystem, params *createVolumeParameters, spacePolicy *linodego.NFSSpaceAccessPolicy, capacityRange *csi.CapacityRange, source *snapshotHandle) (*csi.CreateVolumeResponse, error) {
 	if source != nil {
 		if err := validateExistingSnapshotClone(existing, source.snapshotID, params.region); err != nil {
 			return nil, err
@@ -585,7 +540,7 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 	if err := validateExistingFilesystem(existing, params); err != nil {
 		return nil, err
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, vpcID)
+	volume, err := s.finalizeFilesystemVolume(ctx, existing, params, spacePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +549,7 @@ func (s *ControllerServer) handleExistingFilesystem(ctx context.Context, existin
 
 // TODO: Restore NFS snapshot helpers when upstream linodego exposes the API.
 /*
-func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID, vpcID int, params *createVolumeParameters, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
+func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string, source snapshotHandle, spaceID int, spacePolicy *linodego.NFSSpaceAccessPolicy, params *createVolumeParameters, capacityBytes int64) (*csi.CreateVolumeResponse, error) {
 	options := linodego.NFSSnapshotCloneOptions{
 		Label:   label,
 		Region:  params.region,
@@ -614,7 +569,7 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 	if err != nil {
 		return nil, linodeWaitError(err, "wait for NFS cloned filesystem active")
 	}
-	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, vpcID)
+	volume, err := s.finalizeFilesystemVolume(ctx, cloned, params, spacePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -628,20 +583,6 @@ func (s *ControllerServer) restoreFromSnapshot(ctx context.Context, label string
 	return &csi.CreateVolumeResponse{Volume: volume}, nil
 }
 */
-
-func spaceAccessPolicySubnetIDs(subnets []linodego.NFSSpaceAccessPolicyVPCSubnet) []int {
-	if len(subnets) == 0 {
-		return nil
-	}
-	ids := make([]int, 0, len(subnets))
-	for i := range subnets {
-		subnet := &subnets[i]
-		if subnet.ID != 0 {
-			ids = append(ids, subnet.ID)
-		}
-	}
-	return ids
-}
 
 func (s *ControllerServer) setInitialSquashPolicy(ctx context.Context, spaceID, filesystemID int, squashPolicy linodego.NFSSquashPolicy) error {
 	policy, err := s.client.GetNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID)
