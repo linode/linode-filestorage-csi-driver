@@ -92,7 +92,7 @@ curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
 
 Look for an active interface with `"purpose": "vpc"` and a non-null `vpc_id`. If there is none, the node pool has to be recreated inside a VPC; a running Linode's interfaces cannot be reconfigured into a VPC in place. See [VPC requirement](./access-and-networking.md#-vpc-requirement).
 
-If the token lacks Linodes read access, this same error appears even though the VPC exists, because the interface lookup fails. Check for a `PermissionDenied` earlier in the controller log.
+If the token lacks read access to Linodes, this same error appears even though the VPC exists, because the interface lookup fails. Check for a `PermissionDenied` earlier in the controller log.
 
 ### Nodes in multiple regions
 
