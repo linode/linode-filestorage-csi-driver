@@ -25,7 +25,8 @@
 | **A VPC** | Every node must be attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets |
 | **A single region** | All nodes must be in one region. A mixed-region cluster is rejected when resolving cluster metadata |
 | **An NFS Storage Space** | Pre-created. The driver provisions filesystems inside it but never creates the space |
-| **`LINODE_TOKEN`** | A [Personal Access Token](https://cloud.linode.com/profile/tokens) with read/write on Linodes, VPCs, and NFS resources |
+| **NFSv4 kernel support** | The node kernel must support NFSv4. By default the driver mounts with `vers=4.1,proto=tcp6`; `mountOptions` on the StorageClass replace those defaults. The NFS client tools ship in the plugin image, so nothing needs installing on the host |
+| **`LINODE_TOKEN`** | A [Personal Access Token](https://cloud.linode.com/profile/tokens) with read-only access to Linodes and read/write access to NFS resources |
 
 > The VPC requirement is a hard precondition, not a recommendation. `CreateVolume` fails with `FailedPrecondition: this driver requires VPC-backed IPv6 connectivity; cluster VPC not found` when the node's Linode has no VPC interface. See [Access and Networking](./access-and-networking.md#-vpc-requirement).
 
@@ -33,9 +34,10 @@
 
 Generate a Personal Access Token (PAT) in the [Linode Cloud Manager](https://cloud.linode.com/profile/tokens). The controller uses it for every Linode API call, so scope it to what the driver actually touches:
 
-- **Linodes**: read/write, to resolve instance interfaces and configs when finding the cluster VPC
-- **VPCs**: read, to find the cluster VPC
-- **NFS / file storage**: read/write, to create and delete filesystems and manage filesystem access policies; read access to Storage Space access policies
+- **Linodes**: read-only, to look up instances, interfaces, and configs when finding the cluster VPC
+- **NFS / file storage**: read/write, to create and delete filesystems and update filesystem access policies. The controller only reads Storage Space access policies
+
+The driver makes no VPC API calls; it reads the VPC ID from the Linode's interfaces.
 
 Give it an expiry long enough for continued use, and plan to rotate it. The token is injected as the `LINODE_TOKEN` environment variable, so a rotation requires restarting the controller pod.
 
@@ -155,7 +157,7 @@ helm repo add linode-nfs-csi https://linode.github.io/linode-filestorage-csi-dri
 helm repo update linode-nfs-csi
 ```
 
-Every tagged release publishes a versioned chart package and repository index to that site, so this is the only step that needs repeating when a new version lands. The GitHub Pages site must be publicly accessible for users without repository access.
+Every tagged release publishes a versioned chart package and repository index to that site, so this is the only step that needs repeating when a new version lands.
 
 #### 🚀 Deploy the CSI driver
 
@@ -238,7 +240,8 @@ The Secret name and key are not configurable in the raw manifests: the controlle
 Apply the manifest attached to a release. It carries the release image tag:
 
 ```sh
-export VERSION="v0.0.1"
+# Use the latest tag from https://github.com/linode/linode-filestorage-csi-driver/releases
+export VERSION="<release tag>"
 kubectl apply -f https://github.com/linode/linode-filestorage-csi-driver/releases/download/${VERSION}/linode-filestorage-csi-driver-${VERSION}.yaml
 ```
 
