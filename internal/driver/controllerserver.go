@@ -331,14 +331,15 @@ func (s *ControllerServer) ControllerExpandVolume(ctx context.Context, req *csi.
 	}
 
 	currentCapacityBytes := *rootQuota.MaxCapacityBytes
-	if capacityBytes < currentCapacityBytes {
-		return nil, status.Errorf(codes.InvalidArgument, "requested capacity %d is smaller than the current root quota capacity %d", capacityBytes, currentCapacityBytes)
-	}
-	if capacityBytes == currentCapacityBytes {
+	if (currentCapacityBytes >= requiredBytes && (limitBytes == 0 || currentCapacityBytes <= limitBytes)) || capacityBytes == currentCapacityBytes {
+		// required_bytes is a minimum, so existing capacity that already satisfies the range is a no-op success.
 		return &csi.ControllerExpandVolumeResponse{
 			CapacityBytes:         currentCapacityBytes,
 			NodeExpansionRequired: false,
 		}, nil
+	}
+	if capacityBytes < currentCapacityBytes {
+		return nil, status.Errorf(codes.InvalidArgument, "requested capacity %d is smaller than the current root quota capacity %d", capacityBytes, currentCapacityBytes)
 	}
 
 	_, err = s.client.UpdateNFSFilesystem(ctx, handle.spaceID, handle.filesystemID, linodego.NFSFilesystemUpdateOptions{

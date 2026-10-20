@@ -1451,10 +1451,23 @@ func TestControllerExpandVolume(t *testing.T) {
 			wantCapacityBytes: 1024,
 		},
 		{
-			name: "smaller capacity is rejected",
+			name: "smaller required capacity is a no-op",
 			request: &csi.ControllerExpandVolumeRequest{
 				VolumeId:      testVolumeID,
 				CapacityRange: &csi.CapacityRange{RequiredBytes: 512},
+			},
+			setup: func(env controllerTestEnv) {
+				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
+					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
+				}, nil)
+			},
+			wantCapacityBytes: 1024,
+		},
+		{
+			name: "capacity above the requested limit is rejected",
+			request: &csi.ControllerExpandVolumeRequest{
+				VolumeId:      testVolumeID,
+				CapacityRange: &csi.CapacityRange{RequiredBytes: 256, LimitBytes: 512},
 			},
 			setup: func(env controllerTestEnv) {
 				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
