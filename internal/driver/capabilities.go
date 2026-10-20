@@ -11,15 +11,14 @@ const (
 
 func pluginCapabilities(role Role) []*csi.PluginCapability {
 	var capabilities []csi.PluginCapability_Service_Type
+	supportsExpansion := false
 
 	switch role {
 	case RoleController:
 		capabilities = []csi.PluginCapability_Service_Type{
 			csi.PluginCapability_Service_CONTROLLER_SERVICE,
 		}
-		// Future post-v1 capability: advertise plugin volume expansion once
-		// quota-backed resize semantics are implemented end to end.
-		// expansion := csi.PluginCapability_VolumeExpansion_OFFLINE
+		supportsExpansion = true
 	case RoleNode:
 	}
 
@@ -31,6 +30,15 @@ func pluginCapabilities(role Role) []*csi.PluginCapability {
 			},
 		})
 	}
+	if supportsExpansion {
+		pc = append(pc, &csi.PluginCapability{
+			Type: &csi.PluginCapability_VolumeExpansion_{
+				VolumeExpansion: &csi.PluginCapability_VolumeExpansion{
+					Type: csi.PluginCapability_VolumeExpansion_ONLINE,
+				},
+			},
+		})
+	}
 	return pc
 }
 
@@ -38,19 +46,13 @@ func controllerServiceCapabilities(accessPolicyMode AccessPolicyMode) []*csi.Con
 	capabilities := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_GET_VOLUME,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 		// TODO: Advertise CREATE_DELETE_SNAPSHOT when upstream linodego exposes the NFS snapshot API.
 		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 	}
 	if accessPolicyMode == AccessPolicyModeNode {
 		capabilities = append(capabilities, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
 	}
-
-	// Future post-v1 capabilities once core filesystem lifecycle is complete.
-	// capabilities = append(capabilities,
-	// 	csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-	// 	csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
-	// 	csi.ControllerServiceCapability_RPC_CLONE_VOLUME,
-	// )
 
 	cc := make([]*csi.ControllerServiceCapability, 0, len(capabilities))
 	for _, c := range capabilities {
