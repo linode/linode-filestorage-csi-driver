@@ -1,4 +1,4 @@
-IMAGE_VERSION := env("IMAGE_VERSION", shell("git branch --show-current"))
+IMAGE_VERSION := env("IMAGE_VERSION", "dev")
 IMAGE_TAGS := env("IMAGE_TAGS", IMAGE_VERSION)
 IMAGE_REPO := env("IMAGE_REPO", "docker.io/linode/linode-filestorage-csi-driver")
 PLATFORM := env("PLATFORM", "linux/amd64")
