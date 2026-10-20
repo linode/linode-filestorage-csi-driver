@@ -1427,13 +1427,12 @@ func TestControllerExpandVolume(t *testing.T) {
 					{ID: 789, FilesystemID: 456, Path: "/user-data", MaxCapacityBytes: new(int64(512))},
 					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
 				}, nil)
-				updateQuota := env.client.EXPECT().UpdateNFSQuota(
+				updateQuota := env.client.EXPECT().UpdateNFSFilesystem(
 					gomock.Any(),
 					123,
 					456,
-					890,
-					gomock.Eq(linodego.NFSQuotaUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
-				).Return(&linodego.NFSQuota{ID: 890, FilesystemID: 456, IsRoot: true, MaxCapacityBytes: new(int64(2048))}, nil)
+					gomock.Eq(linodego.NFSFilesystemUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
+				).Return(&linodego.NFSFilesystem{SpaceID: 890, ID: 456, MaxCapacityBytes: int64(2048)}, nil)
 				gomock.InOrder(listQuotas, updateQuota)
 			},
 			wantCapacityBytes: 2048,
@@ -1475,12 +1474,11 @@ func TestControllerExpandVolume(t *testing.T) {
 				env.client.EXPECT().ListNFSQuotas(gomock.Any(), 123, 456, nil).Return([]linodego.NFSQuota{
 					{ID: 890, FilesystemID: 456, Path: "/", IsRoot: true, MaxCapacityBytes: new(int64(1024))},
 				}, nil)
-				env.client.EXPECT().UpdateNFSQuota(
+				env.client.EXPECT().UpdateNFSFilesystem(
 					gomock.Any(),
 					123,
 					456,
-					890,
-					gomock.Eq(linodego.NFSQuotaUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
+					gomock.Eq(linodego.NFSFilesystemUpdateOptions{MaxCapacityBytes: new(int64(2048))}),
 				).Return(nil, &linodego.Error{
 					Code:    http.StatusUnprocessableEntity,
 					Message: "requested capacity exceeds the customer-manageable limit",

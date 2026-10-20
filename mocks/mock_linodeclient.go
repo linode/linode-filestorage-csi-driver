@@ -220,6 +220,21 @@ func (mr *MockLinodeClientMockRecorder) ListNFSSpaces(ctx, opts any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNFSSpaces", reflect.TypeOf((*MockLinodeClient)(nil).ListNFSSpaces), ctx, opts)
 }
 
+// UpdateNFSFilesystem mocks base method.
+func (m *MockLinodeClient) UpdateNFSFilesystem(ctx context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemUpdateOptions) (*linodego.NFSFilesystem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNFSFilesystem", ctx, spaceID, filesystemID, opts)
+	ret0, _ := ret[0].(*linodego.NFSFilesystem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNFSFilesystem indicates an expected call of UpdateNFSFilesystem.
+func (mr *MockLinodeClientMockRecorder) UpdateNFSFilesystem(ctx, spaceID, filesystemID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSFilesystem", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSFilesystem), ctx, spaceID, filesystemID, opts)
+}
+
 // UpdateNFSFilesystemAccessPolicy mocks base method.
 func (m *MockLinodeClient) UpdateNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemAccessPolicyUpdateOptions) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
@@ -233,21 +248,6 @@ func (m *MockLinodeClient) UpdateNFSFilesystemAccessPolicy(ctx context.Context, 
 func (mr *MockLinodeClientMockRecorder) UpdateNFSFilesystemAccessPolicy(ctx, spaceID, filesystemID, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSFilesystemAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSFilesystemAccessPolicy), ctx, spaceID, filesystemID, opts)
-}
-
-// UpdateNFSQuota mocks base method.
-func (m *MockLinodeClient) UpdateNFSQuota(ctx context.Context, spaceID, filesystemID, quotaID int, opts linodego.NFSQuotaUpdateOptions) (*linodego.NFSQuota, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNFSQuota", ctx, spaceID, filesystemID, quotaID, opts)
-	ret0, _ := ret[0].(*linodego.NFSQuota)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateNFSQuota indicates an expected call of UpdateNFSQuota.
-func (mr *MockLinodeClientMockRecorder) UpdateNFSQuota(ctx, spaceID, filesystemID, quotaID, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSQuota", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSQuota), ctx, spaceID, filesystemID, quotaID, opts)
 }
 
 // WaitForNFSFilesystemAccessPolicyStatus mocks base method.

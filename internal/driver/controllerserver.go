@@ -341,11 +341,11 @@ func (s *ControllerServer) ControllerExpandVolume(ctx context.Context, req *csi.
 		}, nil
 	}
 
-	_, err = s.client.UpdateNFSQuota(ctx, handle.spaceID, handle.filesystemID, rootQuota.ID, linodego.NFSQuotaUpdateOptions{
+	_, err = s.client.UpdateNFSFilesystem(ctx, handle.spaceID, handle.filesystemID, linodego.NFSFilesystemUpdateOptions{
 		MaxCapacityBytes: new(capacityBytes),
 	})
 	if err != nil {
-		return nil, linodeError(err, "update NFS filesystem root quota")
+		return nil, linodeError(err, "update NFS filesystem")
 	}
 
 	return &csi.ControllerExpandVolumeResponse{

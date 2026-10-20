@@ -175,29 +175,32 @@ func (c *fakeSanityLinodeClient) ListNFSQuotas(_ context.Context, spaceID, files
 	return result, nil
 }
 
-func (c *fakeSanityLinodeClient) UpdateNFSQuota(_ context.Context, spaceID, filesystemID, quotaID int, opts linodego.NFSQuotaUpdateOptions) (*linodego.NFSQuota, error) {
+func (c *fakeSanityLinodeClient) UpdateNFSFilesystem(_ context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemUpdateOptions) (*linodego.NFSFilesystem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	filesystem, err := c.filesystemLocked(spaceID, filesystemID)
 	if err != nil {
 		return nil, err
 	}
-	quota, ok := c.quotas[quotaID]
-	if !ok || quota.FilesystemID != filesystemID {
-		return nil, fakeSanityNotFound("NFS quota", quotaID)
-	}
 	if opts.MaxCapacityBytes != nil {
-		if quota.MaxCapacityBytes != nil && *opts.MaxCapacityBytes < *quota.MaxCapacityBytes {
-			return nil, fakeSanityInvalid("NFS quota capacity cannot be decreased")
+		if *opts.MaxCapacityBytes < filesystem.MaxCapacityBytes {
+			return nil, fakeSanityInvalid("NFS filesystem capacity cannot be decreased")
 		}
-		quota.MaxCapacityBytes = cloneSanityInt64(opts.MaxCapacityBytes)
 		filesystem.MaxCapacityBytes = *opts.MaxCapacityBytes
 		filesystem.Updated = sanityNow()
 		c.filesystems[filesystemID] = filesystem
+
+		for quotaID := range c.quotas {
+			quota := c.quotas[quotaID]
+			if quota.FilesystemID != filesystemID || !quota.IsRoot {
+				continue
+			}
+			quota.MaxCapacityBytes = cloneSanityInt64(opts.MaxCapacityBytes)
+			quota.Updated = filesystem.Updated
+			c.quotas[quotaID] = quota
+		}
 	}
-	quota.Updated = sanityNow()
-	c.quotas[quotaID] = quota
-	result := cloneSanityQuota(&quota)
+	result := cloneSanityFilesystem(&filesystem)
 	return &result, nil
 }
 
