@@ -190,6 +190,21 @@ func (mr *MockLinodeClientMockRecorder) ListNFSFilesystems(ctx, spaceID, opts an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNFSFilesystems", reflect.TypeOf((*MockLinodeClient)(nil).ListNFSFilesystems), ctx, spaceID, opts)
 }
 
+// ListNFSQuotas mocks base method.
+func (m *MockLinodeClient) ListNFSQuotas(ctx context.Context, spaceID, filesystemID int, opts *linodego.ListOptions) ([]linodego.NFSQuota, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNFSQuotas", ctx, spaceID, filesystemID, opts)
+	ret0, _ := ret[0].([]linodego.NFSQuota)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNFSQuotas indicates an expected call of ListNFSQuotas.
+func (mr *MockLinodeClientMockRecorder) ListNFSQuotas(ctx, spaceID, filesystemID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNFSQuotas", reflect.TypeOf((*MockLinodeClient)(nil).ListNFSQuotas), ctx, spaceID, filesystemID, opts)
+}
+
 // ListNFSSpaces mocks base method.
 func (m *MockLinodeClient) ListNFSSpaces(ctx context.Context, opts *linodego.ListOptions) ([]linodego.NFSSpace, error) {
 	m.ctrl.T.Helper()
@@ -203,6 +218,21 @@ func (m *MockLinodeClient) ListNFSSpaces(ctx context.Context, opts *linodego.Lis
 func (mr *MockLinodeClientMockRecorder) ListNFSSpaces(ctx, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNFSSpaces", reflect.TypeOf((*MockLinodeClient)(nil).ListNFSSpaces), ctx, opts)
+}
+
+// UpdateNFSFilesystem mocks base method.
+func (m *MockLinodeClient) UpdateNFSFilesystem(ctx context.Context, spaceID, filesystemID int, opts linodego.NFSFilesystemUpdateOptions) (*linodego.NFSFilesystem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNFSFilesystem", ctx, spaceID, filesystemID, opts)
+	ret0, _ := ret[0].(*linodego.NFSFilesystem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNFSFilesystem indicates an expected call of UpdateNFSFilesystem.
+func (mr *MockLinodeClientMockRecorder) UpdateNFSFilesystem(ctx, spaceID, filesystemID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNFSFilesystem", reflect.TypeOf((*MockLinodeClient)(nil).UpdateNFSFilesystem), ctx, spaceID, filesystemID, opts)
 }
 
 // UpdateNFSFilesystemAccessPolicy mocks base method.

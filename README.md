@@ -80,10 +80,10 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - **Leaves Space access to you.** The Storage Space access policy must be enabled and admit the cluster VPC. The Space owner maintains it; the driver neither validates nor changes it, so a misconfigured policy surfaces as mount failures. `accessPolicy.mode=node` enables per-filesystem Linode ACL management, but is not currently recommended because every publish and unpublish waits for an asynchronous policy update and scales poorly.
 - **Mounts over NFSv4.** The node plugin mounts filesystem DNS name at the kubelet staging path, then bind-mounts it into each pod.
 - **Reports usage.** `NodeGetVolumeStats` reports byte and inode usage read from the mounted filesystem.
+- **Volume expansion** supports capacity increases through the NFS filesystem's root quota.
 
 ### Current Limitations:
 
-- **Volume expansion** is planned, but not available yet.
 - **Volume cloning** is planned, through snapshots, but not available yet.
 - **Snapshots and restores** are planned, but not available yet.
 
@@ -146,7 +146,7 @@ Then mount `nfs-pvc` from a pod as shown in [Consume it from a pod](docs/usage.m
 - **The driver is in alpha.** Behavior and the interfaces it exposes may change between releases.
 - **A VPC is required.** `CreateVolume` fails with `FailedPrecondition` when the cluster's nodes are not attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - **Storage Spaces are not created by the driver.** You must create the NFS Storage Space yourself and reference it from every `StorageClass`. The driver creates and deletes filesystems inside that space, never the space itself.
-- **Capacity requests are advisory.** The Linode NFS API does not take a size on filesystem creation. The driver echoes the requested capacity back in the CSI response so Kubernetes can bind the PVC, but it does not enforce a quota. Do not treat `spec.resources.requests.storage` as a hard limit.
+- **Capacity increases are quota-backed.** The driver increases the NFS filesystem's root quota for PVC expansion and rejects reductions. The Linode API enforces the maximum customer-manageable capacity; rejected requests and the API's error are returned to Kubernetes.
 
 ## 💬 Join Us on Slack
 

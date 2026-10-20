@@ -28,6 +28,8 @@ type LinodeClient interface {
 	CreateNFSFilesystem(ctx context.Context, spaceID int, opts linodego.NFSFilesystemCreateOptions) (*linodego.NFSFilesystem, error)
 	WaitForNFSFilesystemStatus(ctx context.Context, spaceID int, filesystemID int, status linodego.NFSFilesystemStatus) (*linodego.NFSFilesystem, error)
 	DeleteNFSFilesystem(ctx context.Context, spaceID int, filesystemID int) error
+	ListNFSQuotas(ctx context.Context, spaceID int, filesystemID int, opts *linodego.ListOptions) ([]linodego.NFSQuota, error)
+	UpdateNFSFilesystem(ctx context.Context, spaceID int, filesystemID int, opts linodego.NFSFilesystemUpdateOptions) (*linodego.NFSFilesystem, error)
 
 	GetNFSSpaceAccessPolicy(ctx context.Context, spaceID int) (*linodego.NFSSpaceAccessPolicy, error)
 	GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID int, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error)
