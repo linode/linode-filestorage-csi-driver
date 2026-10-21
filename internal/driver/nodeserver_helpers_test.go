@@ -188,6 +188,32 @@ func TestNodeServer_nodePublishVolume(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "ReadOnlyMany without an explicit read-only request",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeCapability:  mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY),
+			},
+			resp: &csi.NodePublishVolumeResponse{},
+			mntExpects: func(m *mocks.MockMounter) {
+				m.EXPECT().Mount("/tmp/staging", "/tmp/target", nfsFilesystemType, []string{"bind", "ro"}).Return(nil)
+			},
+		},
+		{
+			name: "Single-node reader-only without an explicit read-only request",
+			req: &csi.NodePublishVolumeRequest{
+				VolumeId:          "vol-123",
+				TargetPath:        "/tmp/target",
+				StagingTargetPath: "/tmp/staging",
+				VolumeCapability:  mountCapability(csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY),
+			},
+			resp: &csi.NodePublishVolumeResponse{},
+			mntExpects: func(m *mocks.MockMounter) {
+				m.EXPECT().Mount("/tmp/staging", "/tmp/target", nfsFilesystemType, []string{"bind", "ro"}).Return(nil)
+			},
+		},
+		{
 			name: "Failure cleans up mount point",
 			req: &csi.NodePublishVolumeRequest{
 				VolumeId: "vol-123",

@@ -174,6 +174,8 @@ The driver accepts every mount access mode the CSI spec defines:
 
 `ReadWriteMany` is the mode that reflects what the backend actually does. The narrower modes are accepted and honored by Kubernetes' own scheduling and binding rules, but nothing in the driver or the NFS backend enforces single-node exclusivity for them, so do not rely on `ReadWriteOnce` as a data-safety mechanism here.
 
+`ReadOnlyMany` publishes each pod's bind mount with `ro`, even when the Pod omits `readOnly: true`. CSI `SINGLE_NODE_READER_ONLY` requests also publish with `ro`. NFS staging and backend export policy are unchanged.
+
 Requesting a raw block volume (`volumeMode: Block`) fails with `InvalidArgument`. This is a filesystem, not a device.
 
 ## ⚓ Mount options
@@ -201,7 +203,7 @@ reclaimPolicy: Delete
 Notes:
 
 - The filesystem type is always `nfs4`. There is no `fsType` parameter, and setting `csi.storage.k8s.io/fstype` has no effect.
-- `NodeStageVolume` passes these flags to the NFS mount. `NodePublishVolume` passes them again alongside `bind`, and adds `ro` when the pod mounts the PVC read-only.
+- `NodeStageVolume` passes these flags to the NFS mount. `NodePublishVolume` passes them again alongside `bind`, and adds `ro` for an explicit read-only request or a reader-only CSI access mode.
 
 For NFS connection count and multipath options, see [Connection count and endpoint spreading](#-connection-count-and-endpoint-spreading) at the end of this page.
 

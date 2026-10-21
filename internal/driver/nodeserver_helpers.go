@@ -44,7 +44,10 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	if capMount := req.GetVolumeCapability().GetMount(); capMount != nil {
 		options = append(options, capMount.GetMountFlags()...)
 	}
-	if req.GetReadonly() {
+	accessMode := req.GetVolumeCapability().GetAccessMode().GetMode()
+	if req.GetReadonly() ||
+		accessMode == csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY ||
+		accessMode == csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
 		options = append(options, "ro")
 		klog.V(4).InfoS("Volume will be mounted as read-only", "volumeID", volumeID)
 	}
