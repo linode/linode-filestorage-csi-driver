@@ -286,7 +286,7 @@ The mount source is the filesystem's DNS name, carried from the controller in th
 
 ### NodePublishVolume
 
-Bind-mounts the staged path into the pod's target path with `-o bind`, plus the capability's mount flags, plus `ro` when the request is read-only. On mount failure it cleans up and returns `Internal`.
+Bind-mounts the staged path into the pod's target path with `-o bind`, plus the capability's mount flags, plus `ro` when the request is read-only or its CSI access mode is `SINGLE_NODE_READER_ONLY` or `MULTI_NODE_READER_ONLY` (`ReadOnlyMany`). On mount failure it cleans up and returns `Internal`.
 
 The lock here is on the **target path**, not the volume ID. Many pods on one node can share a single NFS volume, and serializing them on the volume ID would make them queue behind each other for no reason.
 
