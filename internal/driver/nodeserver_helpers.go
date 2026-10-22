@@ -2,6 +2,7 @@ package driver
 
 import (
 	"os"
+	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"k8s.io/klog/v2"
@@ -66,17 +67,34 @@ func (ns *NodeServer) nodePublishVolume(req *csi.NodePublishVolumeRequest) (*csi
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest, source string, ips []string) (*csi.NodeStageVolumeResponse, error) {
 	stagingTargetPath := req.GetStagingTargetPath()
 	volumeID := req.GetVolumeId()
 
 	klog.V(4).InfoS("Staging volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
 
-	source := req.GetVolumeContext()[volumeContextMountTarget]
 	mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]
 	options := append([]string{}, req.GetVolumeCapability().GetMount().GetMountFlags()...)
 	if len(options) == 0 {
 		options = append(options, "vers=4.1", "proto=tcp6")
+	}
+	if len(ips) != 0 {
+		for optionIndex, option := range options {
+			if !strings.Contains(option, "remoteports=dns") {
+				continue
+			}
+			parts := strings.Split(option, ",")
+			changed := false
+			for j, part := range parts {
+				if part == "remoteports=dns" {
+					parts[j] = "remoteports=" + strings.Join(ips, "~")
+					changed = true
+				}
+			}
+			if changed {
+				options[optionIndex] = strings.Join(parts, ",")
+			}
+		}
 	}
 	switch mtlsMode {
 	case mtlsModeRequired:
@@ -97,6 +115,24 @@ func (s *NodeServer) nodeStageVolume(req *csi.NodeStageVolumeRequest) (*csi.Node
 
 	klog.V(4).InfoS("Successfully staged", "volumeID", volumeID)
 	return &csi.NodeStageVolumeResponse{}, nil
+}
+
+func nodeMountTargets(values map[string]string) (source string, ips []string) {
+	if fqdn := values[volumeContextMountTarget]; fqdn != "" {
+		return fqdn, nil
+	}
+	targets := strings.Split(values[volumeContextMountTargetIPs], ",")
+	count := 0
+	for _, target := range targets {
+		if ip := mountTargetIP(target); ip != "" {
+			if source == "" {
+				source = target
+			}
+			targets[count] = ip
+			count++
+		}
+	}
+	return source, targets[:count]
 }
 
 func allowedMTLSMode(mode string) bool {

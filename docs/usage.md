@@ -113,7 +113,7 @@ kubectl exec nfs-app -- tail -n 3 /data/out.txt
 After scheduling, the sequence depends on `accessPolicy.mode`:
 
 1. **Authorize (`node` mode only).** `csi-attacher` calls `ControllerPublishVolume`, which adds that node's Linode to the filesystem's Linode ACL and waits for the access policy to become active. There is no block device involved.
-2. **Stage.** The node plugin mounts the filesystem's DNS name over NFSv4 at the kubelet staging path, once per node.
+2. **Stage.** The node plugin mounts the filesystem over NFSv4 at the kubelet staging path, once per node. It prefers the FQDN mount source and uses an IP source when the FQDN is absent.
 3. **Publish.** The node plugin bind-mounts the staging path into the pod's target path.
 
 The default `space` mode skips step 1. The Space access policy authorizes cluster connectivity, and Kubernetes creates no `VolumeAttachment`.
@@ -278,9 +278,13 @@ These options control different parts of the connection layout:
 - `remoteports=dns` tells a compatible NFS client to use the IP addresses returned when it resolves the mount target as remote endpoints. Multipath can spread connections only when the node's resolver returns multiple distinct addresses.
 - `pconnect=<N>` controls how many connections are grouped into each NFS client context. With `nconnect=8,pconnect=1`, the client can use up to eight remote addresses. With `nconnect=8,pconnect=2`, it groups connections in pairs and can use at most four remote addresses. The actual spread also depends on the addresses returned by DNS and the client implementation.
 
-`remoteports` and `pconnect` are not portable Linux NFS mount options. They require a compatible NFS client on every node where the volume may be mounted; the CSI driver passes the options through but does not install or configure that client. An unsupported option causes the node mount to fail. Check the node client's documentation for supported NFS versions, kernel requirements, and option limits before using them.
+`remoteports` and `pconnect` are not portable Linux NFS mount options. They require a compatible NFS client on every node where the volume may be mounted. The CSI driver does not install or configure that client. An unsupported option causes the node mount to fail. Check the node client's documentation for supported NFS versions, kernel requirements, and option limits before using them.
 
-The driver mounts using the worker node's resolver, not CoreDNS. Check the mount target's answers from a worker node; one returned address cannot provide endpoint spreading. After mounting, inspect the effective NFS mount options on that node:
+Without an FQDN, the node mounts the first usable IPv6 source returned by the API. IPv4 and IPv4-mapped IPv6 addresses are ignored. If the mount options include `remoteports=dns`, the node replaces it with the usable IPv6 addresses joined by `~`. It removes export paths and IPv6 brackets from this list. For example, two IPv6 targets produce `remoteports=2001:db8::1~2001:db8::2`.
+
+The driver preserves explicit `remoteports` values, `nconnect`, and `pconnect`. It does not add multipath options when none are requested. FQDN-based mounts retain their existing options, including `remoteports=dns`.
+
+For FQDN-based mounts, the driver uses the worker node's resolver, not CoreDNS. Check the mount target's answers from a worker node; one returned address cannot provide endpoint spreading. After mounting, inspect the effective NFS mount options on that node:
 
 ```sh
 findmnt -t nfs4 -o SOURCE,TARGET,OPTIONS

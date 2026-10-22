@@ -90,7 +90,8 @@ func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolu
 	if req.GetVolumeCapability().GetMount() == nil {
 		return nil, errNoMountVolumeCapability
 	}
-	if req.GetVolumeContext()[volumeContextMountTarget] == "" {
+	source, ips := nodeMountTargets(req.GetVolumeContext())
+	if source == "" {
 		return nil, errNoVolumeContextMountTarget
 	}
 	if mtlsMode := req.GetVolumeContext()[volumeContextSpaceMTLSMode]; mtlsMode != "" && !allowedMTLSMode(mtlsMode) {
@@ -114,7 +115,7 @@ func (s *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolu
 	}
 
 	klog.V(4).InfoS("Staging volume", "volumeID", volumeID, "stagingTargetPath", stagingTargetPath)
-	return s.nodeStageVolume(req)
+	return s.nodeStageVolume(req, source, ips)
 }
 
 func (s *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
