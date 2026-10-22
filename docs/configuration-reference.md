@@ -158,12 +158,15 @@ Summarized here; the full rules, error messages, and idempotency implications ar
 | --- | --- | --- |
 | `space-id` | `42` | informational |
 | `filesystem-id` | `1337` | informational |
-| `mount-target` | `fs-1337.us-ord.nfs.linode.com` | **`NodeStageVolume`, as the NFS mount source** |
+| `mount-target` | `fs-1337.us-ord.nfs.linode.com:/export` | `NodeStageVolume`: preferred FQDN mount source, or an empty string when absent |
+| `mount-target-ips` | `[2001:db8::1]:/export,[2001:db8::2]:/export` | `NodeStageVolume`: comma-separated IP mount sources, in API order |
 | `region` | `us-ord` | informational |
 
-`mount-target` is the load-bearing one: `NodeStageVolume` fails with `InvalidArgument` when it is missing. The controller also refuses to return a volume whose filesystem has no mount target, so an empty value should never reach a PV.
+The controller passes both target forms after the filesystem becomes active. It returns `FailedPrecondition` if neither a non-empty FQDN source nor a usable IPv6 source is available. The node prefers `mount-target`; otherwise, it uses the first usable IPv6 source from `mount-target-ips`. IPv4 and IPv4-mapped IPv6 addresses are ignored. A node request without either usable target form fails with `InvalidArgument`.
 
-Editing a PV's `volumeAttributes` by hand is how you break a working volume. The values are a snapshot taken at provisioning time, and the driver never refreshes them.
+Existing FQDN-only PVs remain supported. During a rolling upgrade, update all node plugins before provisioning IP-only volumes. Older node plugins require a non-empty `mount-target` and cannot stage IP-only volumes. Rolling node plugins back has the same restriction.
+
+The values in `volumeAttributes` are a snapshot from provisioning; the driver never refreshes them. Kubernetes does not allow changes to these fields on an existing PV. See [missing mount target recovery](./troubleshooting.md#missing-mount-target-in-the-volume-context) to replace a PV while keeping its filesystem.
 
 ## 📦 Deployed objects
 

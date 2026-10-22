@@ -272,7 +272,7 @@ The node cannot reach the mount target, or the server refused it. Provisioning s
 
    Compare `linode_acl` against the node's Linode ID and confirm `enabled` is `true`.
 
-3. **DNS.** The mount target FQDN has to resolve from the **host**, not from CoreDNS, because the node plugin uses `hostNetwork` and mounts in the host namespace.
+3. **DNS, when using an FQDN.** The mount target FQDN has to resolve from the **host**, not from CoreDNS, because the node plugin uses `hostNetwork` and mounts in the host namespace. IP-only volumes use `mount-target-ips` and do not require DNS for target selection.
 
    ```sh
    kubectl get pv <pv> -o jsonpath='{.spec.csi.volumeAttributes.mount-target}'
@@ -293,10 +293,21 @@ Usually a bad flag in the `StorageClass` `mountOptions`. Remove it and let the d
 ### Missing mount target in the volume context
 
 ```text
-InvalidArgument: mount-target is required in volume context
+InvalidArgument: mount-target or usable mount-target-ips is required
 ```
 
-The PV's `volumeAttributes` lost its `mount-target`, which normally means someone edited the PV. Editing it back is not reliably recoverable, since the value has to match the actual filesystem. Recreate the PVC.
+The node received no usable mount source in either `mount-target` or `mount-target-ips`. An empty `mount-target` is valid if usable IPv6 targets are present. IPv4 and IPv4-mapped IPv6 addresses cannot be used as IP mount targets. If provisioning failed because the API returned no usable targets, fix the backend issue and let provisioning retry.
+
+For a statically provisioned PV, you can supply the filesystem's API-reported targets yourself. Include the export path: put the FQDN source in `mount-target` or comma-separated IPv6 sources in `mount-target-ips`. The node prefers a non-empty `mount-target`, so omit it or leave it empty to use IPv6 addresses. It does not refresh these attributes from the API when the backend changes. Use only targets for this filesystem; do not invent a target or use another filesystem's export.
+
+Kubernetes does not allow changes to an existing PV's `spec.csi`, including `volumeAttributes`. To correct its targets:
+
+1. Stop the consumers, set the PV's reclaim policy to `Retain`, and save its manifest.
+2. Remove the PVC and PV objects. Keep the backend filesystem.
+3. Recreate the PV with the same `volumeHandle`, the corrected targets, and the other original CSI settings.
+4. Explicitly bind a PVC to the replacement PV, then restart the consumers.
+
+Do not remove protection finalizers to bypass an in-use volume.
 
 ### Mounts work on some nodes only
 
@@ -434,7 +445,7 @@ You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is 
 | `volume access mode is required` | No access mode on the PVC | [Access modes](./usage.md#-access-modes) |
 | `unsupported volume content source` | PVC-to-PVC clone attempted | [Unsupported volume content source](#unsupported-volume-content-source) |
 | `mount.nfs4: Connection timed out` or `access denied by server` | Space access policy disabled, not `active`, or missing the cluster VPC; or network/DNS | [Mount times out or is denied](#mount-times-out-or-is-denied) |
-| `mount-target is required in volume context` | PV attributes were edited | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
+| `mount-target or usable mount-target-ips is required` | PV attributes contain neither target form | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
 | `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#-the-node-plugin-never-registers) |
 | `An operation with the given volume key` | Lock contention; retried automatically | [Benign lock contention](#benign-lock-contention) |
 | `operation not implemented` | An unimplemented RPC was called | [What is not implemented](./usage.md#-what-is-not-supported) |

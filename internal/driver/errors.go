@@ -16,7 +16,7 @@ var (
 	errNoVolumeCapabilities       = status.Error(codes.InvalidArgument, "volume capabilities are required")
 	errNoVolumeCapability         = status.Error(codes.InvalidArgument, "no volume capability set")
 	errNoMountVolumeCapability    = status.Error(codes.InvalidArgument, "no mount volume capability set")
-	errNoVolumeContextMountTarget = status.Error(codes.InvalidArgument, "mount-target is required in volume context")
+	errNoVolumeContextMountTarget = status.Error(codes.InvalidArgument, "mount-target or usable mount-target-ips is required")
 	errNoVolumeID                 = status.Error(codes.InvalidArgument, "volume ID is not set")
 	errNoVolumePath               = status.Error(codes.InvalidArgument, "volume path is not set")
 	errNoTargetPath               = status.Error(codes.InvalidArgument, "target path is not set")

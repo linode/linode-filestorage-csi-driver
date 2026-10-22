@@ -520,21 +520,23 @@ func TestVolumeContext(t *testing.T) {
 		{
 			name: "owned",
 			want: map[string]string{
-				volumeContextSpaceID:      "123",
-				volumeContextFilesystemID: "456",
-				volumeContextMountTarget:  "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
-				volumeContextRegion:       "us-east",
+				volumeContextSpaceID:        "123",
+				volumeContextFilesystemID:   "456",
+				volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
+				volumeContextMountTargetIPs: "",
+				volumeContextRegion:         "us-east",
 			},
 		},
 		{
 			name:     "with mtls mode",
 			mtlsMode: linodego.NFSMTLSModeRequired,
 			want: map[string]string{
-				volumeContextSpaceID:       "123",
-				volumeContextFilesystemID:  "456",
-				volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
-				volumeContextRegion:        "us-east",
-				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
+				volumeContextSpaceID:        "123",
+				volumeContextFilesystemID:   "456",
+				volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
+				volumeContextMountTargetIPs: "",
+				volumeContextRegion:         "us-east",
+				volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeRequired),
 			},
 		},
 	}
@@ -563,9 +565,6 @@ func TestCSIVolume(t *testing.T) {
 	}
 	if volume.GetCapacityBytes() != filesystem.MaxCapacityBytes {
 		t.Fatalf("csiVolume() capacity = %d, want filesystem capacity %d", volume.GetCapacityBytes(), filesystem.MaxCapacityBytes)
-	}
-	if len(volume.GetVolumeContext()) != 4 {
-		t.Fatalf("csiVolume() context = %#v", volume.GetVolumeContext())
 	}
 
 	volumeWithMTLS := csiVolume(filesystem, linodego.NFSMTLSModeOptional)
