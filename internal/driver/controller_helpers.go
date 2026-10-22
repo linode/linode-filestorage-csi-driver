@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -29,11 +30,12 @@ const (
 	storageClassParamRootSquash = storageClassParamNamespace + "filesystem-root-squash"
 	storageClassParamTags       = storageClassParamNamespace + "tags"
 
-	volumeContextSpaceID       = "space-id"
-	volumeContextFilesystemID  = "filesystem-id"
-	volumeContextMountTarget   = "mount-target"
-	volumeContextRegion        = "region"
-	volumeContextSpaceMTLSMode = "mtls-mode"
+	volumeContextSpaceID        = "space-id"
+	volumeContextFilesystemID   = "filesystem-id"
+	volumeContextMountTarget    = "mount-target"
+	volumeContextMountTargetIPs = "mount-target-ips"
+	volumeContextRegion         = "region"
+	volumeContextSpaceMTLSMode  = "mtls-mode"
 
 	// Accepted values for the mtls-mode volume context key.
 	mtlsModeRequired = "required"
@@ -266,10 +268,11 @@ func volumeCapabilitySupported(capability *csi.VolumeCapability) (supported bool
 
 func volumeContext(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLSMode) map[string]string {
 	values := map[string]string{
-		volumeContextSpaceID:      strconv.Itoa(filesystem.SpaceID),
-		volumeContextFilesystemID: strconv.Itoa(filesystem.ID),
-		volumeContextMountTarget:  filesystemMountTarget(filesystem),
-		volumeContextRegion:       filesystem.Region,
+		volumeContextSpaceID:        strconv.Itoa(filesystem.SpaceID),
+		volumeContextFilesystemID:   strconv.Itoa(filesystem.ID),
+		volumeContextMountTarget:    filesystemMountTarget(filesystem),
+		volumeContextMountTargetIPs: strings.Join(filesystem.MountTargetIPs, ","),
+		volumeContextRegion:         filesystem.Region,
 	}
 	if mtlsMode != "" {
 		values[volumeContextSpaceMTLSMode] = string(mtlsMode)
@@ -286,10 +289,15 @@ func csiVolume(filesystem *linodego.NFSFilesystem, mtlsMode linodego.NFSMTLSMode
 }
 
 func validateFilesystemMountTarget(filesystem *linodego.NFSFilesystem) error {
-	if filesystemMountTarget(filesystem) == "" {
-		return status.Errorf(codes.FailedPrecondition, "NFS filesystem %d does not have a mount target", filesystem.ID)
+	if filesystemMountTarget(filesystem) != "" {
+		return nil
 	}
-	return nil
+	for _, target := range filesystem.MountTargetIPs {
+		if mountTargetIP(target) != "" {
+			return nil
+		}
+	}
+	return status.Errorf(codes.FailedPrecondition, "NFS filesystem %d does not have a mount target", filesystem.ID)
 }
 
 func csiControllerVolumeStatus(policy *linodego.NFSFilesystemAccessPolicy) *csi.ControllerGetVolumeResponse_VolumeStatus {
@@ -305,6 +313,19 @@ func filesystemMountTarget(filesystem *linodego.NFSFilesystem) string {
 		return ""
 	}
 	return *filesystem.MountTargetFQDN
+}
+
+// mountTargetIP extracts the address from an API NFS source, including bracketed IPv6.
+func mountTargetIP(target string) string {
+	host, _, ok := strings.Cut(target, ":/")
+	if !ok {
+		return ""
+	}
+	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return ""
+	}
+	return address.String()
 }
 
 func filesystemPolicyLinodeIDs(policy *linodego.NFSFilesystemAccessPolicy) []int {

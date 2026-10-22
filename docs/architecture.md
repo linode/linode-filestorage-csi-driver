@@ -282,7 +282,7 @@ sequenceDiagram
     end
 ```
 
-The mount source is the filesystem's DNS name, carried from the controller in the volume context under `mount-target`; a request without it fails with `InvalidArgument`. The filesystem type is always `nfs4`.
+The controller carries both the FQDN mount source (`mount-target`, empty when absent) and IP mount sources (`mount-target-ips`) in the volume context. The node prefers the FQDN; otherwise, it uses the first usable IP source. A request without either form fails with `InvalidArgument`. The filesystem type is always `nfs4`.
 
 ### NodePublishVolume
 

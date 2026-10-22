@@ -104,11 +104,12 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
 				assertCreateVolumeResponse(t, response, testVolumeID, 2048, map[string]string{
-					volumeContextSpaceID:       "123",
-					volumeContextFilesystemID:  "456",
-					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
-					volumeContextRegion:        "us-east",
-					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
+					volumeContextSpaceID:        "123",
+					volumeContextFilesystemID:   "456",
+					volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
+					volumeContextMountTargetIPs: "",
+					volumeContextRegion:         "us-east",
+					volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeRequired),
 				})
 			},
 		},
@@ -147,11 +148,12 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
 				assertCreateVolumeResponse(t, response, testVolumeID, 1024, map[string]string{
-					volumeContextSpaceID:       "123",
-					volumeContextFilesystemID:  "456",
-					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-volume-1c8",
-					volumeContextRegion:        "us-east",
-					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeRequired),
+					volumeContextSpaceID:        "123",
+					volumeContextFilesystemID:   "456",
+					volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/sanity-test-volume-1c8",
+					volumeContextMountTargetIPs: "",
+					volumeContextRegion:         "us-east",
+					volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeRequired),
 				})
 			},
 		},
@@ -219,6 +221,7 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 						volumeContextSpaceID:       "1123",
 						volumeContextFilesystemID:  "890",
 						volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/sanity-test-restore-315",
+						volumeContextMountTargetIPs: "",
 						volumeContextRegion:        "us-east",
 						volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
 					})
@@ -285,11 +288,12 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
 				assertCreateVolumeResponse(t, response, "123/789", 2048, map[string]string{
-					volumeContextSpaceID:       "123",
-					volumeContextFilesystemID:  "789",
-					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-315",
-					volumeContextRegion:        "us-east",
-					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
+					volumeContextSpaceID:        "123",
+					volumeContextFilesystemID:   "789",
+					volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/pvc-abc-315",
+					volumeContextMountTargetIPs: "",
+					volumeContextRegion:         "us-east",
+					volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeOptional),
 				})
 			},
 		},
@@ -317,11 +321,12 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 			assert: func(t *testing.T, response *csi.CreateVolumeResponse) {
 				t.Helper()
 				assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
-					volumeContextSpaceID:       "123",
-					volumeContextFilesystemID:  "456",
-					volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
-					volumeContextRegion:        "us-east",
-					volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeDisabled),
+					volumeContextSpaceID:        "123",
+					volumeContextFilesystemID:   "456",
+					volumeContextMountTarget:    "prod-7b.nfs.us-east.linode.com:/pvc-abc-1c8",
+					volumeContextMountTargetIPs: "",
+					volumeContextRegion:         "us-east",
+					volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeDisabled),
 				})
 			},
 		},
@@ -331,6 +336,75 @@ func TestCreateVolumeSuccessCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			runCreateVolumeTest(t, tt.request, tt.setup, codes.OK, tt.assert, "")
 		})
+	}
+}
+
+func TestCreateVolumeMountTargets(t *testing.T) {
+	const fqdn = "nfs.example.com:/export"
+	const ipTargets = "[2001:db8::1]:/export,[2001:db8::2]:/export"
+	for _, tt := range []struct {
+		name     string
+		fqdn     *string
+		ips      []string
+		wantCode codes.Code
+	}{
+		{name: "both target forms", fqdn: new(fqdn), ips: strings.Split(ipTargets, ","), wantCode: codes.OK},
+		{name: "FQDN only", fqdn: new(fqdn), wantCode: codes.OK},
+		{name: "IP targets only", ips: strings.Split(ipTargets, ","), wantCode: codes.OK},
+		{name: "empty FQDN", fqdn: new(""), ips: strings.Split(ipTargets, ","), wantCode: codes.OK},
+		{name: "no targets", wantCode: codes.FailedPrecondition},
+		{name: "unusable IP targets", ips: []string{"", "not-an-ip:/export"}, wantCode: codes.FailedPrecondition},
+	} {
+		for _, path := range []struct {
+			name     string
+			existing bool
+		}{{name: "create"}, {name: "retry", existing: true}} {
+			t.Run(path.name+"/"+tt.name, func(t *testing.T) {
+				env := newControllerTestEnv(t)
+				expectSingleNodeCluster(env, 123456)
+				env.client.EXPECT().GetNFSSpace(gomock.Any(), 123).Return(&linodego.NFSSpace{ID: 123}, nil)
+				expectSpaceVPCAdmission(env, 123, "space-policy", 123456, linodego.NFSMTLSModeDisabled)
+				filesystem := &linodego.NFSFilesystem{
+					ID: 456, SpaceID: 123, Label: "pvc-abc", Region: "us-east",
+					Status: linodego.NFSFilesystemStatusCreating,
+				}
+				options := mustListOptionsForExactFields(t, map[string]string{"label": "pvc-abc", "region": "us-east"})
+				if path.existing {
+					env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(options)).Return([]linodego.NFSFilesystem{*filesystem}, nil)
+				} else {
+					gomock.InOrder(
+						env.client.EXPECT().ListNFSFilesystems(gomock.Any(), 123, gomock.Eq(options)).Return(nil, nil),
+						env.client.EXPECT().CreateNFSFilesystem(gomock.Any(), 123, gomock.Any()).Return(filesystem, nil),
+					)
+				}
+				active := *filesystem
+				active.Status = linodego.NFSFilesystemStatusActive
+				active.MountTargetFQDN = tt.fqdn
+				active.MountTargetIPs = tt.ips
+				env.client.EXPECT().WaitForNFSFilesystemStatus(gomock.Any(), 123, 456, linodego.NFSFilesystemStatusActive).Return(&active, nil)
+				response, err := env.server.CreateVolume(t.Context(), &csi.CreateVolumeRequest{
+					Name: "pvc-abc", Parameters: map[string]string{storageClassParamSpaceID: "123"},
+					VolumeCapabilities: []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)},
+				})
+				if status.Code(err) != tt.wantCode {
+					t.Fatalf("CreateVolume() code = %v, want %v: %v", status.Code(err), tt.wantCode, err)
+				}
+				if err != nil {
+					return
+				}
+				wantFQDN := ""
+				if tt.fqdn != nil {
+					wantFQDN = *tt.fqdn
+				}
+				values := response.GetVolume().GetVolumeContext()
+				if got, present := values[volumeContextMountTarget]; !present || got != wantFQDN {
+					t.Fatalf("FQDN target = %q (present %v), want %q", got, present, wantFQDN)
+				}
+				if got := values[volumeContextMountTargetIPs]; got != strings.Join(tt.ips, ",") {
+					t.Fatalf("IP targets = %q, want %v", got, tt.ips)
+				}
+			})
+		}
 	}
 }
 
@@ -373,11 +447,12 @@ func TestCreateVolumeWithInactiveSpacePolicy(t *testing.T) {
 				t.Fatalf("CreateVolume() error = %v", err)
 			}
 			assertCreateVolumeResponse(t, response, testVolumeID, 0, map[string]string{
-				volumeContextSpaceID:       "123",
-				volumeContextFilesystemID:  "456",
-				volumeContextMountTarget:   *filesystem.MountTargetFQDN,
-				volumeContextRegion:        "us-east",
-				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeDisabled),
+				volumeContextSpaceID:        "123",
+				volumeContextFilesystemID:   "456",
+				volumeContextMountTarget:    *filesystem.MountTargetFQDN,
+				volumeContextMountTargetIPs: "",
+				volumeContextRegion:         "us-east",
+				volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeDisabled),
 			})
 		})
 	}
@@ -738,6 +813,7 @@ func TestCreateVolumeSnapshotCloneContracts(t *testing.T) {
 				volumeContextSpaceID:       "1123",
 				volumeContextFilesystemID:  "890",
 				volumeContextMountTarget:   "prod-7b.nfs.us-east.linode.com:/pvc-abc-315",
+				volumeContextMountTargetIPs: "",
 				volumeContextRegion:        "us-east",
 				volumeContextSpaceMTLSMode: string(linodego.NFSMTLSModeOptional),
 			})
@@ -1244,9 +1320,6 @@ func TestValidateVolumeCapabilities(t *testing.T) {
 				t.Helper()
 				if response.GetConfirmed() == nil {
 					t.Fatal("expected confirmed capabilities")
-				}
-				if len(response.GetConfirmed().GetVolumeContext()) != 4 {
-					t.Fatalf("unexpected volume context %#v", response.GetConfirmed().GetVolumeContext())
 				}
 				if !reflect.DeepEqual(response.GetConfirmed().GetVolumeCapabilities(), []*csi.VolumeCapability{mountCapability(csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER)}) {
 					t.Fatalf("unexpected confirmed capabilities %#v", response.GetConfirmed().GetVolumeCapabilities())

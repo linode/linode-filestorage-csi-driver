@@ -284,6 +284,81 @@ func TestNodeStageVolume(t *testing.T) {
 			wantCode: codes.OK,
 		},
 		{
+			name: "prefers FQDN over IP targets and preserves DNS multipath",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTarget:    "nfs.server.linode.com:/fs-id",
+				volumeContextMountTargetIPs: "[2001:db8::1]:/fs-id,[2001:db8::2]:/fs-id",
+			}, nil, "nconnect=8", "remoteports=dns", "pconnect=1"),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("nfs.server.linode.com:/fs-id", gomock.Any(), nfsFilesystemType, []string{"nconnect=8", "remoteports=dns", "pconnect=1"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "mounts first IPv6 target without requiring multipath options",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTarget:    "",
+				volumeContextMountTargetIPs: "[2001:db8::1]:/fs-id,[2001:db8::2]:/fs-id",
+			}, nil),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("[2001:db8::1]:/fs-id", gomock.Any(), nfsFilesystemType, []string{"vers=4.1", "proto=tcp6"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "uses explicit IPv6 multipath endpoints with required mTLS",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: "[2001:db8::1]:/fs-id,[2001:db8::2]:/fs-id",
+				volumeContextSpaceMTLSMode:  string(linodego.NFSMTLSModeRequired),
+			}, nil, "hard,remoteports=dns", "nconnect=8", "pconnect=1"),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("[2001:db8::1]:/fs-id", gomock.Any(), nfsFilesystemType, []string{"hard,remoteports=2001:db8::1~2001:db8::2", "nconnect=8", "pconnect=1", "xprtsec=mtls"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "preserves explicit caller endpoints with IP fallback",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: "[2001:db8::1]:/fs-id",
+			}, nil, "remoteports=2001:db8::3~2001:db8::4", "nconnect=4"),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("[2001:db8::1]:/fs-id", gomock.Any(), nfsFilesystemType, []string{"remoteports=2001:db8::3~2001:db8::4", "nconnect=4"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "skips unusable targets and mounts an IPv4 target",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: ",not-an-ip:/fs-id,192.0.2.1:/fs-id,192.0.2.2:/fs-id",
+			}, nil, "proto=tcp", "remoteports=dns"),
+			expectMounterCalls: func(m *mocks.MockMounter) {
+				gomock.InOrder(
+					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
+					m.EXPECT().Mount("192.0.2.1:/fs-id", gomock.Any(), nfsFilesystemType, []string{"proto=tcp", "remoteports=192.0.2.1~192.0.2.2"}).Return(nil),
+				)
+			},
+			wantCode: codes.OK,
+		},
+		{
+			name: "unusable IP targets are invalid before mounting",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: ",not-an-ip:/fs-id",
+			}, nil),
+			wantCode: codes.InvalidArgument,
+		},
+		{
 			name: "uses NFS defaults when no mount flags are provided",
 			req: newRequest(
 				t.TempDir(),
