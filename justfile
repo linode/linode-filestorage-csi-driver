@@ -49,6 +49,13 @@ lint:
 test:
     go test ./... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
+# Run the Chainsaw E2E tests against an authorized existing cluster
+e2e-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${KUBECONFIG:?Set KUBECONFIG to the authorized cluster kubeconfig}"
+    : "${E2E_STORAGE_CLASS:?E2E_STORAGE_CLASS must name the pre-created StorageClass}"
+    chainsaw test --config .chainsaw.yaml e2e/test
 
 # Run the embedded CSI sanity suite
 sanity:
