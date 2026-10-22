@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chainsaw-rwx-writers
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      e2e.linode.com/test: rwx-shared-file
+  template:
+    metadata:
+      labels:
+        e2e.linode.com/test: rwx-shared-file
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  e2e.linode.com/test: rwx-shared-file
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: writer
+          image: busybox:1.37.0
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              printf '%s ' "$POD_NAME" >> /data/shared-markers.txt
+              exec tail -f /dev/null
+          volumeMounts:
+            - name: shared-data
+              mountPath: /data
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim:
+            claimName: chainsaw-rwx-shared-file

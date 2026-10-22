@@ -11,6 +11,7 @@ just = "1.58.0"
 yq = "4.53.3"
 uv = "latest"
 "pipx:linode-cli" = "5.68.0"
+"aqua:kyverno/chainsaw" = "0.2.15"
 
 [tasks.fmt]
 description = "Format Go sources"
@@ -31,6 +32,10 @@ run = "just lint"
 [tasks.test]
 description = "Run tests"
 run = "just test"
+
+[tasks.e2e-test]
+description = "Run the local Chainsaw multi-node RWX test"
+run = "just e2e-test"
 
 [tasks.cover]
 description = "Open HTML coverage report"

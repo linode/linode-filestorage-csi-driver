@@ -7,8 +7,9 @@
 3. [Mocks](#-mocks)
 4. [Writing a test](#-writing-a-test)
 5. [Manual verification against a real cluster](#-manual-verification-against-a-real-cluster)
-6. [CSI sanity](#-csi-sanity)
-7. [What CI runs](#-what-ci-runs)
+6. [Chainsaw multi-node RWX E2E](#-chainsaw-multi-node-rwx-e2e)
+7. [CSI sanity](#-csi-sanity)
+8. [What CI runs](#-what-ci-runs)
 
 ## ▶ Running the tests
 
@@ -232,6 +233,18 @@ Things worth deliberately breaking while you are in here, because each one exerc
 | Deleting the PVC while a pod still uses it | The PVC waits on `pvc-protection` until the pod is gone |
 | Restarting the node DaemonSet with a pod mounted | The pod keeps working; the mount lives in the host namespace |
 | Two pods on the same node sharing the PVC | Both start without serializing; publish locks the path, not the volume |
+
+## 🪚 Chainsaw multi-node RWX E2E
+
+This local Chainsaw suite verifies a real RWX mount across three nodes. Run it only against an authorized cluster with the driver already installed, at least three schedulable nodes, a pre-created Space, and a StorageClass that points to that Space. Set the standard `KUBECONFIG` environment variable and `E2E_STORAGE_CLASS` to the existing class name. Chainsaw creates a random ephemeral namespace for each test and cleans it up afterward. The suite does not install the driver or create, modify, or delete the shared StorageClass or Space.
+
+Set the kubeconfig path and existing StorageClass name:
+
+```sh
+KUBECONFIG=/path/to/test.kubeconfig E2E_STORAGE_CLASS=<storage-class-name> mise run e2e-test
+```
+
+The task requires both variables. The test creates a PVC and three labeled writer pods in a Chainsaw-managed ephemeral namespace and checks that all unique markers are visible through the shared file. Its `finally` step removes the marker file before PVC cleanup so a `Delete`-policy StorageClass can reclaim the test filesystem. Chainsaw cleans up only the test-created resources and namespace.
 
 ## 🧷 CSI sanity
 
