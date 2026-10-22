@@ -315,14 +315,14 @@ func filesystemMountTarget(filesystem *linodego.NFSFilesystem) string {
 	return *filesystem.MountTargetFQDN
 }
 
-// mountTargetIP extracts the address from an API NFS source, including bracketed IPv6.
+// mountTargetIP extracts a native IPv6 address from an API NFS source.
 func mountTargetIP(target string) string {
 	host, _, ok := strings.Cut(target, ":/")
 	if !ok {
 		return ""
 	}
 	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
-	if err != nil {
+	if err != nil || !address.Is6() || address.Is4In6() {
 		return ""
 	}
 	return address.String()

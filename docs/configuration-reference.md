@@ -162,7 +162,7 @@ Summarized here; the full rules, error messages, and idempotency implications ar
 | `mount-target-ips` | `[2001:db8::1]:/export,[2001:db8::2]:/export` | `NodeStageVolume`: comma-separated IP mount sources, in API order |
 | `region` | `us-ord` | informational |
 
-The controller passes both target forms after the filesystem becomes active. It returns `FailedPrecondition` if neither a non-empty FQDN source nor a usable IP source is available. The node prefers `mount-target`; otherwise, it uses the first usable source from `mount-target-ips`. A node request without either form fails with `InvalidArgument`.
+The controller passes both target forms after the filesystem becomes active. It returns `FailedPrecondition` if neither a non-empty FQDN source nor a usable IPv6 source is available. The node prefers `mount-target`; otherwise, it uses the first usable IPv6 source from `mount-target-ips`. IPv4 and IPv4-mapped IPv6 addresses are ignored. A node request without either usable target form fails with `InvalidArgument`.
 
 Existing FQDN-only PVs remain supported. During a rolling upgrade, update all node plugins before provisioning IP-only volumes. Older node plugins require a non-empty `mount-target` and cannot stage IP-only volumes. Rolling node plugins back has the same restriction.
 

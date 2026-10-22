@@ -339,14 +339,14 @@ func TestNodeStageVolume(t *testing.T) {
 			wantCode: codes.OK,
 		},
 		{
-			name: "skips unusable targets and mounts an IPv4 target",
+			name: "skips unusable and IPv4 targets and mounts only IPv6 endpoints",
 			req: newRequest(t.TempDir(), map[string]string{
-				volumeContextMountTargetIPs: ",not-an-ip:/fs-id,192.0.2.1:/fs-id,192.0.2.2:/fs-id",
-			}, nil, "proto=tcp", "remoteports=dns"),
+				volumeContextMountTargetIPs: ",not-an-ip:/fs-id,192.0.2.1:/fs-id,[::ffff:192.0.2.2]:/fs-id,[2001:db8::1]:/fs-id,[2001:db8::2]:/fs-id",
+			}, nil, "proto=tcp6", "remoteports=dns"),
 			expectMounterCalls: func(m *mocks.MockMounter) {
 				gomock.InOrder(
 					m.EXPECT().IsLikelyNotMountPoint(gomock.Any()).Return(true, nil),
-					m.EXPECT().Mount("192.0.2.1:/fs-id", gomock.Any(), nfsFilesystemType, []string{"proto=tcp", "remoteports=192.0.2.1~192.0.2.2"}).Return(nil),
+					m.EXPECT().Mount("[2001:db8::1]:/fs-id", gomock.Any(), nfsFilesystemType, []string{"proto=tcp6", "remoteports=2001:db8::1~2001:db8::2"}).Return(nil),
 				)
 			},
 			wantCode: codes.OK,
@@ -355,6 +355,20 @@ func TestNodeStageVolume(t *testing.T) {
 			name: "unusable IP targets are invalid before mounting",
 			req: newRequest(t.TempDir(), map[string]string{
 				volumeContextMountTargetIPs: ",not-an-ip:/fs-id",
+			}, nil),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "IPv4 targets are invalid before mounting",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: "192.0.2.1:/fs-id,192.0.2.2:/fs-id",
+			}, nil),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name: "IPv4-mapped targets are invalid before mounting",
+			req: newRequest(t.TempDir(), map[string]string{
+				volumeContextMountTargetIPs: "[::ffff:192.0.2.1]:/fs-id",
 			}, nil),
 			wantCode: codes.InvalidArgument,
 		},

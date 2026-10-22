@@ -352,6 +352,9 @@ func TestCreateVolumeMountTargets(t *testing.T) {
 		{name: "FQDN only", fqdn: new(fqdn), wantCode: codes.OK},
 		{name: "IP targets only", ips: strings.Split(ipTargets, ","), wantCode: codes.OK},
 		{name: "empty FQDN", fqdn: new(""), ips: strings.Split(ipTargets, ","), wantCode: codes.OK},
+		{name: "mixed address families", ips: []string{"192.0.2.1:/export", "[2001:db8::1]:/export"}, wantCode: codes.OK},
+		{name: "IPv4 targets only", ips: []string{"192.0.2.1:/export"}, wantCode: codes.FailedPrecondition},
+		{name: "IPv4-mapped targets only", ips: []string{"[::ffff:192.0.2.1]:/export"}, wantCode: codes.FailedPrecondition},
 		{name: "no targets", wantCode: codes.FailedPrecondition},
 		{name: "unusable IP targets", ips: []string{"", "not-an-ip:/export"}, wantCode: codes.FailedPrecondition},
 	} {

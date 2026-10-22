@@ -280,7 +280,7 @@ These options control different parts of the connection layout:
 
 `remoteports` and `pconnect` are not portable Linux NFS mount options. They require a compatible NFS client on every node where the volume may be mounted. The CSI driver does not install or configure that client. An unsupported option causes the node mount to fail. Check the node client's documentation for supported NFS versions, kernel requirements, and option limits before using them.
 
-Without an FQDN, the node mounts the first usable IP source returned by the API. If the mount options include `remoteports=dns`, the node replaces it with the returned IP addresses joined by `~`. It removes export paths and IPv6 brackets from this list. For example, two IPv6 targets produce `remoteports=2001:db8::1~2001:db8::2`.
+Without an FQDN, the node mounts the first usable IPv6 source returned by the API. IPv4 and IPv4-mapped IPv6 addresses are ignored. If the mount options include `remoteports=dns`, the node replaces it with the usable IPv6 addresses joined by `~`. It removes export paths and IPv6 brackets from this list. For example, two IPv6 targets produce `remoteports=2001:db8::1~2001:db8::2`.
 
 The driver preserves explicit `remoteports` values, `nconnect`, and `pconnect`. It does not add multipath options when none are requested. FQDN-based mounts retain their existing options, including `remoteports=dns`.
 

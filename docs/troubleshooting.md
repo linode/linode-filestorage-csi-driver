@@ -296,9 +296,9 @@ Usually a bad flag in the `StorageClass` `mountOptions`. Remove it and let the d
 InvalidArgument: mount-target or usable mount-target-ips is required
 ```
 
-The node received no usable mount source in either `mount-target` or `mount-target-ips`. An empty `mount-target` is valid if usable IP targets are present. If provisioning failed because the API returned no targets, fix the backend issue and let provisioning retry.
+The node received no usable mount source in either `mount-target` or `mount-target-ips`. An empty `mount-target` is valid if usable IPv6 targets are present. IPv4 and IPv4-mapped IPv6 addresses cannot be used as IP mount targets. If provisioning failed because the API returned no usable targets, fix the backend issue and let provisioning retry.
 
-For a statically provisioned PV, you can supply the filesystem's API-reported targets yourself. Include the export path: put the FQDN source in `mount-target` or comma-separated IP sources in `mount-target-ips`. The node prefers a non-empty `mount-target`, so omit it or leave it empty to use IPs. It does not refresh these attributes from the API when the backend changes. Use only targets for this filesystem; do not invent a target or use another filesystem's export.
+For a statically provisioned PV, you can supply the filesystem's API-reported targets yourself. Include the export path: put the FQDN source in `mount-target` or comma-separated IPv6 sources in `mount-target-ips`. The node prefers a non-empty `mount-target`, so omit it or leave it empty to use IPv6 addresses. It does not refresh these attributes from the API when the backend changes. Use only targets for this filesystem; do not invent a target or use another filesystem's export.
 
 Kubernetes does not allow changes to an existing PV's `spec.csi`, including `volumeAttributes`. To correct its targets:
 
