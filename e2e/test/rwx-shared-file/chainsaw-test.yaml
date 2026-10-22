@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: rwx-shared-file
+spec:
+  template: true
+  bindings:
+    - name: storageClass
+      value: (env('E2E_STORAGE_CLASS'))
+  steps:
+    - name: bind the test PVC
+      try:
+        - create:
+            file: pvc.yaml
+        - wait:
+            timeout: 10m
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            name: chainsaw-rwx-shared-file
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.phase}"
+                value: Bound
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: chainsaw-rwx-shared-file
+                namespace: ($namespace)
+              spec:
+                accessModes:
+                  - ReadWriteMany
+                storageClassName: ($storageClass)
+              status:
+                phase: Bound
+    - name: write markers from distinct nodes
+      try:
+        - create:
+            file: writer-deployment.yaml
+        - wait:
+            timeout: 5m
+            apiVersion: apps/v1
+            kind: Deployment
+            name: chainsaw-rwx-writers
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.readyReplicas}"
+                value: "3"
+        - assert:
+            file: assert-writer-deployment.yaml
+        - script:
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              set -eo pipefail
+              kubectl get pods --namespace "$TEST_NAMESPACE" \
+                --selector=e2e.linode.com/test=rwx-shared-file \
+                --output=jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
+                | sort -u | wc -l
+            check:
+              ($error): ~
+              (trim_space($stdout)): "3"
+        - script:
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              set -eo pipefail
+              kubectl exec --namespace "$TEST_NAMESPACE" deployment/chainsaw-rwx-writers -- cat /data/shared-markers.txt |
+                tr -s ' ' '\n' |
+                sort -u | wc -l
+            check:
+              ($error): ~
+              (trim_space($stdout)): "3"
+      finally:
+        - script:
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              kubectl exec --namespace "$TEST_NAMESPACE" deployment/chainsaw-rwx-writers -- rm -f /data/shared-markers.txt

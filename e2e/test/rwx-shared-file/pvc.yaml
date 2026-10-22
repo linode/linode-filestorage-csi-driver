@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chainsaw-rwx-shared-file
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ($storageClass)
+  resources:
+    requests:
+      storage: 10Gi

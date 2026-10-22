@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chainsaw-rwx-writers
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+spec:
+  replicas: 3
+status:
+  replicas: 3
+  readyReplicas: 3
