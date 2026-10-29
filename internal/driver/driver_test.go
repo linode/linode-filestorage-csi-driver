@@ -164,6 +164,32 @@ func TestSetupLinodeDriver(t *testing.T) {
 	}
 }
 
+func TestNodeGetInfoAfterMetadataInitializationFailure(t *testing.T) {
+	withStubMetadataFactories(t)
+	ctx := t.Context()
+	kubeClient := mocks.NewMockKubeNodeClient(gomock.NewController(t))
+	kubeClient.EXPECT().GetNode(gomock.Any(), "worker-a").Return(newTestNode("worker-a", "us-central", "10.0.0.1", "linode://701"), nil)
+	newKubeNodeClient = func(string) (KubeNodeClient, error) {
+		return kubeClient, nil
+	}
+	newInstanceMetadataClient = func(context.Context) (InstanceMetadataClient, error) {
+		var client *mocks.MockInstanceMetadataClient
+		return client, errors.New("metadata initialization failed")
+	}
+
+	driver := GetLinodeDriver(ctx)
+	if err := driver.SetupLinodeDriver(ctx, nil, defaultMounterHelper(t), Name, "dev", RoleNode, "worker-a", "", AccessPolicyModeSpace); err != nil {
+		t.Fatalf("SetupLinodeDriver() error = %v", err)
+	}
+	info, err := driver.ns.NodeGetInfo(ctx, &csi.NodeGetInfoRequest{})
+	if err != nil {
+		t.Fatalf("NodeGetInfo() error = %v", err)
+	}
+	if info.GetNodeId() != "701" {
+		t.Fatalf("NodeGetInfo() node ID = %q, want 701 from Kubernetes fallback", info.GetNodeId())
+	}
+}
+
 func assertControllerDriverSetup(t *testing.T, driver *LinodeDriver) {
 	t.Helper()
 

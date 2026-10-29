@@ -130,6 +130,7 @@ func newMetadataService(ctx context.Context, nodeName string, role Role, kubecon
 		instanceClient, err = newInstanceMetadataClient(ctx)
 		if err != nil {
 			klog.V(4).InfoS("metadata service will fall back to kubernetes node lookups", "error", err)
+			instanceClient = nil
 		}
 	}
 

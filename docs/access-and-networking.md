@@ -154,7 +154,7 @@ When the parameter is omitted the driver never touches the setting, leaving the 
 
 Everything above hinges on mapping a Kubernetes node to a Linode ID, which the driver does in two ways.
 
-**Node plugin, resolving itself:** it tries the [Linode instance metadata service](https://www.linode.com/docs/products/compute/compute-instances/guides/metadata/) (link-local, no credentials) and falls back to a Kubernetes node lookup by name if the metadata service is unreachable. This is why the node plugin's RBAC needs `get`, `list`, and `watch` on nodes, and why it needs no API token.
+**Node plugin, resolving itself:** it tries the [Linode instance metadata service](https://www.linode.com/docs/products/compute/compute-instances/guides/metadata/) (link-local, no credentials) and falls back to a Kubernetes node lookup by name if client initialization or metadata lookup fails. This is why the node plugin's RBAC needs `get`, `list`, and `watch` on nodes, and why it needs no API token.
 
 **Controller, resolving any node:** always a Kubernetes node lookup, parsing `spec.providerID`.
 
