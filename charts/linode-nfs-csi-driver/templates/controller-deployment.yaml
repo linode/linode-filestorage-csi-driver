@@ -1,4 +1,10 @@
 {{- if .Values.controller.enabled }}
+{{- $kubeconfigPath := "" }}
+{{- with .Values.controller.kubeconfig }}
+  {{- if and .mountDir .secretKey }}
+    {{- $kubeconfigPath = printf "%s/%s" .mountDir .secretKey }}
+  {{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -62,6 +68,10 @@ spec:
               value: {{ .Values.linodeURL | quote }}
             - name: LINODE_API_VERSION
               value: {{ .Values.linodeAPIVersion | quote }}
+            {{- if $kubeconfigPath }}
+            - name: KUBECONFIG
+              value: {{ $kubeconfigPath | quote }}
+            {{- end }}
             {{- with .Values.image.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -91,10 +101,8 @@ spec:
             - --volume-name-prefix=pvc
             - --volume-name-uuid-length=16
             - --timeout={{ .Values.sidecars.provisioner.timeout }}
-            {{- with .Values.controller.kubeconfig }}
-              {{- if and .mountDir .secretName .secretKey }}
-            - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
-              {{- end }}
+            {{- if $kubeconfigPath }}
+            - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
           {{- with .Values.sidecars.provisioner.resources }}
           resources:
@@ -118,10 +126,8 @@ spec:
             - --csi-address=$(ADDRESS)
             - --leader-election
             - --timeout={{ .Values.sidecars.attacher.timeout }}
-            {{- with .Values.controller.kubeconfig }}
-              {{- if and .mountDir .secretName .secretKey }}
-            - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
-              {{- end }}
+            {{- if $kubeconfigPath }}
+            - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
           env:
             - name: ADDRESS
@@ -147,10 +153,8 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
-            {{- with .Values.controller.kubeconfig }}
-              {{- if and .mountDir .secretName .secretKey }}
-            - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
-              {{- end }}
+            {{- if $kubeconfigPath }}
+            - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
           {{- with .Values.sidecars.resizer.resources }}
           resources:
@@ -174,10 +178,8 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
-            {{- with .Values.controller.kubeconfig }}
-              {{- if and .mountDir .secretName .secretKey }}
-            - --kubeconfig={{ printf "%s/%s" .mountDir .secretKey }}
-              {{- end }}
+            {{- if $kubeconfigPath }}
+            - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
           {{- with .Values.sidecars.snapshotter.resources }}
           resources:

@@ -58,6 +58,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	vendorVersion string,
 	role Role,
 	nodeName string,
+	kubeconfigPath string,
 	accessPolicyMode AccessPolicyMode,
 ) error {
 	if name == "" {
@@ -78,7 +79,10 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	d.pluginCaps = pluginCapabilities(role)
 	d.controllerCaps = controllerServiceCapabilities(accessPolicyMode)
 	klog.V(2).InfoS("configuring driver", "role", role, "name", name)
-	metadataSvc, err := newMetadataService(ctx, nodeName, client)
+	if role != RoleController {
+		kubeconfigPath = ""
+	}
+	metadataSvc, err := newMetadataService(ctx, nodeName, role, kubeconfigPath, client)
 	if err != nil {
 		return fmt.Errorf("new metadata service: %w", err)
 	}

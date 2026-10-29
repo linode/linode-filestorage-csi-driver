@@ -27,7 +27,7 @@ func withStubMetadataFactories(t *testing.T) {
 		newInstanceMetadataClient = originalMetadataFactory
 	})
 
-	newKubeNodeClient = func(context.Context) (KubeNodeClient, error) {
+	newKubeNodeClient = func(string) (KubeNodeClient, error) {
 		return mocks.NewMockKubeNodeClient(ctrl), nil
 	}
 	newInstanceMetadataClient = func(context.Context) (InstanceMetadataClient, error) {
@@ -150,7 +150,7 @@ func TestSetupLinodeDriver(t *testing.T) {
 			client := defaultClientHelper(t)
 			mounter := defaultMounterHelper(t)
 
-			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, tt.accessPolicyMode)
+			err := driver.SetupLinodeDriver(ctx, client, mounter, Name, "dev", tt.role, tt.nodeName, "", tt.accessPolicyMode)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("SetupLinodeDriver() error = %v, want %v", err, tt.wantErr)
 			}

@@ -2,8 +2,15 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	metadataapi "github.com/linode/go-metadata"
@@ -11,6 +18,7 @@ import (
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/linode/linode-filestorage-csi-driver/mocks"
 )
@@ -315,4 +323,87 @@ func newTestNode(name, region, internalIP, providerID string) *corev1.Node {
 			{Type: corev1.NodeInternalIP, Address: internalIP},
 		}},
 	}
+}
+
+func TestMetadataServiceClusterUsesExplicitKubeconfig(t *testing.T) {
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/nodes" {
+			http.Error(w, "unexpected node lookup", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(&corev1.NodeList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NodeList"},
+			Items:    []corev1.Node{*newTestNode("workload-node", "us-central", "10.0.0.1", "linode://701")},
+		}); err != nil {
+			t.Errorf("encode fake node list: %v", err)
+		}
+	}))
+	defer apiServer.Close()
+	client, err := newKubeNodeClient(writeKubeconfig(t, apiServer.URL))
+	if err != nil {
+		t.Fatalf("new Kubernetes client: %v", err)
+	}
+	linodeClient := mocks.NewMockLinodeClient(gomock.NewController(t))
+	linodeClient.EXPECT().GetInstance(gomock.Any(), 701).Return(&linodego.Instance{InterfaceGeneration: linodego.GenerationLinode}, nil)
+	linodeClient.EXPECT().ListInterfaces(gomock.Any(), 701, gomock.Nil()).Return([]linodego.LinodeInterface{
+		{VPC: &linodego.VPCInterface{VPCID: 123456}},
+	}, nil)
+	service := &metadataService{kubeClient: client, linodeClient: linodeClient}
+	want := ClusterMetadata{Region: "us-central", VPCID: 123456}
+	if cluster, err := service.Cluster(t.Context()); err != nil || cluster != want {
+		t.Fatalf("Cluster() = %#v, %v; want %#v from workload API", cluster, err, want)
+	}
+}
+
+func TestNewKubeNodeClientConfigurationErrors(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+
+	if _, err := newKubeNodeClient(""); err == nil || !strings.Contains(err.Error(), "in-cluster config") {
+		t.Fatalf("empty kubeconfig error = %v, want in-cluster config error", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "invalid-kubeconfig")
+	if err := os.WriteFile(path, []byte("not: [valid"), 0o600); err != nil {
+		t.Fatalf("write invalid kubeconfig: %v", err)
+	}
+	if _, err := newKubeNodeClient(path); err == nil || !strings.Contains(err.Error(), "load kubeconfig") {
+		t.Fatalf("invalid explicit kubeconfig error = %v, want load kubeconfig error", err)
+	}
+}
+
+func TestNewKubeNodeClientRejectsEmptyExplicitKubeconfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty-kubeconfig")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("write empty kubeconfig: %v", err)
+	}
+	if _, err := newKubeNodeClient(path); !errors.Is(err, clientcmd.ErrEmptyConfig) {
+		t.Fatalf("empty explicit kubeconfig error = %v, want empty config error", err)
+	}
+}
+
+func writeKubeconfig(t *testing.T, serverURL string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	contents := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: fake
+  cluster:
+    server: %q
+contexts:
+- name: fake
+  context:
+    cluster: fake
+    user: fake
+current-context: fake
+users:
+- name: fake
+  user: {}
+`, serverURL)
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	return path
 }

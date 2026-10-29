@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
 	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
@@ -80,10 +81,27 @@ func (k *metadataKubeClient) ListNodes(ctx context.Context) (*corev1.NodeList, e
 	return k.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 }
 
-var newKubeNodeClient = func(ctx context.Context) (KubeNodeClient, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("in-cluster config: %w", err)
+var newKubeNodeClient = func(kubeconfigPath string) (KubeNodeClient, error) {
+	var (
+		config *rest.Config
+		err    error
+	)
+	if kubeconfigPath != "" {
+		// Direct loading prevents empty explicit files from selecting in-cluster credentials.
+		loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}
+		kubeconfig, err := loadingRules.Load()
+		if err != nil {
+			return nil, fmt.Errorf("load kubeconfig: %w", err)
+		}
+		config, err = clientcmd.NewNonInteractiveClientConfig(*kubeconfig, "", &clientcmd.ConfigOverrides{}, loadingRules).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("load kubeconfig: %w", err)
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("in-cluster config: %w", err)
+		}
 	}
 
 	client, err := kubernetes.NewForConfig(config)
@@ -101,16 +119,18 @@ type metadataService struct {
 	linodeClient   linodeclient.LinodeClient
 }
 
-func newMetadataService(ctx context.Context, nodeName string, linodeClient linodeclient.LinodeClient) (*metadataService, error) {
-	kubeClient, err := newKubeNodeClient(ctx)
+func newMetadataService(ctx context.Context, nodeName string, role Role, kubeconfigPath string, linodeClient linodeclient.LinodeClient) (*metadataService, error) {
+	kubeClient, err := newKubeNodeClient(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes metadata client: %w", err)
 	}
 
-	instanceClient, err := newInstanceMetadataClient(ctx)
-	if err != nil {
-		klog.V(4).InfoS("metadata service will fall back to kubernetes node lookups", "error", err)
-		instanceClient = nil
+	var instanceClient InstanceMetadataClient
+	if role == RoleNode {
+		instanceClient, err = newInstanceMetadataClient(ctx)
+		if err != nil {
+			klog.V(4).InfoS("metadata service will fall back to kubernetes node lookups", "error", err)
+		}
 	}
 
 	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient, linodeClient), nil
