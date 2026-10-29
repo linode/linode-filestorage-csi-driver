@@ -16,7 +16,6 @@ const (
 	sanityNodeID         = 123
 	sanityNodeProviderID = "linode://123"
 	sanityRegion         = "us-east"
-	sanityVPCID          = 456
 )
 
 type fakeSanityInstanceMetadataClient struct {

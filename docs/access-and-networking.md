@@ -39,37 +39,11 @@ The selected access-policy mode determines whether the Space access policy is th
 
 ## 🔒 VPC requirement
 
-**Every node must be attached to a VPC.** This is a hard precondition, checked on every `CreateVolume`:
+**Every node needs VPC-backed IPv6 connectivity to the NFS mount targets.** This is a networking requirement, not a provisioning precondition checked by the driver.
 
-```text
-FailedPrecondition: this driver requires VPC-backed IPv6 connectivity; cluster VPC not found
-```
+The controller discovers only the workload region, from one Kubernetes Node on the first successful `CreateVolume`, and reuses it for the process lifetime.
 
-The driver resolves the cluster VPC from the Linode API rather than from Kubernetes:
-
-1. List all nodes. Read `topology.kubernetes.io/region` (or the beta label) from each and require them all to agree, otherwise `cluster has multiple regions: "us-ord" and "us-east"`.
-2. Take the **first** node, parse its Linode ID out of `spec.providerID` (`linode://12345`).
-3. Fetch that Linode and branch on its `interface_generation`:
-   - **`legacy_config`** (LKE and CAPI nodes today): list the instance's config profiles and look for an active interface with `purpose: vpc`.
-   - anything else: list the Linode's interfaces and look for one carrying a VPC.
-4. If no VPC is found, fail with the `FailedPrecondition` above.
-
-A cluster's nodes all live in one VPC and one region, so taking the first node is enough to identify the cluster's VPC.
-
-Checking your own cluster:
-
-```sh
-kubectl get nodes -o custom-columns=\
-NAME:.metadata.name,\
-PROVIDER:.spec.providerID,\
-REGION:'.metadata.labels.topology\.kubernetes\.io/region'
-
-# then, for one Linode ID from above
-curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
-  https://api.linode.com/v4/linode/instances/12345/configs
-```
-
-Look for an interface with `"purpose": "vpc"` and a non-null `vpc_id`.
+Check each node pool's VPC and subnet assignment in Cloud Manager, and compare them with the Space access policy. A missing VPC, an uncovered subnet, or an incorrect customer ACL surfaces as an error when the node mounts the volume.
 
 ## 🚧 Access-policy modes
 
@@ -152,21 +126,21 @@ When the parameter is omitted the driver never touches the setting, leaving the 
 
 ## 🪪 Node identity
 
-Everything above hinges on mapping a Kubernetes node to a Linode ID, which the driver does in two ways.
+The node plugin supplies its Linode ID as the CSI node ID. In node access-policy mode, the controller uses that ID for filesystem ACL entries.
 
 **Node plugin, resolving itself:** it tries the [Linode instance metadata service](https://www.linode.com/docs/products/compute/compute-instances/guides/metadata/) (link-local, no credentials) and falls back to a Kubernetes node lookup by name if the metadata service is unreachable. This is why the node plugin's RBAC needs `get`, `list`, and `watch` on nodes, and why it needs no API token.
 
-**Controller, resolving any node:** always a Kubernetes node lookup, parsing `spec.providerID`.
+**Controller:** publish and unpublish parse the CSI request's `NodeId` as a Linode ID; they do not look up individual Kubernetes Nodes. `CreateVolume` discovers only the workload region, as described above.
 
-Both paths require the node object to carry:
+The node plugin's Kubernetes fallback requires the node object to carry:
 
 | Field | Failure when missing |
 | --- | --- |
-| `spec.providerID` as `linode://<id>` | `node "..." : invalid provider ID` and provisioning fails |
+| `spec.providerID` as `linode://<id>` | Node identity resolution fails |
 | `topology.kubernetes.io/region` or the beta label | `node region label not found` |
 | An `InternalIP` or `ExternalIP` in `status.addresses` | `node allowlist IP not found` |
 
-All three come from the Linode Cloud Controller Manager, which is why the CCM is a hard requirement. A node whose `providerID` is still empty because the CCM has not processed it yet will make `CreateVolume` fail; it recovers on retry once the CCM catches up.
+The Linode Cloud Controller Manager supplies these fields. If the node plugin falls back to Kubernetes before the CCM has populated them, node identity resolution fails until a later retry.
 
 The IP address is resolved but not currently used for ACL entries; the filesystem ACL is keyed on Linode ID. It is still required, so a node with no addresses reported fails metadata resolution.
 

@@ -93,7 +93,7 @@ For background on Kubernetes CSI, see the [Kubernetes CSI documentation](https:/
 - Every node must be attached to a VPC with IPv6 connectivity, and all nodes must be in one region. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - The [Linode Cloud Controller Manager](https://github.com/linode/linode-cloud-controller-manager) must be installed and running, because the driver reads each node's `providerID` and region label.
 - You create the NFS Storage Space yourself. See [Create an NFS Storage Space](docs/installation.md#-create-an-nfs-storage-space).
-- The Space access policy must be enabled and list your cluster VPC. The driver only checks it, and a PVC stays `Pending` until it passes. See [Admit the cluster VPC](docs/installation.md#-admit-the-cluster-vpc-on-the-space).
+- The Space access policy must be enabled and list your cluster's VPC to ensure proper access. Incorrect customer ACLs surface as mount failures. See [Admit the cluster VPC](docs/installation.md#-admit-the-cluster-vpc-on-the-space).
 - You need a Linode API token. See [Secure a Linode API access token](docs/installation.md#-secure-a-linode-api-access-token).
 
 ## ⚡ Quickstart
@@ -144,7 +144,7 @@ Then mount `nfs-pvc` from a pod as shown in [Consume it from a pod](docs/usage.m
 ## 🚧 Disclaimers
 
 - **The driver is in alpha.** Behavior and the interfaces it exposes may change between releases.
-- **A VPC is required.** `CreateVolume` fails with `FailedPrecondition` when the cluster's nodes are not attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
+- **VPC-backed IPv6 connectivity is required for mounts.** The driver does not discover the cluster VPC or gate provisioning on it. Network and customer ACL problems surface as mount failures. See [Access and Networking](docs/access-and-networking.md#-vpc-requirement).
 - **Storage Spaces are not created by the driver.** You must create the NFS Storage Space yourself and reference it from every `StorageClass`. The driver creates and deletes filesystems inside that space, never the space itself.
 - **Capacity increases are quota-backed.** The driver increases the NFS filesystem's root quota for PVC expansion and rejects reductions. The Linode API enforces the maximum customer-manageable capacity; rejected requests and the API's error are returned to Kubernetes.
 

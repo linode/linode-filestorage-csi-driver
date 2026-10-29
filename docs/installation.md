@@ -23,21 +23,20 @@
 | **Linode Cloud Controller Manager** | Required. The driver reads `spec.providerID` (`linode://12345`) off node objects to resolve Linode IDs |
 | **Region topology labels** | Nodes must carry `topology.kubernetes.io/region` (or the beta label). The CCM sets these |
 | **A VPC** | Every node must be attached to a VPC. The driver requires VPC-backed IPv6 connectivity to reach mount targets |
-| **A single region** | All nodes must be in one region. A mixed-region cluster is rejected when resolving cluster metadata |
+| **A single region** | All workload nodes must be in one region. The controller discovers it from one Node on first provisioning and caches it for the process lifetime |
 | **An NFS Storage Space** | Pre-created. The driver provisions filesystems inside it but never creates the space |
 | **NFSv4 kernel support** | The node kernel must support NFSv4. By default the driver mounts with `vers=4.1,proto=tcp6`; `mountOptions` on the StorageClass replace those defaults. The NFS client tools ship in the plugin image, so nothing needs installing on the host |
-| **`LINODE_TOKEN`** | A [Personal Access Token](https://cloud.linode.com/profile/tokens) with read-only access to Linodes and read/write access to NFS resources |
+| **`LINODE_TOKEN`** | A [Personal Access Token](https://cloud.linode.com/profile/tokens) with read/write access to NFS resources |
 
-> The VPC requirement is a hard precondition, not a recommendation. `CreateVolume` fails with `FailedPrecondition: this driver requires VPC-backed IPv6 connectivity; cluster VPC not found` when the node's Linode has no VPC interface. See [Access and Networking](./access-and-networking.md#-vpc-requirement).
+> VPC-backed IPv6 connectivity and a correct Space access policy are required for mounts. The driver does not discover a VPC or enforce customer Space ACLs during provisioning. See [Access and Networking](./access-and-networking.md#-vpc-requirement).
 
 ## 🔐 Secure a Linode API access token
 
 Generate a Personal Access Token (PAT) in the [Linode Cloud Manager](https://cloud.linode.com/profile/tokens). The controller uses it for every Linode API call, so scope it to what the driver actually touches:
 
-- **Linodes**: read-only, to look up instances, interfaces, and configs when finding the cluster VPC
 - **NFS / file storage**: read/write, to create and delete filesystems and update filesystem access policies. The controller only reads Storage Space access policies
 
-The driver makes no VPC API calls; it reads the VPC ID from the Linode's interfaces.
+The driver makes no Linode instance, interface, or VPC discovery calls.
 
 Give it an expiry long enough for continued use, and plan to rotate it. The token is injected as the `LINODE_TOKEN` environment variable, so a rotation requires restarting the controller pod.
 
@@ -45,22 +44,18 @@ The node DaemonSet does not receive the token and does not call the Linode API.
 
 ## 🩺 Check your cluster first
 
-Before you create anything, confirm that every node has a `spec.providerID`, a region label, and a VPC interface. The driver needs all three (see [Requirements](#-requirements) and the [VPC requirement](./access-and-networking.md#-vpc-requirement)).
+Confirm that workload nodes have the provider IDs and region labels used by node identity and controller region discovery. Check their VPC and subnet assignments separately for mount reachability (see [Requirements](#-requirements)).
 
 ```sh
 kubectl get nodes -o custom-columns=\
 NAME:.metadata.name,\
 PROVIDER:.spec.providerID,\
 REGION:'.metadata.labels.topology\.kubernetes\.io/region'
-
-# then, for one Linode ID from above
-curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
-  https://api.linode.com/v4/linode/instances/12345/configs
 ```
 
-Every node should show a `linode://` provider ID and the same region. In the configs response, look for an interface with `"purpose": "vpc"` and a non-null `vpc_id`. If any of these is missing, fix it first: install the Linode Cloud Controller Manager for the provider ID and region, and attach the node to a VPC.
+Every node should show a `linode://` provider ID and the same region. The controller requests one workload Node and caches its region after the first successful lookup; it does not compare all nodes. No region installation value is required, and the controller can start before workers exist. Failed discovery can retry on a later provisioning request.
 
-Note the `vpc_id`. You need it to admit the cluster on the Storage Space. It is also shown on the VPC's page in Cloud Manager.
+Find the workload VPC ID in Cloud Manager and give it to the Space owner for access-policy configuration. The driver does not perform that lookup.
 
 ## 📂 Create an NFS Storage Space
 
@@ -115,7 +110,7 @@ The two are mutually exclusive, and one of them is required. See [StorageClass p
 
 ### 🔓 Admit the cluster VPC on the Space
 
-The driver reads the Space access policy when it provisions a volume and never changes it. Until the policy is enabled and lists your cluster VPC, a PVC stays `Pending` with a `FailedPrecondition` event. If you own the Space, do the steps below yourself. If someone else does, send them these steps along with the VPC ID.
+The driver reads the Space access policy for its mTLS mode and never changes or validates its ACL. A PVC can bind while the policy is disabled or does not admit the workload VPC; the failure appears when a pod mounts the volume. If you own the Space, configure it below. Otherwise, send the Space owner these steps and the workload VPC ID.
 
 Read the current policy first. A new policy is disabled by default.
 
@@ -137,7 +132,7 @@ curl -sS -X PUT \
 
 The PUT replaces the whole VPC list. If `vpc_acl` in the earlier response already has entries, include them in `vpcs` too, with their subnet IDs if they have any. Leaving `subnets` out admits every subnet in the VPC.
 
-The Linode API applies the update asynchronously. The PUT response already lists your VPC ID in `vpc_acl`, but the policy's `status` can read `updating` for a while. The driver waits for `status` to be `active` during provisioning, so a new PVC stays Pending until the policy settles. Run the GET again to check progress.
+The Linode API applies the update asynchronously. The PUT response can already list the VPC while the policy's `status` is `updating`. Run the GET again to confirm it is `active` before mounting. The driver does not wait for the Space policy during provisioning.
 
 ## 🧰 Deployment methods
 

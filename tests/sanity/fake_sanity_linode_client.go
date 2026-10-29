@@ -51,7 +51,6 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 			SpaceID:  fakeSanitySpaceID,
 			Label:    "sanity-space-policy",
 			Enabled:  true,
-			VPCACL:   []linodego.NFSSpaceAccessPolicyVPC{{ID: sanityVPCID}},
 			MTLSMode: linodego.NFSMTLSModeDisabled,
 			Status:   linodego.NFSAccessPolicyStatusActive,
 			Created:  &now,
@@ -64,38 +63,6 @@ func newFakeSanityLinodeClient() *fakeSanityLinodeClient {
 		quotas:           make(map[int]linodego.NFSQuota),
 		nextQuotaID:      20000,
 	}
-}
-
-func (c *fakeSanityLinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
-	if linodeID != sanityNodeID {
-		return nil, fakeSanityNotFound("Linode instance", linodeID)
-	}
-	return &linodego.Instance{
-		ID:                  sanityNodeID,
-		Region:              sanityRegion,
-		Status:              linodego.InstanceRunning,
-		InterfaceGeneration: linodego.GenerationLinode,
-	}, nil
-}
-
-func (c *fakeSanityLinodeClient) ListInterfaces(_ context.Context, linodeID int, _ *linodego.ListOptions) ([]linodego.LinodeInterface, error) {
-	if linodeID != sanityNodeID {
-		return nil, fakeSanityNotFound("Linode instance", linodeID)
-	}
-	return []linodego.LinodeInterface{{ID: 1, VPC: &linodego.VPCInterface{VPCID: sanityVPCID, SubnetID: 1}}}, nil
-}
-
-func (c *fakeSanityLinodeClient) ListInstanceConfigs(_ context.Context, linodeID int, _ *linodego.ListOptions) ([]linodego.InstanceConfig, error) {
-	if linodeID != sanityNodeID {
-		return nil, fakeSanityNotFound("Linode instance", linodeID)
-	}
-	vpcID := sanityVPCID
-	return []linodego.InstanceConfig{{
-		ID: 1,
-		Interfaces: []linodego.InstanceConfigInterface{{
-			ID: 1, Purpose: linodego.InterfacePurposeVPC, Active: true, VPCID: &vpcID,
-		}},
-	}}, nil
 }
 
 func (c *fakeSanityLinodeClient) ListNFSSpaces(_ context.Context, opts *linodego.ListOptions) ([]linodego.NFSSpace, error) {

@@ -111,7 +111,7 @@ Keeping them separate avoids host-side contention when several CSI drivers are i
 │   ├── controller_helpers.go     # parameter parsing, handles, Linode API orchestration
 │   ├── nodeserver.go             # node RPC entry points
 │   ├── nodeserver_helpers.go     # mount-point setup, NFS mount
-│   ├── metadata.go               # node/cluster/VPC resolution
+│   ├── metadata.go               # node identity and cached workload region
 │   ├── server.go                 # non-blocking gRPC server, unary logging interceptor
 │   └── errors.go                 # shared gRPC status errors
 ├── pkg/linode-client/            # LinodeClient interface + configured linodego client
@@ -167,15 +167,14 @@ The same normalization applies to snapshot labels. Because the label is derived 
 
 ## 🧭 The metadata service
 
-`internal/driver/metadata.go` answers three questions, and deliberately uses two data sources.
+`internal/driver/metadata.go` resolves node identity and the controller's workload region.
 
 | Question | Used by | Source |
 | --- | --- | --- |
 | Which Linode am I running on? | Node plugin, for `NodeGetInfo` | `go-metadata` fast path, Kubernetes node fallback |
-| What is the cluster region and VPC? | Controller, for `CreateVolume` | Kubernetes node list, then the Linode API |
-| What is the Linode ID for node *X*? | Controller, for publish/unpublish | Kubernetes node `spec.providerID` |
+| In which region should filesystems be provisioned? | Controller, for `CreateVolume` | One workload Kubernetes Node, cached after successful discovery |
 
-The controller must translate arbitrary Kubernetes node names into Linode IDs, which instance metadata cannot do (it only ever describes the local instance), so Kubernetes node objects are the primary source. `go-metadata` is used only as a local fast path on the node plugin; if the metadata service is unreachable at startup, `instanceClient` is left `nil` and everything falls back to Kubernetes lookups.
+`go-metadata` is used only on the node plugin. If the metadata service is unreachable, node identity falls back to Kubernetes lookups. Controller publish/unpublish already receives the numeric Linode ID in the CSI request's `NodeId`; it does not need to look up Kubernetes Nodes.
 
 ### Resolving the Linode ID
 
@@ -183,16 +182,9 @@ From `spec.providerID`, which the Linode CCM sets to `linode://12345`. A node wi
 
 ### Resolving the region
 
-From the node label `topology.kubernetes.io/region`, falling back to the beta label `failure-domain.beta.kubernetes.io/region`. `Cluster()` walks every node and rejects a cluster whose nodes disagree, because a filesystem is created in exactly one region.
+The first `CreateVolume` requests one workload Node and reads `topology.kubernetes.io/region`, falling back to `failure-domain.beta.kubernetes.io/region`. A mutex serializes discovery, and the first successful region is reused for the lifetime of that controller process. These clusters are single-region; the driver does not scan all nodes to compare their labels.
 
-### Resolving the VPC
-
-This is the subtle one, and it has two code paths because Linode has two interface generations:
-
-- **Newer `linode` interface generation:** `ListInterfaces` exposes VPC attachment directly, on the interface's `VPC.VPCID`.
-- **Legacy config-profile interfaces** (which is what most existing Linodes use, including LKE and CAPL nodes): VPC attachment is a `purpose="vpc"` entry with a `VPCID` on the *active* `InstanceConfig`, so the driver lists instance configs instead.
-
-`nodeVPCID` reads `instance.InterfaceGeneration` to decide which path to take. Either path errors if one Linode somehow reports two different VPCs, and returns `errClusterVPCNotFound` when it finds none, which `CreateVolume` surfaces as `FailedPrecondition`.
+Discovery is lazy, so the controller can start before workers exist. API errors, an empty Node list, or a missing region label leave the cache empty; a later request can try again. The controller uses its configured kubeconfig, or in-cluster credentials when unset.
 
 ## 🔄 Provisioning lifecycle
 
@@ -205,7 +197,7 @@ sequenceDiagram
     participant L as Linode API
     P->>C: CreateVolume(name, StorageClass params)
     C->>C: validate the request, parse the parameters
-    C->>L: resolve the cluster region and VPC
+    C->>C: resolve or reuse cached workload region
     C->>L: resolve the Storage Space (by ID or label)
     C->>L: read the Space access policy (for its mTLS mode)
     C->>L: look for a filesystem already carrying this label

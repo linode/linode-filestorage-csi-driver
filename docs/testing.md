@@ -43,14 +43,14 @@ The whole suite is hermetic: no network, no cluster, no Linode token. If a test 
 | `internal/driver/controller_helpers_test.go` | Parameter parsing, handle formats, label normalization, idempotency comparisons, error mapping |
 | `internal/driver/nodeserver_test.go` | Node RPC validation, locking, stats |
 | `internal/driver/nodeserver_helpers_test.go` | Mount option assembly, mount-point setup |
-| `internal/driver/metadata_test.go` | Provider ID parsing, region resolution, both VPC discovery paths, the multi-region rejection |
+| `internal/driver/metadata_test.go` | Node identity, workload kubeconfig selection, retryable region discovery, and concurrent region-cache reuse |
 | `internal/driver/identityserver_test.go` | Plugin info, capabilities, probe readiness |
 | `internal/driver/driver_test.go` | Setup, role validation, capability advertisement |
 | `pkg/linode-client/client_test.go` | Client construction and configuration |
 | `pkg/mount-manager/safe_mounter_test.go` | The mounter wrapper |
 | `tests/sanity/sanity_test.go` | `csi-sanity` against the real servers over fakes. See [CSI sanity](#-csi-sanity) |
 
-The parts worth having tests for, and which do have them, are the ones that are painful to verify by hand: the composite handle formats, the 63-byte label truncation with its trailing-hyphen strip, the HTTP-to-gRPC error mapping table, and the two different VPC discovery paths for legacy and modern interface generations.
+Focused boundary tests cover composite handles, label truncation, HTTP-to-gRPC error mapping, and region discovery that retries failures but caches successful results across concurrent requests.
 
 ## 🎭 Mocks
 

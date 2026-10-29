@@ -25,7 +25,6 @@ var (
 	errInvalidRole                = errors.New("invalid driver role")
 	errInvalidAccessPolicyMode    = errors.New("invalid access policy mode")
 	errInvalidMTLSMode            = status.Error(codes.InvalidArgument, "invalid mtls-mode value, must be one of: required, optional, disabled")
-	errClusterVPCNotFound         = errors.New("cluster VPC not found")
 	errLinodeClientNotFound       = errors.New("linode client not found or is nil")
 	ErrTokenRequired              = errors.New("linode token required for controller role")
 	// TODO: Restore the snapshot error when the NFS snapshot API is available.

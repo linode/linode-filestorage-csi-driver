@@ -90,65 +90,6 @@ func TestParseCreateVolumeParameters(t *testing.T) {
 	}
 }
 
-func TestValidateSpaceVPC(t *testing.T) {
-	tests := []struct {
-		name        string
-		vpcID       int
-		policy      *linodego.NFSSpaceAccessPolicy
-		wantCode    codes.Code
-		wantMessage string
-	}{
-		{
-			name:        "policy missing",
-			vpcID:       123,
-			wantCode:    codes.Internal,
-			wantMessage: "get NFS space access policy for Space 42 returned no policy",
-		},
-		{
-			name:        "cluster VPC unavailable",
-			policy:      &linodego.NFSSpaceAccessPolicy{Enabled: true},
-			wantCode:    codes.FailedPrecondition,
-			wantMessage: "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateSpaceVPC(42, tt.vpcID, tt.policy)
-			if status.Code(err) != tt.wantCode {
-				t.Fatalf("validateSpaceVPC() code = %v, want %v", status.Code(err), tt.wantCode)
-			}
-			if tt.wantMessage != "" && status.Convert(err).Message() != tt.wantMessage {
-				t.Fatalf("validateSpaceVPC() message = %q, want %q", status.Convert(err).Message(), tt.wantMessage)
-			}
-		})
-	}
-}
-
-func TestValidateSpaceVPCIgnoresPolicyStatus(t *testing.T) {
-	for _, policyStatus := range []linodego.NFSAccessPolicyStatus{
-		linodego.NFSAccessPolicyStatusCreating,
-		linodego.NFSAccessPolicyStatusUpdating,
-		linodego.NFSAccessPolicyStatusDeleting,
-		linodego.NFSAccessPolicyStatusError,
-		"blocked",
-		"",
-		"unknown",
-	} {
-		t.Run(string(policyStatus), func(t *testing.T) {
-			policy := &linodego.NFSSpaceAccessPolicy{
-				Enabled: true,
-				VPCACL:  []linodego.NFSSpaceAccessPolicyVPC{{ID: 123}},
-				Status:  policyStatus,
-			}
-			err := validateSpaceVPC(42, 123, policy)
-			if err != nil {
-				t.Fatalf("validateSpaceVPC() error = %v, want nil", err)
-			}
-		})
-	}
-}
-
 func TestParseVolumeHandle(t *testing.T) {
 	tests := []struct {
 		name     string
