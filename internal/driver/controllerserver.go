@@ -2,7 +2,6 @@ package driver
 
 import (
 	"context"
-	"errors"
 	"slices"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -59,14 +58,10 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	if err != nil {
 		return nil, err
 	}
-	cluster, err := s.driver.metadata.Cluster(ctx)
+	params.region, err = s.driver.metadata.Region(ctx)
 	if err != nil {
-		if errors.Is(err, errClusterVPCNotFound) {
-			return nil, status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
-		}
-		return nil, status.Errorf(codes.FailedPrecondition, "resolve cluster metadata: %v", err)
+		return nil, status.Errorf(codes.FailedPrecondition, "resolve region: %v", err)
 	}
-	params.region = cluster.Region
 
 	space, err := s.resolveSpace(ctx, &params)
 	if err != nil {
@@ -74,9 +69,6 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 	}
 	spacePolicy, err := s.getSpaceAccessPolicy(ctx, space.ID)
 	if err != nil {
-		return nil, err
-	}
-	if err := validateSpaceVPC(space.ID, cluster.VPCID, spacePolicy); err != nil {
 		return nil, err
 	}
 	label := truncateNFSLabelToMaxBytes(normalizeLabel(req.GetName()))

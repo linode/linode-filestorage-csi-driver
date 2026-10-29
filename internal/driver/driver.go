@@ -82,7 +82,7 @@ func (d *LinodeDriver) SetupLinodeDriver(
 	if role != RoleController {
 		kubeconfigPath = ""
 	}
-	metadataSvc, err := newMetadataService(ctx, nodeName, role, kubeconfigPath, client)
+	metadataSvc, err := newMetadataService(ctx, nodeName, role, kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("new metadata service: %w", err)
 	}

@@ -19,9 +19,8 @@ func NewTestMetadataProvider(
 	nodeName string,
 	instanceClient InstanceMetadataClient,
 	kubeClient KubeNodeClient,
-	linodeClient linodeclient.LinodeClient,
 ) MetadataProvider {
-	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient, linodeClient)
+	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient)
 }
 
 // NewTestServices constructs CSI services for the embedded sanity suite using
