@@ -128,7 +128,7 @@ When the parameter is omitted the driver never touches the setting, leaving the 
 
 The node plugin supplies its Linode ID as the CSI node ID. In node access-policy mode, the controller uses that ID for filesystem ACL entries.
 
-**Node plugin, resolving itself:** it tries the [Linode instance metadata service](https://www.linode.com/docs/products/compute/compute-instances/guides/metadata/) (link-local, no credentials) and falls back to a Kubernetes node lookup by name if the metadata service is unreachable. This is why the node plugin's RBAC needs `get`, `list`, and `watch` on nodes, and why it needs no API token.
+**Node plugin, resolving itself:** it tries the [Linode instance metadata service](https://www.linode.com/docs/products/compute/compute-instances/guides/metadata/) (link-local, no credentials) and falls back to a Kubernetes node lookup by name if client initialization or metadata lookup fails. This is why the node plugin's RBAC needs `get`, `list`, and `watch` on nodes, and why it needs no API token.
 
 **Controller:** publish and unpublish parse the CSI request's `NodeId` as a Linode ID; they do not look up individual Kubernetes Nodes. `CreateVolume` discovers only the workload region, as described above.
 
