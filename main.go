@@ -43,6 +43,7 @@ func loadConfig() linodeclient.Config {
 		AccessPolicyMode: envOrDefault("NFS_ACCESS_POLICY_MODE", string(driver.AccessPolicyModeSpace)),
 		CSIEndpoint:      envOrDefault("CSI_ENDPOINT", "unix:///csi/csi.sock"),
 		NodeName:         os.Getenv("NODE_NAME"),
+		KubeconfigPath:   os.Getenv("KUBECONFIG"),
 	}
 }
 
@@ -97,6 +98,7 @@ func handle(ctx context.Context) error {
 		vendorVersion,
 		role,
 		cfg.NodeName,
+		cfg.KubeconfigPath,
 		accessPolicyMode,
 	); err != nil {
 		return fmt.Errorf("setup driver: %w", err)

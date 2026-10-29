@@ -21,6 +21,7 @@ The binary is configured entirely through the environment. There is no config fi
 | `DRIVER_ROLE` | `controller` | both | `controller` or `node`. Anything else is a startup error: `invalid driver role "..."` |
 | `CSI_ENDPOINT` | `unix:///csi/csi.sock` | both | gRPC listen address. The chart overrides it to `unix:///var/lib/csi/sockets/pluginproxy/csi.sock` for the controller |
 | `LINODE_TOKEN` | none | controller | Linode API token. **Required** for the controller; the process exits with `ErrTokenRequired` without it. The node plugin ignores it |
+| `KUBECONFIG` | unset | controller | Optional kubeconfig file for controller Kubernetes metadata. The chart passes the same file to controller sidecars. Unset keeps in-cluster configuration; an empty or invalid configured file fails startup without falling back. The node role ignores it. |
 | `NFS_ACCESS_POLICY_MODE` | `space` | controller | `space` disables CSI attachment and relies on the Space access policy; `node` enables publish/unpublish and maintains each filesystem's Linode ACL. Any other value is a startup error |
 | `NODE_NAME` | none | node | The node's Kubernetes name, injected from `spec.nodeName`. Metadata resolution fails without it |
 | `TIMEOUT` | `10s` | controller | Per-request Linode API client timeout, as a Go duration. An unparseable value logs a warning and falls back to 10s |
@@ -28,7 +29,7 @@ The binary is configured entirely through the environment. There is no config fi
 | `LINODE_API_VERSION` | `v4beta` | controller | Linode API version. Also read by `linodego` |
 | `LINODE_CA` | none | controller | Path to a root CA certificate for the Linode API client. Useful only against a non-public endpoint |
 
-`LINODE_TOKEN`, `TIMEOUT`, `LINODE_CA`, `DRIVER_ROLE`, `CSI_ENDPOINT`, `NODE_NAME`, and `NFS_ACCESS_POLICY_MODE` are read during driver startup. `LINODE_URL` and `LINODE_API_VERSION` are consumed by `linodego` directly from the environment.
+`main.loadConfig` reads `LINODE_TOKEN`, `TIMEOUT`, `LINODE_CA`, `DRIVER_ROLE`, `CSI_ENDPOINT`, `NODE_NAME`, `NFS_ACCESS_POLICY_MODE`, and `KUBECONFIG` at startup and passes configuration explicitly into driver setup. The node role ignores `KUBECONFIG`. `LINODE_URL` and `LINODE_API_VERSION` are consumed by `linodego` directly from the environment.
 
 `TIMEOUT` bounds a single API call, not an operation. Operations that wait for a resource to become active are bounded separately by a fixed 5-minute internal deadline, which is not configurable.
 
@@ -97,7 +98,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.replicaCount` | `1` | Replicas. See the note below |
 | `controller.hostNetwork` | `false` | Host networking for the controller pod |
 | `controller.dnsPolicy` | `Default` | Set to `ClusterFirstWithHostNet` if you enable `hostNetwork` |
-| `controller.kubeconfig.*` | `""` | Internal. Leave unset; see the note below |
+| `controller.kubeconfig.*` | `""` | `mountDir` and `secretKey` select the kubeconfig path; `secretName` additionally mounts an existing Secret |
 | `controller.serviceAccount.enabled` | `true` | Create the ServiceAccount and set `serviceAccountName` on the Deployment. Leave it on; see the note below |
 | `controller.serviceAccount.name` | `csi-linode-nfs-controller` | |
 | `controller.rbac.enabled` | `true` | Create the ClusterRole and ClusterRoleBinding |
@@ -105,9 +106,9 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.affinity` | `{}` | |
 | `controller.tolerations` | `CriticalAddonsOnly` + `NoExecute` | Lets the controller schedule on control-plane-ish nodes |
 
-**On `controller.kubeconfig`:** the chart can mount a kubeconfig Secret and pass `--kubeconfig` to the CSI sidecars, but this is not a supported way to run the driver and it is not what the sidecars should be using. They authenticate with the controller ServiceAccount and the ClusterRole the chart creates, which is the arrangement the RBAC is written for. Leave these values empty.
+**On `controller.kubeconfig`:** setting `mountDir` and `secretKey` selects `mountDir/secretKey` for the controller plugin and sidecars. Setting `secretName` as well mounts that Secret at `mountDir`; without it, you must make the file available to each container that uses it. If the path fields are unset, they use in-cluster configuration. The node plugin ignores this setting and keeps its workload-cluster in-cluster identity. The kubeconfig identity must have the needed permissions in its target cluster; controller RBAC in the Helm release cluster does not grant remote permissions.
 
-**On `serviceAccount.enabled`:** this flag does two things at once for both the controller and the node, and `false` is not a way to supply your own ServiceAccount. The chart guards the `serviceAccountName` field on the pod spec with the same flag that creates the account, so turning it off leaves the workload running as the namespace's `default` ServiceAccount with none of the driver's RBAC bound to it. Leave both at `true`. If you manage roles and bindings yourself, use `rbac.enabled: false` and bind your own to the ServiceAccount names above.
+**On `serviceAccount.enabled`:** this flag creates the ServiceAccount and sets `serviceAccountName` on the pod. Setting it to `false` leaves the workload on the namespace's `default` ServiceAccount; it does not select a user-managed ServiceAccount. Keep it enabled for the normal in-cluster installation.
 
 **On `replicaCount`:** raising it above 1 gives you multiple driver processes, and the sidecars lease-elect among themselves so only one is active. The driver's own in-process locks (which serialize concurrent operations on the same volume) are per-process and do not coordinate across replicas, so leader election is what keeps that safe. Leave it at 1 unless you have a reason.
 

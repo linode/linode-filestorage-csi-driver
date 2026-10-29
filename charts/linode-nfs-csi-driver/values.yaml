@@ -113,7 +113,8 @@ controller:
   # DNS policy for the controller pod.
   dnsPolicy: Default
   kubeconfig:
-    # Mount path for an optional kubeconfig secret.
+    # Mount path for the controller plugin and sidecars to read a kubeconfig.
+    # mountDir and secretKey select the file path; also set secretName to mount a Secret.
     mountDir: ""
     # Secret name containing the kubeconfig file.
     secretName: ""
