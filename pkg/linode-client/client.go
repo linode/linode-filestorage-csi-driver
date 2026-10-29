@@ -68,6 +68,7 @@ type Config struct {
 	AccessPolicyMode string
 	CSIEndpoint      string
 	NodeName         string
+	KubeconfigPath   string
 }
 
 const defaultUserAgentProduct = "LinodeFileStorageCSI"
