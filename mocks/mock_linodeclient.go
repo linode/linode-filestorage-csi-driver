@@ -70,21 +70,6 @@ func (mr *MockLinodeClientMockRecorder) DeleteNFSFilesystem(ctx, spaceID, filesy
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNFSFilesystem", reflect.TypeOf((*MockLinodeClient)(nil).DeleteNFSFilesystem), ctx, spaceID, filesystemID)
 }
 
-// GetInstance mocks base method.
-func (m *MockLinodeClient) GetInstance(ctx context.Context, linodeID int) (*linodego.Instance, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetInstance", ctx, linodeID)
-	ret0, _ := ret[0].(*linodego.Instance)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetInstance indicates an expected call of GetInstance.
-func (mr *MockLinodeClientMockRecorder) GetInstance(ctx, linodeID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstance", reflect.TypeOf((*MockLinodeClient)(nil).GetInstance), ctx, linodeID)
-}
-
 // GetNFSFilesystemAccessPolicy mocks base method.
 func (m *MockLinodeClient) GetNFSFilesystemAccessPolicy(ctx context.Context, spaceID, filesystemID int) (*linodego.NFSFilesystemAccessPolicy, error) {
 	m.ctrl.T.Helper()
@@ -143,36 +128,6 @@ func (m *MockLinodeClient) GetNFSSpaceAccessPolicy(ctx context.Context, spaceID 
 func (mr *MockLinodeClientMockRecorder) GetNFSSpaceAccessPolicy(ctx, spaceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNFSSpaceAccessPolicy", reflect.TypeOf((*MockLinodeClient)(nil).GetNFSSpaceAccessPolicy), ctx, spaceID)
-}
-
-// ListInstanceConfigs mocks base method.
-func (m *MockLinodeClient) ListInstanceConfigs(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.InstanceConfig, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListInstanceConfigs", ctx, linodeID, opts)
-	ret0, _ := ret[0].([]linodego.InstanceConfig)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListInstanceConfigs indicates an expected call of ListInstanceConfigs.
-func (mr *MockLinodeClientMockRecorder) ListInstanceConfigs(ctx, linodeID, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListInstanceConfigs", reflect.TypeOf((*MockLinodeClient)(nil).ListInstanceConfigs), ctx, linodeID, opts)
-}
-
-// ListInterfaces mocks base method.
-func (m *MockLinodeClient) ListInterfaces(ctx context.Context, linodeID int, opts *linodego.ListOptions) ([]linodego.LinodeInterface, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListInterfaces", ctx, linodeID, opts)
-	ret0, _ := ret[0].([]linodego.LinodeInterface)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListInterfaces indicates an expected call of ListInterfaces.
-func (mr *MockLinodeClientMockRecorder) ListInterfaces(ctx, linodeID, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListInterfaces", reflect.TypeOf((*MockLinodeClient)(nil).ListInterfaces), ctx, linodeID, opts)
 }
 
 // ListNFSFilesystems mocks base method.

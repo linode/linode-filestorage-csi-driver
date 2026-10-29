@@ -6,17 +6,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	metadataapi "github.com/linode/go-metadata"
-	"github.com/linode/linodego/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-
-	linodeclient "github.com/linode/linode-filestorage-csi-driver/pkg/linode-client"
 )
 
 const (
@@ -31,8 +29,7 @@ var (
 	errMetadataClusterNodes     = errors.New("cluster has no nodes")
 )
 
-// NodeMetadata contains the node facts the CSI controller and node servers use
-// for topology and filesystem allowlisting decisions.
+// NodeMetadata contains the facts resolved for the node plugin's identity.
 type NodeMetadata struct {
 	KubernetesName string
 	LinodeID       int
@@ -40,17 +37,10 @@ type NodeMetadata struct {
 	AllowlistIP    string
 }
 
-// ClusterMetadata contains cluster-scoped facts derived from Kubernetes node
-// state.
-type ClusterMetadata struct {
-	Region string
-	VPCID  int
-}
-
-// MetadataProvider supplies the cluster and node facts consumed by CSI services.
+// MetadataProvider supplies node identity and the controller's workload region.
 type MetadataProvider interface {
 	CurrentNode(context.Context) (NodeMetadata, error)
-	Cluster(context.Context) (ClusterMetadata, error)
+	Region(context.Context) (string, error)
 }
 
 var _ MetadataProvider = (*metadataService)(nil)
@@ -78,7 +68,7 @@ func (k *metadataKubeClient) GetNode(ctx context.Context, name string) (*corev1.
 }
 
 func (k *metadataKubeClient) ListNodes(ctx context.Context) (*corev1.NodeList, error) {
-	return k.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	return k.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
 }
 
 var newKubeNodeClient = func(kubeconfigPath string) (KubeNodeClient, error) {
@@ -116,10 +106,12 @@ type metadataService struct {
 	nodeName       string
 	instanceClient InstanceMetadataClient
 	kubeClient     KubeNodeClient
-	linodeClient   linodeclient.LinodeClient
+
+	regionMu sync.Mutex
+	region   string
 }
 
-func newMetadataService(ctx context.Context, nodeName string, role Role, kubeconfigPath string, linodeClient linodeclient.LinodeClient) (*metadataService, error) {
+func newMetadataService(ctx context.Context, nodeName string, role Role, kubeconfigPath string) (*metadataService, error) {
 	kubeClient, err := newKubeNodeClient(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes metadata client: %w", err)
@@ -134,20 +126,18 @@ func newMetadataService(ctx context.Context, nodeName string, role Role, kubecon
 		}
 	}
 
-	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient, linodeClient), nil
+	return newMetadataServiceWithClients(nodeName, instanceClient, kubeClient), nil
 }
 
 func newMetadataServiceWithClients(
 	nodeName string,
 	instanceClient InstanceMetadataClient,
 	kubeClient KubeNodeClient,
-	linodeClient linodeclient.LinodeClient,
 ) *metadataService {
 	return &metadataService{
 		nodeName:       nodeName,
 		instanceClient: instanceClient,
 		kubeClient:     kubeClient,
-		linodeClient:   linodeClient,
 	}
 }
 
@@ -166,17 +156,6 @@ func (s *metadataService) CurrentNode(ctx context.Context) (NodeMetadata, error)
 	}
 
 	return s.NodeByName(ctx, s.nodeName)
-}
-
-func (s *metadataService) configured(role Role) bool {
-	switch role {
-	case RoleController:
-		return s.kubeClient != nil && s.linodeClient != nil
-	case RoleNode:
-		return s.instanceClient != nil || s.kubeClient != nil
-	default:
-		return false
-	}
 }
 
 func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMetadata, error) {
@@ -212,138 +191,27 @@ func (s *metadataService) NodeByName(ctx context.Context, name string) (NodeMeta
 	}, nil
 }
 
-func (s *metadataService) NodesByName(ctx context.Context, names []string) ([]NodeMetadata, error) {
-	results := make([]NodeMetadata, 0, len(names))
-	for _, name := range names {
-		node, err := s.NodeByName(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, node)
-	}
-	return results, nil
-}
-
-func (s *metadataService) Cluster(ctx context.Context) (ClusterMetadata, error) {
-	if s.linodeClient == nil {
-		return ClusterMetadata{}, errLinodeClientNotFound
+// Region caches only successful discovery; workers may not exist when the controller starts.
+func (s *metadataService) Region(ctx context.Context) (string, error) {
+	s.regionMu.Lock()
+	defer s.regionMu.Unlock()
+	if s.region != "" {
+		return s.region, nil
 	}
 
 	nodes, err := s.kubeClient.ListNodes(ctx)
 	if err != nil {
-		return ClusterMetadata{}, fmt.Errorf("list kubernetes nodes: %w", err)
+		return "", fmt.Errorf("list kubernetes nodes: %w", err)
 	}
 	if len(nodes.Items) == 0 {
-		return ClusterMetadata{}, errMetadataClusterNodes
+		return "", errMetadataClusterNodes
 	}
-
-	region := ""
-	for i := range nodes.Items {
-		nodeRegion, err := regionFromNode(&nodes.Items[i])
-		if err != nil {
-			return ClusterMetadata{}, fmt.Errorf("node %q: %w", nodes.Items[i].Name, err)
-		}
-
-		if region == "" {
-			region = nodeRegion
-			continue
-		}
-
-		if nodeRegion != region {
-			return ClusterMetadata{}, fmt.Errorf("cluster has multiple regions: %q and %q", region, nodeRegion)
-		}
-	}
-
-	node := &nodes.Items[0]
-	linodeID, err := linodeIDFromProviderID(node.Spec.ProviderID)
+	region, err := regionFromNode(&nodes.Items[0])
 	if err != nil {
-		return ClusterMetadata{}, fmt.Errorf("node %q: %w", node.Name, err)
+		return "", fmt.Errorf("node %q: %w", nodes.Items[0].Name, err)
 	}
-
-	vpcID, err := s.nodeVPCID(ctx, linodeID)
-	if err != nil {
-		return ClusterMetadata{}, fmt.Errorf("node %q: %w", node.Name, err)
-	}
-
-	return ClusterMetadata{Region: region, VPCID: vpcID}, nil
-}
-
-// nodeVPCID resolves the VPC a Linode is attached to. Linodes provisioned with
-// the newer "linode" interface generation expose VPC attachment via
-// ListInterfaces, but most existing Linodes (including LKE/CAPI-provisioned
-// nodes) still use the legacy config-profile interfaces, where VPC attachment
-// is a purpose="vpc" entry on the active InstanceConfig instead.
-func (s *metadataService) nodeVPCID(ctx context.Context, linodeID int) (int, error) {
-	instance, err := s.linodeClient.GetInstance(ctx, linodeID)
-	if err != nil {
-		return 0, fmt.Errorf("get Linode instance %d: %w", linodeID, err)
-	}
-
-	if instance.InterfaceGeneration == linodego.GenerationLegacyConfig {
-		return s.nodeVPCIDFromConfigs(ctx, linodeID)
-	}
-	return s.nodeVPCIDFromInterfaces(ctx, linodeID)
-}
-
-func (s *metadataService) nodeVPCIDFromInterfaces(ctx context.Context, linodeID int) (int, error) {
-	interfaces, err := s.linodeClient.ListInterfaces(ctx, linodeID, nil)
-	if err != nil {
-		return 0, fmt.Errorf("list Linode interfaces for %d: %w", linodeID, err)
-	}
-
-	vpcID := 0
-	for i := range interfaces {
-		iface := &interfaces[i]
-		if iface.VPC == nil || iface.VPC.VPCID == 0 {
-			continue
-		}
-		if err := mergeVPCID(&vpcID, iface.VPC.VPCID, linodeID); err != nil {
-			return 0, err
-		}
-	}
-	if vpcID == 0 {
-		return 0, errClusterVPCNotFound
-	}
-
-	return vpcID, nil
-}
-
-func (s *metadataService) nodeVPCIDFromConfigs(ctx context.Context, linodeID int) (int, error) {
-	configs, err := s.linodeClient.ListInstanceConfigs(ctx, linodeID, nil)
-	if err != nil {
-		return 0, fmt.Errorf("list Linode instance configs for %d: %w", linodeID, err)
-	}
-
-	vpcID := 0
-	for i := range configs {
-		for j := range configs[i].Interfaces {
-			iface := &configs[i].Interfaces[j]
-			if !iface.Active || iface.Purpose != linodego.InterfacePurposeVPC || iface.VPCID == nil || *iface.VPCID == 0 {
-				continue
-			}
-			if err := mergeVPCID(&vpcID, *iface.VPCID, linodeID); err != nil {
-				return 0, err
-			}
-		}
-	}
-	if vpcID == 0 {
-		return 0, errClusterVPCNotFound
-	}
-
-	return vpcID, nil
-}
-
-// mergeVPCID records candidate as the resolved VPC ID, or errors if a
-// different VPC ID was already recorded for the same Linode.
-func mergeVPCID(vpcID *int, candidate, linodeID int) error {
-	if *vpcID == 0 {
-		*vpcID = candidate
-		return nil
-	}
-	if *vpcID != candidate {
-		return fmt.Errorf("linode %d has multiple VPCs: %d and %d", linodeID, *vpcID, candidate)
-	}
-	return nil
+	s.region = region
+	return region, nil
 }
 
 func (s *metadataService) currentNodeFromMetadata(ctx context.Context) (NodeMetadata, error) {

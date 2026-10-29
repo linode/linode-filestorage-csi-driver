@@ -73,49 +73,28 @@ kubectl describe pvc <name> | tail -20
 
 The event from `csi-provisioner` carries the driver's error. Match it below.
 
-### No cluster VPC found
+### Workload region is unavailable
 
 ```text
-FailedPrecondition: this driver requires VPC-backed IPv6 connectivity; cluster VPC not found
+FailedPrecondition: resolve region: cluster has no nodes
 ```
 
-The Linode behind the cluster's first node has no VPC interface. This is the single most common installation failure.
+The controller can start before workers exist, but provisioning needs one workload Node with `topology.kubernetes.io/region` (or `failure-domain.beta.kubernetes.io/region`). If the selected Node has neither label, the error includes `node region label not found`. API failures, empty Node lists, and missing labels are not cached; a later provisioning request can retry.
 
-```sh
-# Get a Linode ID
-kubectl get nodes -o jsonpath='{.items[0].spec.providerID}'
-
-# Check its interfaces
-curl -sS -H "Authorization: Bearer ${LINODE_API_TOKEN}" \
-  https://api.linode.com/v4/linode/instances/<id>/configs
-```
-
-Look for an active interface with `"purpose": "vpc"` and a non-null `vpc_id`. If there is none, the node pool has to be recreated inside a VPC; a running Linode's interfaces cannot be reconfigured into a VPC in place. See [VPC requirement](./access-and-networking.md#-vpc-requirement).
-
-If the token lacks read access to Linodes, this same error appears even though the VPC exists, because the interface lookup fails. Check for a `PermissionDenied` earlier in the controller log.
-
-### Nodes in multiple regions
-
-```text
-FailedPrecondition: resolve cluster metadata: cluster has multiple regions: "us-ord" and "us-east"
-```
-
-Nodes report different `topology.kubernetes.io/region` values, and the driver refuses to guess which region a filesystem belongs in. Split the cluster, or remove the out-of-region nodes.
+Check that the controller's kubeconfig targets the workload API, that its identity can list Nodes, and that workers have the expected region label. The first successful region is reused until the controller process restarts. These clusters must be single-region; the driver does not scan all nodes to compare labels or accept an installation region override.
 
 ### Node has no Linode provider ID
 
 ```text
-FailedPrecondition: resolve cluster metadata: node "...": invalid provider ID
+Internal: resolve node metadata: node "...": provider ID is not set
 ```
 
-A node's `spec.providerID` is empty or is not `linode://<id>`. Either the Linode CCM is not installed, or it has not processed that node yet.
+This affects node registration when the node plugin falls back to Kubernetes metadata, not controller region discovery. A node's `spec.providerID` must be `linode://<id>`. Confirm that the Linode CCM has processed the node.
 
 ```sh
 kubectl get nodes -o custom-columns=NAME:.metadata.name,PROVIDER:.spec.providerID
 kubectl -n kube-system get pods | grep ccm
 ```
-
-This clears itself once the CCM catches up.
 
 ### Node missing a region label or an address
 
@@ -124,7 +103,7 @@ node region label not found
 node allowlist IP not found
 ```
 
-Also a CCM problem. The driver needs `topology.kubernetes.io/region` (or the beta label) and at least one `InternalIP` or `ExternalIP`. Check `.metadata.labels` and `.status.addresses`:
+The controller needs a region label on its selected workload Node. The node plugin's Kubernetes fallback also needs a region label and at least one `InternalIP` or `ExternalIP`. Check the CCM, `.metadata.labels`, and `.status.addresses`:
 
 ```sh
 kubectl get node <name> -o yaml | head -40
@@ -258,7 +237,7 @@ The node cannot reach the mount target, or the server refused it. Provisioning s
 
    - `enabled` is `true`.
    - `status` is `active`. While it is anything else (for example `updating`), entries you just added may be visible but not yet applied.
-   - The cluster VPC ID is in `vpc_acl`. Find it from any node's Linode interfaces; it is the VPC the driver infers for the cluster (see [No cluster VPC found](#no-cluster-vpc-found)).
+   - The workload VPC ID is in `vpc_acl`. Find the VPC and subnet assignments in Cloud Manager; the driver does not discover them. See [VPC requirement](./access-and-networking.md#-vpc-requirement).
    - The VPC entry covers the subnets every node pool uses. A node in an uncovered subnet fails while others mount fine.
 
    Fix the policy (or ask the Space owner to), wait for `status` to return to `active`, and the kubelet's next mount retry succeeds without any change to the PVC.
@@ -311,7 +290,7 @@ Do not remove protection finalizers to bypass an in-use volume.
 
 ### Mounts work on some nodes only
 
-That is the signature of a node outside the cluster VPC, or in a subnet the Space access policy does not cover. The VPC is inferred from the **first** node alone, so a second node pool created outside it provisions fine and never mounts. Compare each node's Linode interfaces against the Space policy's `vpc_acl`; see [Mount times out or is denied](#mount-times-out-or-is-denied).
+A node pool may be outside the workload VPC or in a subnet the Space policy does not cover. Provisioning does not validate network reachability or customer ACLs. Compare every node pool's VPC and subnet assignments against the Space policy's `vpc_acl`; see [Mount times out or is denied](#mount-times-out-or-is-denied).
 
 ### Benign lock contention
 
@@ -427,8 +406,7 @@ You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is 
 
 | Message | Meaning | Section |
 | --- | --- | --- |
-| `this driver requires VPC-backed IPv6 connectivity` | No VPC on the first node's Linode | [No cluster VPC found](#no-cluster-vpc-found) |
-| `cluster has multiple regions` | Nodes disagree on region | [Nodes in multiple regions](#nodes-in-multiple-regions) |
+| `resolve region: cluster has no nodes` | No workload Nodes are available yet | [Workload region is unavailable](#workload-region-is-unavailable) |
 | `invalid provider ID` | The CCM has not labelled the node | [Node has no Linode provider ID](#node-has-no-linode-provider-id) |
 | `node region label not found` | Missing region label | [Node missing a region label or an address](#node-missing-a-region-label-or-an-address) |
 | `node allowlist IP not found` | The node reports no addresses | [Node missing a region label or an address](#node-missing-a-region-label-or-an-address) |

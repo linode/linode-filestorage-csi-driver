@@ -62,7 +62,6 @@ func TestCSISanity(t *testing.T) {
 		"sanity-node",
 		fakeInstanceMetadata,
 		fakeKubeNodes,
-		fakeClient,
 	)
 	fakeMounter := newFakeSanitySafeMounter(newFakeSanityMounter())
 	identity, controller, node, err := driver.NewTestServices(

@@ -509,18 +509,10 @@ func (s *ControllerServer) getSpaceAccessPolicy(ctx context.Context, spaceID int
 	if err != nil {
 		return nil, linodeError(err, "get NFS space access policy")
 	}
-	return policy, nil
-}
-
-func validateSpaceVPC(spaceID, vpcID int, policy *linodego.NFSSpaceAccessPolicy) error {
-	if vpcID == 0 {
-		return status.Error(codes.FailedPrecondition, "this driver requires VPC-backed IPv6 connectivity; cluster VPC not found")
-	}
 	if policy == nil {
-		return status.Errorf(codes.Internal, "get NFS space access policy for Space %d returned no policy", spaceID)
+		return nil, status.Errorf(codes.Internal, "get NFS space access policy for Space %d returned no policy", spaceID)
 	}
-
-	return nil
+	return policy, nil
 }
 
 // finalizeFilesystemVolume completes backend initialization after the caller has
