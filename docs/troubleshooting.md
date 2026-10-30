@@ -364,6 +364,7 @@ kubectl get volumeattachment | grep <pv>
 | Pods still using the PVC | Delete them. `kubernetes.io/pvc-protection` holds the PVC while any pod references it |
 | The driver was uninstalled first | Reinstall it, let the deletes drain, then uninstall again. Nothing else can satisfy the CSI finalizers |
 | `DeleteVolume` returns `PermissionDenied` | Token problem. Fix the token, restart the controller, and the delete retries |
+| `DeleteVolume` returns `FailedPrecondition` with `Filesystem still contains data or directories` | Expected for a non-empty filesystem. Remove its contents before retrying deletion; see [recovery below](#filesystem-still-contains-data-or-directories) |
 | `VolumeAttachment` stuck in `node` mode | Check the attacher log. `ControllerUnpublishVolume` returns success for an already-deleted filesystem, so a genuine hang here is an API or ACL wait |
 
 Force-removing a finalizer leaks the backend filesystem. If you do it deliberately, note `spec.csi.volumeHandle` first so you can delete the filesystem by hand.
@@ -373,6 +374,22 @@ Cleanup that survives a normal uninstall, by design:
 - The Storage Space, which the driver never created.
 - The Space access policy, which the driver never validates or changes.
 - Filesystems whose PVs used `Retain`. `ListVolumes` is unimplemented, so the filesystem label (the old PV name) is your only breadcrumb for finding them.
+
+### Filesystem still contains data or directories
+
+With reclaim policy `Delete`, the filesystem must be empty. Otherwise, the controller logs:
+
+```text
+rpc error: code = FailedPrecondition desc = delete NFS filesystem: [409] Filesystem still contains data or directories. Remove all files and directories from the filesystem before deleting it.
+```
+
+The driver does not remove files for you. The PVC may disappear, but the PV and filesystem remain until cleanup succeeds.
+
+Before deleting the workload and PVC, stop application writes, back up anything you need, and remove all files and directories, including hidden entries, through the mounted volume.
+
+If the PVC is already gone, use temporary access to the same filesystem, such as a static PV and PVC with reclaim policy `Retain`, to remove the contents. The controller keeps retrying deletion, so stop the temporary consumer promptly after cleanup. Confirm the original PV and filesystem are deleted, then remove the temporary resources.
+
+Do not remove finalizers to bypass this error; that can leave the filesystem behind.
 
 ## 🚫 Permission denied inside the pod
 
@@ -425,6 +442,7 @@ You used a `dataSource` of `kind: PersistentVolumeClaim`. Direct PVC cloning is 
 | `mount.nfs4: Connection timed out` or `access denied by server` | Space access policy disabled, not `active`, or missing the cluster VPC; or network/DNS | [Mount times out or is denied](#mount-times-out-or-is-denied) |
 | `mount-target or usable mount-target-ips is required` | PV attributes contain neither target form | [Missing mount target in the volume context](#missing-mount-target-in-the-volume-context) |
 | `metadata service is not configured` | The node plugin cannot resolve itself | [The node plugin never registers](#-the-node-plugin-never-registers) |
+| `Filesystem still contains data or directories` | Backend rejects deletion of a non-empty filesystem with HTTP `409` | [Non-empty filesystem deletion](#filesystem-still-contains-data-or-directories) |
 | `An operation with the given volume key` | Lock contention; retried automatically | [Benign lock contention](#benign-lock-contention) |
 | `operation not implemented` | An unimplemented RPC was called | [What is not implemented](./usage.md#-what-is-not-supported) |
 | `volume path not found` | `NodeGetVolumeStats` on a path that is gone | [NodeGetVolumeStats](./architecture.md#nodegetvolumestats) |
