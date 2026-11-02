@@ -215,10 +215,12 @@ Standard Kubernetes semantics apply, and the choice matters more than usual beca
 
 | `reclaimPolicy` | On PVC deletion |
 | --- | --- |
-| `Delete` | The PV is removed and `DeleteVolume` deletes the NFS filesystem |
+| `Delete` | The controller attempts to delete the NFS filesystem, then removes the PV. The filesystem must be empty |
 | `Retain` | The PV stays `Released` and the NFS filesystem stays in your Storage Space |
 
 With `Retain`, cleanup is manual. Since `ListVolumes` is not implemented, the driver will not help you find orphans later; the filesystem label carries the old PV name, which is your only breadcrumb. Delete retained filesystems through the Cloud Manager or the API when you are done with them.
+
+With `Delete`, empty the filesystem before deleting the workload and PVC, including hidden files and directories. Back up anything you need first; the driver does not remove the contents for you. Otherwise, deletion fails with HTTP `409` and the PV and filesystem remain, even if the PVC is gone. See [deletion troubleshooting](./troubleshooting.md#filesystem-still-contains-data-or-directories).
 
 ## 🔍 Inspecting a volume
 
