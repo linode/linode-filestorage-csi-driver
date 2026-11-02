@@ -120,6 +120,10 @@ controller:
     secretName: ""
     # Secret key holding the kubeconfig file contents.
     secretKey: ""
+  leaderElection:
+    # Namespace for the controller sidecars' leader election Leases. Empty uses the pod's namespace.
+    # Set it when controller.kubeconfig targets a cluster that does not have the release namespace.
+    namespace: ""
   serviceAccount:
     # Create and use a dedicated controller service account.
     enabled: true

@@ -5,6 +5,7 @@
     {{- $kubeconfigPath = printf "%s/%s" .mountDir .secretKey }}
   {{- end }}
 {{- end }}
+{{- $leaderElectionNamespace := dig "leaderElection" "namespace" "" .Values.controller }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +99,9 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
+            {{- if $leaderElectionNamespace }}
+            - --leader-election-namespace={{ $leaderElectionNamespace }}
+            {{- end }}
             - --volume-name-prefix=pvc
             - --volume-name-uuid-length=16
             - --timeout={{ .Values.sidecars.provisioner.timeout }}
@@ -125,6 +129,9 @@ spec:
             - --v=2
             - --csi-address=$(ADDRESS)
             - --leader-election
+            {{- if $leaderElectionNamespace }}
+            - --leader-election-namespace={{ $leaderElectionNamespace }}
+            {{- end }}
             - --timeout={{ .Values.sidecars.attacher.timeout }}
             {{- if $kubeconfigPath }}
             - --kubeconfig={{ $kubeconfigPath }}
@@ -153,6 +160,9 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
+            {{- if $leaderElectionNamespace }}
+            - --leader-election-namespace={{ $leaderElectionNamespace }}
+            {{- end }}
             {{- if $kubeconfigPath }}
             - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
@@ -178,6 +188,9 @@ spec:
           args:
             - --csi-address=/var/lib/csi/sockets/pluginproxy/csi.sock
             - --leader-election
+            {{- if $leaderElectionNamespace }}
+            - --leader-election-namespace={{ $leaderElectionNamespace }}
+            {{- end }}
             {{- if $kubeconfigPath }}
             - --kubeconfig={{ $kubeconfigPath }}
             {{- end }}
