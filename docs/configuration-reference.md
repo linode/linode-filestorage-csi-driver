@@ -99,6 +99,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.hostNetwork` | `false` | Host networking for the controller pod |
 | `controller.dnsPolicy` | `Default` | Set to `ClusterFirstWithHostNet` if you enable `hostNetwork` |
 | `controller.kubeconfig.*` | `""` | `mountDir` and `secretKey` select the kubeconfig path; `secretName` additionally mounts an existing Secret |
+| `controller.leaderElection.namespace` | `""` | Namespace for the sidecars' leader election Leases. Empty uses the pod's namespace. See the note on `controller.kubeconfig` |
 | `controller.serviceAccount.enabled` | `true` | Create the ServiceAccount and set `serviceAccountName` on the Deployment. Leave it on; see the note below |
 | `controller.serviceAccount.name` | `csi-linode-nfs-controller` | |
 | `controller.rbac.enabled` | `true` | Create the ClusterRole and ClusterRoleBinding |
@@ -106,7 +107,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `controller.affinity` | `{}` | |
 | `controller.tolerations` | `CriticalAddonsOnly` + `NoExecute` | Lets the controller schedule on control-plane-ish nodes |
 
-**On `controller.kubeconfig`:** setting `mountDir` and `secretKey` selects `mountDir/secretKey` for the controller plugin and sidecars. Setting `secretName` as well mounts that Secret at `mountDir`; without it, you must make the file available to each container that uses it. If the path fields are unset, they use in-cluster configuration. The node plugin ignores this setting and keeps its workload-cluster in-cluster identity. The kubeconfig identity must have the needed permissions in its target cluster; controller RBAC in the Helm release cluster does not grant remote permissions.
+**On `controller.kubeconfig`:** setting `mountDir` and `secretKey` selects `mountDir/secretKey` for the controller plugin and sidecars. Setting `secretName` as well mounts that Secret at `mountDir`; without it, you must make the file available to each container that uses it. If the path fields are unset, they use in-cluster configuration. The node plugin ignores this setting and keeps its workload-cluster in-cluster identity. The kubeconfig identity must have the needed permissions in its target cluster; controller RBAC in the Helm release cluster does not grant remote permissions. The sidecars create their leader election Leases in the target cluster, in the pod's namespace by default; if that namespace does not exist there, set `controller.leaderElection.namespace` to one that does (for example, `kube-system`).
 
 **On `serviceAccount.enabled`:** this flag creates the ServiceAccount and sets `serviceAccountName` on the pod. Setting it to `false` leaves the workload on the namespace's `default` ServiceAccount; it does not select a user-managed ServiceAccount. Keep it enabled for the normal in-cluster installation.
 
