@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   linode-nfs-csi-driver:
   - apiVersion: v2
+    appVersion: v0.0.8
+    created: "2026-11-02T21:59:10.72875756Z"
+    description: Helm chart for the Linode managed NFS CSI driver
+    digest: 87be53caffa8f51f9c8cdb95afa9ba594d1c98883bd830f8e50796c985955049
+    name: linode-nfs-csi-driver
+    type: application
+    urls:
+    - https://github.com/linode/linode-filestorage-csi-driver/releases/download/helm-0.0.8/linode-nfs-csi-driver-0.0.8.tgz
+    version: 0.0.8
+  - apiVersion: v2
     appVersion: v0.0.7
     created: "2026-10-20T19:47:00.305851299Z"
     description: Helm chart for the Linode managed NFS CSI driver
@@ -41,4 +51,4 @@ entries:
     urls:
     - https://github.com/linode/linode-filestorage-csi-driver/releases/download/helm-0.0.4/linode-nfs-csi-driver-0.0.4.tgz
     version: 0.0.4
-generated: "2026-10-20T19:47:00.305875224Z"
+generated: "2026-11-02T21:59:10.72877758Z"
