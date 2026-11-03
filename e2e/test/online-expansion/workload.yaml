@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chainsaw-expansion-commands
+  namespace: ($namespace)
+data:
+  consumer.sh: |
+    #!/bin/sh
+    set -eu
+    data=/data/online-expansion
+    # Record this container's original mount before any resize activity.
+    while read -r id parent device root target rest; do
+      if [ "$target" = /data ]; then printf '%s\n' "$id" > /tmp/mount-id; break; fi
+    done < /proc/self/mountinfo
+    test -s /tmp/mount-id
+    for attempt in $(seq 1 300); do
+      [ -f "$data/original.txt" ] && break
+      sleep 1
+    done
+    test -f "$data/original.txt"
+    count=0
+    while [ "$count" -lt 900 ]; do
+      count=$((count + 1))
+      if ! timeout -s KILL 10 sh -eu -c '
+        printf "%s:%s\n" "$1" "$2" > /tmp/expected-io
+        cp /tmp/expected-io "$3/$1.txt"
+        cmp /tmp/expected-io "$3/$1.txt"
+        printf "persisted before expansion\n" | cmp - "$3/original.txt"
+      ' sh "$POD_NAME" "$count" "$data"; then
+        break
+      fi
+      printf '%s\n' "$count" > /tmp/count.next
+      mv /tmp/count.next /tmp/count
+      sleep 1
+    done
+    # A failed operation or exhausted deadline must remain visible to Chainsaw.
+    touch /tmp/io-error
+    exec sleep 86400
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chainsaw-expansion-consumers
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: online-expansion
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      e2e.linode.com/consumer: online-expansion
+  template:
+    metadata:
+      labels:
+        e2e.linode.com/consumer: online-expansion
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  e2e.linode.com/consumer: online-expansion
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: consumer
+          image: busybox:1.37.0
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: [sh, /commands/consumer.sh]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: commands
+              mountPath: /commands
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: chainsaw-online-expansion
+        - name: commands
+          configMap:
+            name: chainsaw-expansion-commands
