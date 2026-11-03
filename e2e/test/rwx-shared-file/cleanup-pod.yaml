@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chainsaw-rwx-cleanup
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+    e2e.linode.com/role: cleanup
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: cleanup
+      image: busybox:1.37.0
+      command: ["/bin/sh", "-c", "exec tail -f /dev/null"]
+      volumeMounts:
+        - name: shared-data
+          mountPath: /data
+  volumes:
+    - name: shared-data
+      persistentVolumeClaim:
+        claimName: chainsaw-rwx-shared-file

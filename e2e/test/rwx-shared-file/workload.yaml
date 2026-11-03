@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chainsaw-rwx-workload
+  namespace: ($namespace)
+data:
+  io.sh: |
+    #!/bin/sh
+    set -eu
+    directory=/data/chainsaw-rwx-shared-file
+    action=$1
+    shift
+    case "$action" in
+      write)
+        record="$1-$POD_NAME"
+        mkdir -p "$directory"
+        printf '%s\n' "$TEST_NAMESPACE/$record" > "$directory/$record"
+        ;;
+      verify)
+        phase=$1
+        shift
+        # Keep the original six records across every consumer transition.
+        for pod in chainsaw-rwx-a1 chainsaw-rwx-a2 chainsaw-rwx-b1 chainsaw-rwx-b2 chainsaw-rwx-c1 chainsaw-rwx-c2; do
+          record="initial-$pod"
+          printf '%s\n' "$TEST_NAMESPACE/$record" | cmp - "$directory/$record"
+        done
+        # Only the current phase needs additional cross-consumer write checks.
+        for pod do
+          record="$phase-$pod"
+          printf '%s\n' "$TEST_NAMESPACE/$record" | cmp - "$directory/$record"
+        done
+        ;;
+      *)
+        echo "Unknown workload action: $action" >&2
+        exit 1
+        ;;
+    esac
