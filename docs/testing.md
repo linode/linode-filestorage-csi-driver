@@ -246,6 +246,26 @@ KUBECONFIG=/path/to/test.kubeconfig E2E_STORAGE_CLASS=<storage-class-name> mise 
 
 The task requires both variables. The test creates a PVC and three labeled writer pods in a Chainsaw-managed ephemeral namespace and checks that all unique markers are visible through the shared file. Its `finally` step removes the marker file before PVC cleanup so a `Delete`-policy StorageClass can reclaim the test filesystem. Chainsaw cleans up only the test-created resources and namespace.
 
+### Online PVC expansion
+
+The `online-expansion` scenario expands a 10 GiB RWX claim to 20 GiB while three consumers stay mounted on distinct nodes. Each consumer runs one bounded write/read loop and verifies the original file. Chainsaw seeds that file, waits for successful I/O before the PVC patch, and records progress immediately after the request. The test waits for the backend root quota, PVC, and PV to report 20 GiB, then waits for each consumer's mounted filesystem to report exactly 21,474,836,480 bytes through `stat -f`. It checks continued I/O, original file contents, and unchanged mount IDs without replacing or remounting consumers. Consumers are stopped only for final cleanup; there is no post-expansion remount phase.
+
+The target is defined once by the `expandedSizeGiB` binding (20 by default). The scenario derives the Kubernetes quantity and byte count from it and reuses them for the PVC patch, quota check, PVC/PV capacity checks, and node-visible filesystem checks.
+
+Each script emits an `OPERATION:` label to stderr so execution logs identify its action without altering JSON output used by assertions. Cleanup scripts emit labels on both success and failure paths.
+
+Pod identity comparisons are sorted by Pod name: API list ordering may change, but Pod UIDs, node assignments, and container IDs must not. Container identity checks prevent a restarted worker from hiding an earlier I/O failure.
+
+Quota verification uses the scenario-local `curl` helper and the repository's pinned `yq` tool. `LINODE_URL` must be the full selected HTTPS API base, including its configured version path, such as `https://api.linode.com/v4beta`; preserve any selected path prefix. The chart stores `linodeURL` and `linodeAPIVersion` separately, so combine those values when setting `LINODE_URL`. The helper appends `/nfs/spaces/{space_id}/filesystems/{filesystem_id}/quotas` unchanged to that base, selects `is_root: true`, and waits for exact `max_capacity_bytes` in bytes. API and parse errors fail immediately; only capacity convergence is polled.
+
+In addition to `KUBECONFIG` and `E2E_STORAGE_CLASS`, export the selected `LINODE_URL` and `LINODE_TOKEN`; the token needs permission to list quotas for the selected Space. `LINODE_CA` is optional for a private CA. The helper supplies the token to curl through stdin configuration, not process arguments, and does not print it. Run the focused scenario with:
+
+```sh
+mise exec -- chainsaw test --config .chainsaw.yaml e2e/test/online-expansion
+```
+
+The test uses a Chainsaw-owned ephemeral namespace and never changes the StorageClass or Space. A YAML-anchored cleanup operation removes all test files and verifies the filesystem root is empty. The same operation runs on success and from the test-level catch. If the bound claim has no ready cleanup mount, it reapplies the existing cleanup Pod manifest. Cleanup errors propagate; Chainsaw owns namespace and PVC teardown, with no custom finalizer.
+
 ## 🧷 CSI sanity
 
 [csi-sanity](https://github.com/kubernetes-csi/csi-test) runs against the real driver in `tests/sanity`, with no cluster and no Linode account:
