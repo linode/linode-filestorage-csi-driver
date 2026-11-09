@@ -1,0 +1,355 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: online-expansion
+spec:
+  template: true
+  bindings:
+    - name: storageClass
+      value: (env('E2E_STORAGE_CLASS'))
+    - name: expandedSizeGiB
+      value: 20
+    - name: expandedSize
+      value: (join('', [to_string($expandedSizeGiB), 'Gi']))
+    - name: expandedSizeBytes
+      value: (multiply($expandedSizeGiB, `1073741824`))
+  catch:
+    - script:
+        shell: bash
+        env:
+          - name: TEST_NAMESPACE
+            value: ($namespace)
+        timeout: 15m
+        content: |
+          printf '%s\n' 'OPERATION: Stop expansion consumers after failure' >&2
+          set -euo pipefail
+          kubectl --namespace "$TEST_NAMESPACE" delete deployment chainsaw-expansion-consumers \
+            --ignore-not-found --cascade=foreground --wait=true --timeout=2m
+    - script: &cleanupData
+        shell: bash
+        env:
+          - name: TEST_NAMESPACE
+            value: ($namespace)
+        timeout: 10m
+        content: |
+          printf '%s\n' 'OPERATION: Scrub expansion test data' >&2
+          set -euo pipefail
+          pvc_name=chainsaw-online-expansion
+          consumer_selector=e2e.linode.com/consumer=online-expansion
+          kube() { kubectl --namespace "$TEST_NAMESPACE" "$@"; }
+          pvc=$(kube get pvc "$pvc_name" --ignore-not-found --output=name)
+          [[ -z "$pvc" ]] && exit 0
+          phase=$(kube get pvc "$pvc_name" --output=jsonpath='{.status.phase}')
+          if [[ -z "$phase" || "$phase" == Pending ]]; then exit 0; fi
+          if [[ "$phase" != Bound ]]; then
+            printf 'PVC is in unexpected phase %s; refusing data cleanup\n' "$phase" >&2
+            exit 1
+          fi
+          consumer_pods=$(kube get pods --selector "$consumer_selector" --output=name)
+          if [[ -n "$consumer_pods" ]]; then
+            printf 'Consumer pods still mount the PVC; refusing data cleanup\n' >&2
+            exit 1
+          fi
+          cleanup_pod=chainsaw-expansion-cleanup
+          if ! kube wait --for=condition=Ready "pod/$cleanup_pod" --timeout=30s; then
+            kube delete pod "$cleanup_pod" --ignore-not-found --wait=true --timeout=2m
+            kube apply -f cleanup-pod.yaml
+            kube wait --for=condition=Ready "pod/$cleanup_pod" --timeout=5m
+          fi
+          kube exec "$cleanup_pod" -- timeout -s KILL 60 sh -eu -c '
+            rm -rf /data/online-expansion
+            [ -z "$(find /data -mindepth 1 -maxdepth 1 -print)" ]
+          '
+  steps:
+    - name: provision the RWX claim and three consumers
+      try:
+        - script:
+            shell: bash
+            skipCommandOutput: true
+            content: |
+              printf '%s\n' 'OPERATION: Check selected API endpoint and credentials are available' >&2
+              set -euo pipefail
+              : "${LINODE_URL:?Set LINODE_URL to the selected HTTPS API base including its version path}"
+              : "${LINODE_TOKEN:?Set LINODE_TOKEN through the selected account environment}"
+        - create:
+            file: pvc.yaml
+        - wait:
+            timeout: 10m
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            name: chainsaw-online-expansion
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.phase}"
+                value: Bound
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: chainsaw-online-expansion
+                namespace: ($namespace)
+              spec:
+                accessModes: [ReadWriteMany]
+                storageClassName: ($storageClass)
+                resources:
+                  requests:
+                    storage: 10Gi
+              status:
+                phase: Bound
+                capacity:
+                  storage: 10Gi
+        - create:
+            file: workload.yaml
+        - create:
+            file: cleanup-pod.yaml
+        - wait:
+            timeout: 5m
+            apiVersion: apps/v1
+            kind: Deployment
+            name: chainsaw-expansion-consumers
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.readyReplicas}"
+                value: "3"
+        - wait:
+            timeout: 5m
+            apiVersion: v1
+            kind: Pod
+            name: chainsaw-expansion-cleanup
+            namespace: ($namespace)
+            for:
+              condition:
+                name: Ready
+                value: "true"
+        - script:
+            shell: bash
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            content: |
+              printf '%s\n' 'OPERATION: Verify consumers occupy three distinct nodes' >&2
+              set -euo pipefail
+              kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion \
+                --output=jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' |
+                sort -u | wc -l | tr -d '[:space:]'
+            check:
+              ($error): ~
+              (trim_space($stdout)): "3"
+        - script:
+            shell: bash
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            content: |
+              printf '%s\n' 'OPERATION: Seed the original shared file before expansion' >&2
+              set -euo pipefail
+              pod=$(kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion \
+                --output=jsonpath='{.items[0].metadata.name}')
+              kubectl --namespace "$TEST_NAMESPACE" exec "$pod" -- timeout -s KILL 20 sh -eu -c '
+                mkdir -p /data/online-expansion
+                printf "persisted before expansion\n" > /data/online-expansion/original.tmp
+                mv /data/online-expansion/original.tmp /data/online-expansion/original.txt
+              '
+            check:
+              ($error): ~
+    - name: expand while workers keep writing
+      try:
+        - wait:
+            timeout: 5m
+            apiVersion: apps/v1
+            kind: Deployment
+            name: chainsaw-expansion-consumers
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.readyReplicas}"
+                value: "3"
+        - script:
+            shell: bash
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            timeout: 3m
+            content: |
+              printf '%s\n' 'OPERATION: Wait for active I/O and capture original consumer identities' >&2
+              set -euo pipefail
+              pods=$(kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion \
+                --output=jsonpath='{range .items[*]}{.metadata.name}{" "}{end}')
+              for pod in $pods; do
+                kubectl --namespace "$TEST_NAMESPACE" exec "$pod" -- timeout -s KILL 40 sh -eu -c '
+                  while [ ! -s /tmp/count ]; do sleep 1; done
+                  test ! -f /tmp/io-error
+                '
+              done
+              kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion --output=json
+            outputs:
+              - name: podsBeforeExpansion
+                value: (json_parse($stdout))
+            check:
+              ($error): ~
+              (length(json_parse($stdout).items)): 3
+        - patch:
+            resource:
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: chainsaw-online-expansion
+                namespace: ($namespace)
+              spec:
+                resources:
+                  requests:
+                    storage: ($expandedSize)
+        - script:
+            shell: bash
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            content: |
+              printf '%s\n' 'OPERATION: Record I/O progress immediately after the resize request' >&2
+              set -euo pipefail
+              pods=$(kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion \
+                --output=jsonpath='{range .items[*]}{.metadata.name}{" "}{end}')
+              for pod in $pods; do
+                kubectl --namespace "$TEST_NAMESPACE" exec "$pod" -- \
+                  sh -eu -c 'cat /tmp/count > /tmp/resize-start-count'
+              done
+            check:
+              ($error): ~
+        - script:
+            shell: bash
+            skipCommandOutput: true
+            timeout: 6m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+              - name: EXPANDED_SIZE_BYTES
+                value: (to_string($expandedSizeBytes))
+            content: |
+              printf '%s\n' 'OPERATION: Wait for the backend root quota to reach the expansion target' >&2
+              set -euo pipefail
+              volume=$(kubectl --namespace "$TEST_NAMESPACE" get pvc chainsaw-online-expansion --output=jsonpath='{.spec.volumeName}')
+              handle=$(kubectl get pv "$volume" --output=jsonpath='{.spec.csi.volumeHandle}')
+              exec bash ./quota.sh "$handle" "$EXPANDED_SIZE_BYTES"
+            check:
+              ($error): ~
+              (json_parse($stdout).is_root): true
+              (json_parse($stdout).max_capacity_bytes): ($expandedSizeBytes)
+        - wait:
+            timeout: 10m
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            name: chainsaw-online-expansion
+            namespace: ($namespace)
+            for:
+              jsonPath:
+                path: "{.status.capacity.storage}"
+                value: ($expandedSize)
+        - script:
+            shell: bash
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+              - name: EXPANDED_SIZE
+                value: ($expandedSize)
+            timeout: 6m
+            content: |
+              printf '%s\n' 'OPERATION: Wait for PV capacity to reach the expansion target' >&2
+              set -euo pipefail
+              volume=$(kubectl --namespace "$TEST_NAMESPACE" get pvc chainsaw-online-expansion --output=jsonpath='{.spec.volumeName}')
+              kubectl wait --for=jsonpath='{.spec.capacity.storage}'="$EXPANDED_SIZE" --timeout=5m "pv/$volume" >/dev/null
+              kubectl get pv "$volume" --output=json
+            check:
+              ($error): ~
+              (json_parse($stdout).spec.capacity.storage): ($expandedSize)
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: PersistentVolumeClaim
+              metadata:
+                name: chainsaw-online-expansion
+                namespace: ($namespace)
+              spec:
+                resources:
+                  requests:
+                    storage: ($expandedSize)
+              status:
+                phase: Bound
+        - script:
+            shell: bash
+            timeout: 6m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+              - name: EXPANDED_SIZE_BYTES
+                value: (to_string($expandedSizeBytes))
+            content: |
+              printf '%s\n' 'OPERATION: Verify node-visible capacity, continued I/O, data and mount identities' >&2
+              set -euo pipefail
+              pods=$(kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion \
+                --output=jsonpath='{range .items[*]}{.metadata.name}{" "}{end}')
+              for pod in $pods; do
+                kubectl --namespace "$TEST_NAMESPACE" exec "$pod" -- timeout -s KILL 300 sh -eu -c '
+                  expected_bytes=$1
+                  # Wait for this node-mounted filesystem, not just API capacity.
+                  while :; do
+                    test ! -f /tmp/io-error
+                    capacity=$(stat -f -c "%S %b" /data)
+                    set -- $capacity
+                    bytes=$(($1 * $2))
+                    [ "$bytes" -eq "$expected_bytes" ] && break
+                    sleep 2
+                  done
+                  printf "Node-visible capacity: %s bytes\n" "$bytes" >&2
+                  test ! -f /tmp/io-error
+                  while [ "$(cat /tmp/count)" -le "$(cat /tmp/resize-start-count)" ]; do
+                    test ! -f /tmp/io-error
+                    sleep 1
+                  done
+                  printf "persisted before expansion\n" | cmp - /data/online-expansion/original.txt
+                  expected_mount=$(cat /tmp/mount-id)
+                  matched=false
+                  while read -r id parent device root target rest; do
+                    if [ "$target" = /data ]; then
+                      test "$id" = "$expected_mount"
+                      matched=true
+                      break
+                    fi
+                  done < /proc/self/mountinfo
+                  test "$matched" = true
+                ' sh "$EXPANDED_SIZE_BYTES"
+              done
+              kubectl --namespace "$TEST_NAMESPACE" get pods \
+                --selector=e2e.linode.com/consumer=online-expansion --output=json
+            check:
+              ($error): ~
+              (length(json_parse($stdout).items)): 3
+              (map(&[metadata.uid, spec.nodeName, status.containerStatuses[0].containerID], sort_by(json_parse($stdout).items, &metadata.name)) == map(&[metadata.uid, spec.nodeName, status.containerStatuses[0].containerID], sort_by($podsBeforeExpansion.items, &metadata.name))): true
+    - name: remove test data before PVC cleanup
+      try:
+        - patch:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: chainsaw-expansion-consumers
+                namespace: ($namespace)
+              spec:
+                replicas: 0
+        - wait:
+            timeout: 2m
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/consumer=online-expansion
+            for:
+              deletion: {}
+        - script: *cleanupData

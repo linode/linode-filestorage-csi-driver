@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chainsaw-online-expansion
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: online-expansion
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: ($storageClass)
+  resources:
+    requests:
+      storage: 10Gi
