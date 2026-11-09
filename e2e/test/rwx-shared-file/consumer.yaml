@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ($podName)
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+    e2e.linode.com/role: consumer
+    e2e.linode.com/slot: ($slot)
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchFields:
+              - key: metadata.name
+                operator: In
+                values:
+                  - ($nodeName)
+  containers:
+    - name: consumer
+      image: busybox:1.37.0
+      command: [/bin/sh, -c, 'exec tail -f /dev/null']
+      env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TEST_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      volumeMounts:
+        - name: shared-data
+          mountPath: /data
+        - name: workload
+          mountPath: /workload
+          readOnly: true
+  volumes:
+    - name: shared-data
+      persistentVolumeClaim:
+        claimName: chainsaw-rwx-shared-file
+    - name: workload
+      configMap:
+        name: chainsaw-rwx-workload

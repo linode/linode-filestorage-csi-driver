@@ -7,8 +7,44 @@ spec:
   bindings:
     - name: storageClass
       value: (env('E2E_STORAGE_CLASS'))
+  catch:
+    - script: &scrubSharedData
+        timeout: 8m
+        env:
+          - name: TEST_NAMESPACE
+            value: ($namespace)
+        shell: bash
+        content: |
+          printf '%s\n' 'OPERATION: Scrub shared test data' >&2
+          set -euo pipefail
+          pvc_phase="$(kubectl get pvc chainsaw-rwx-shared-file --namespace "$TEST_NAMESPACE" \
+            --ignore-not-found --output=jsonpath='{.status.phase}')"
+          case "$pvc_phase" in
+            '') exit 0 ;;
+            Pending) exit 0 ;;
+            Bound) ;;
+            *) echo "Cannot scrub RWX test data while PVC is $pvc_phase" >&2; exit 1 ;;
+          esac
+          cleanup_pod="$(kubectl get pods --namespace "$TEST_NAMESPACE" \
+            --selector=e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer \
+            --field-selector=status.phase=Running --output=jsonpath='{.items[*].metadata.name}')"
+          cleanup_pod=${cleanup_pod%% *}
+          if [ -z "$cleanup_pod" ]; then
+            cleanup_pod=chainsaw-rwx-cleanup
+            kubectl apply --namespace "$TEST_NAMESPACE" --filename cleanup-pod.yaml
+            kubectl wait --namespace "$TEST_NAMESPACE" --for=condition=Ready \
+              "pod/$cleanup_pod" --timeout=5m
+          fi
+          kubectl exec --namespace "$TEST_NAMESPACE" "$cleanup_pod" -- \
+            sh -ec 'rm -rf /data/chainsaw-rwx-shared-file'
+          if [ "$cleanup_pod" = chainsaw-rwx-cleanup ]; then
+            kubectl delete pod "$cleanup_pod" --namespace "$TEST_NAMESPACE" \
+              --wait=true --timeout=2m
+          fi
+        check:
+          ($error): ~
   steps:
-    - name: bind the test PVC
+    - name: provision the shared volume and pin three nodes
       try:
         - create:
             file: pvc.yaml
@@ -35,54 +71,463 @@ spec:
                 storageClassName: ($storageClass)
               status:
                 phase: Bound
-    - name: write markers from distinct nodes
-      try:
         - create:
-            file: writer-deployment.yaml
+            file: workload.yaml
+        - create:
+            file: anchor.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-a1
+              - name: slot
+                value: a
+        - create:
+            file: anchor.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-b1
+              - name: slot
+                value: b
+        - create:
+            file: anchor.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-c1
+              - name: slot
+                value: c
         - wait:
             timeout: 5m
-            apiVersion: apps/v1
-            kind: Deployment
-            name: chainsaw-rwx-writers
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/test=rwx-shared-file,e2e.linode.com/anchor=true
+            for:
+              condition:
+                name: Ready
+                value: "true"
+        - script:
+            timeout: 1m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Discover and verify three distinct anchor nodes' >&2
+              kubectl get pods --namespace "$TEST_NAMESPACE" \
+                --selector=e2e.linode.com/test=rwx-shared-file,e2e.linode.com/anchor=true \
+                --output=json
+            outputs:
+              - name: anchors
+                value: (json_parse($stdout))
+            check:
+              ($error): ~
+              (length(json_parse($stdout).items)): 3
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-a1'] | [0].spec.nodeName) != (json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-b1'] | [0].spec.nodeName)): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-a1'] | [0].spec.nodeName) != (json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-c1'] | [0].spec.nodeName)): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-b1'] | [0].spec.nodeName) != (json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-c1'] | [0].spec.nodeName)): true
+        - create:
+            file: nodes.yaml
+    - name: write and verify from six consumers
+      try:
+        - script:
+            timeout: 1m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Load pinned nodes for the initial consumers' >&2
+              kubectl get configmap chainsaw-rwx-nodes --namespace "$TEST_NAMESPACE" --output=json
+            outputs:
+              - name: nodes
+                value: (json_parse($stdout))
+            check:
+              ($error): ~
+              (length(json_parse($stdout).data)): 3
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-a2
+              - name: slot
+                value: a
+              - name: nodeName
+                value: ($nodes.data.a)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-b2
+              - name: slot
+                value: b
+              - name: nodeName
+                value: ($nodes.data.b)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-c2
+              - name: slot
+                value: c
+              - name: nodeName
+                value: ($nodes.data.c)
+        - wait:
+            timeout: 5m
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer
+            for:
+              condition:
+                name: Ready
+                value: "true"
+        - script:
+            timeout: 5m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Write and cross-check the six original records' >&2
+              set -euo pipefail
+              pods=(chainsaw-rwx-a1 chainsaw-rwx-a2 chainsaw-rwx-b1 chainsaw-rwx-b2 chainsaw-rwx-c1 chainsaw-rwx-c2)
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh write initial
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify initial
+              done
+              kubectl get pods --namespace "$TEST_NAMESPACE" \
+                --selector=e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer \
+                --output=json
+            check:
+              ($error): ~
+              (length(json_parse($stdout).items)): 6
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-a1'] | [0].spec.nodeName) == $nodes.data.a): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-a2'] | [0].spec.nodeName) == $nodes.data.a): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-b1'] | [0].spec.nodeName) == $nodes.data.b): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-b2'] | [0].spec.nodeName) == $nodes.data.b): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-c1'] | [0].spec.nodeName) == $nodes.data.c): true
+              ((json_parse($stdout).items[?metadata.name == 'chainsaw-rwx-c2'] | [0].spec.nodeName) == $nodes.data.c): true
+    - name: delete one consumer and verify survivors
+      try:
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-a2
+              namespace: ($namespace)
+        - wait:
+            timeout: 2m
+            apiVersion: v1
+            kind: Pod
+            name: chainsaw-rwx-a2
             namespace: ($namespace)
             for:
-              jsonPath:
-                path: "{.status.readyReplicas}"
-                value: "3"
-        - assert:
-            file: assert-writer-deployment.yaml
+              deletion: {}
         - script:
+            timeout: 5m
             env:
               - name: TEST_NAMESPACE
                 value: ($namespace)
             shell: bash
             content: |
-              set -eo pipefail
+              printf '%s\n' 'OPERATION: Verify shared reads and writes after one consumer exits' >&2
+              set -euo pipefail
+              pods=(chainsaw-rwx-a1 chainsaw-rwx-b1 chainsaw-rwx-b2 chainsaw-rwx-c1 chainsaw-rwx-c2)
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh write after-delete
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify after-delete "${pods[@]}"
+              done
+            check:
+              ($error): ~
+    - name: remove the last consumer from node a
+      try:
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-a1
+              namespace: ($namespace)
+        - wait:
+            timeout: 2m
+            apiVersion: v1
+            kind: Pod
+            name: chainsaw-rwx-a1
+            namespace: ($namespace)
+            for:
+              deletion: {}
+        - script:
+            timeout: 1m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Verify node A has no remaining consumers' >&2
               kubectl get pods --namespace "$TEST_NAMESPACE" \
-                --selector=e2e.linode.com/test=rwx-shared-file \
-                --output=jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
-                | sort -u | wc -l
+                --selector=e2e.linode.com/test=rwx-shared-file,e2e.linode.com/slot=a \
+                --output=json
             check:
               ($error): ~
-              (trim_space($stdout)): "3"
+              (length(json_parse($stdout).items)): 0
         - script:
+            timeout: 5m
             env:
               - name: TEST_NAMESPACE
                 value: ($namespace)
             shell: bash
             content: |
-              set -eo pipefail
-              kubectl exec --namespace "$TEST_NAMESPACE" deployment/chainsaw-rwx-writers -- cat /data/shared-markers.txt |
-                tr -s ' ' '\n' |
-                sort -u | wc -l
+              printf '%s\n' 'OPERATION: Verify surviving nodes retain shared read-write access' >&2
+              set -euo pipefail
+              pods=(chainsaw-rwx-b1 chainsaw-rwx-b2 chainsaw-rwx-c1 chainsaw-rwx-c2)
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh write after-node-a-removed
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify after-node-a-removed "${pods[@]}"
+              done
             check:
               ($error): ~
-              (trim_space($stdout)): "3"
-      finally:
+    - name: replace consumers on node a
+      try:
         - script:
+            timeout: 1m
             env:
               - name: TEST_NAMESPACE
                 value: ($namespace)
             shell: bash
             content: |
-              kubectl exec --namespace "$TEST_NAMESPACE" deployment/chainsaw-rwx-writers -- rm -f /data/shared-markers.txt
+              printf '%s\n' 'OPERATION: Load pinned nodes for replacement consumers' >&2
+              kubectl get configmap chainsaw-rwx-nodes --namespace "$TEST_NAMESPACE" --output=json
+            outputs:
+              - name: nodes
+                value: (json_parse($stdout))
+            check:
+              ($error): ~
+              (length(json_parse($stdout).data)): 3
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-a3
+              - name: slot
+                value: a
+              - name: nodeName
+                value: ($nodes.data.a)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-a4
+              - name: slot
+                value: a
+              - name: nodeName
+                value: ($nodes.data.a)
+        - wait:
+            timeout: 5m
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/test=rwx-shared-file,e2e.linode.com/slot=a
+            for:
+              condition:
+                name: Ready
+                value: "true"
+        - script:
+            timeout: 5m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Verify replacements read original data and share new writes' >&2
+              set -euo pipefail
+              pods=(chainsaw-rwx-a3 chainsaw-rwx-a4)
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify initial
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh write replacement
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify replacement "${pods[@]}"
+              done
+            check:
+              ($error): ~
+    - name: stop all consumers and remount the same PVC
+      try:
+        - script:
+            timeout: 1m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Load pinned nodes for the full consumer remount' >&2
+              kubectl get configmap chainsaw-rwx-nodes --namespace "$TEST_NAMESPACE" --output=json
+            outputs:
+              - name: nodes
+                value: (json_parse($stdout))
+            check:
+              ($error): ~
+              (length(json_parse($stdout).data)): 3
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-a3
+              namespace: ($namespace)
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-a4
+              namespace: ($namespace)
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-b1
+              namespace: ($namespace)
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-b2
+              namespace: ($namespace)
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-c1
+              namespace: ($namespace)
+        - delete:
+            timeout: 2m
+            ref:
+              apiVersion: v1
+              kind: Pod
+              name: chainsaw-rwx-c2
+              namespace: ($namespace)
+        - wait:
+            timeout: 2m
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer
+            for:
+              deletion: {}
+        - script:
+            timeout: 1m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Verify all consumers are gone before remounting' >&2
+              kubectl get pods --namespace "$TEST_NAMESPACE" \
+                --selector=e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer \
+                --output=json
+            check:
+              ($error): ~
+              (length(json_parse($stdout).items)): 0
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-a1
+              - name: slot
+                value: a
+              - name: nodeName
+                value: ($nodes.data.a)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-a2
+              - name: slot
+                value: a
+              - name: nodeName
+                value: ($nodes.data.a)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-b1
+              - name: slot
+                value: b
+              - name: nodeName
+                value: ($nodes.data.b)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-b2
+              - name: slot
+                value: b
+              - name: nodeName
+                value: ($nodes.data.b)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-c1
+              - name: slot
+                value: c
+              - name: nodeName
+                value: ($nodes.data.c)
+        - create:
+            file: consumer.yaml
+            bindings:
+              - name: podName
+                value: chainsaw-rwx-remount-c2
+              - name: slot
+                value: c
+              - name: nodeName
+                value: ($nodes.data.c)
+        - wait:
+            timeout: 5m
+            apiVersion: v1
+            kind: Pod
+            namespace: ($namespace)
+            selector: e2e.linode.com/test=rwx-shared-file,e2e.linode.com/role=consumer
+            for:
+              condition:
+                name: Ready
+                value: "true"
+        - script:
+            timeout: 5m
+            env:
+              - name: TEST_NAMESPACE
+                value: ($namespace)
+            shell: bash
+            content: |
+              printf '%s\n' 'OPERATION: Verify remounted consumers retain data and share new writes' >&2
+              set -euo pipefail
+              pods=(
+                chainsaw-rwx-remount-a1 chainsaw-rwx-remount-a2
+                chainsaw-rwx-remount-b1 chainsaw-rwx-remount-b2
+                chainsaw-rwx-remount-c1 chainsaw-rwx-remount-c2
+              )
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify initial
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh write after-remount
+              done
+              for pod in "${pods[@]}"; do
+                kubectl exec --namespace "$TEST_NAMESPACE" "$pod" -- sh /workload/io.sh verify after-remount "${pods[@]}"
+              done
+            check:
+              ($error): ~
+    - name: scrub RWX test data before PVC cleanup
+      try:
+        - script: *scrubSharedData
