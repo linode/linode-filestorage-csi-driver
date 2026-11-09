@@ -244,6 +244,12 @@ Set the kubeconfig path and existing StorageClass name:
 KUBECONFIG=/path/to/test.kubeconfig E2E_STORAGE_CLASS=<storage-class-name> mise run e2e-test
 ```
 
+Validate the configuration and all Chainsaw test manifests without a cluster:
+
+```sh
+mise run chainsaw-lint
+```
+
 The test creates one RWX PVC and six labeled consumers, two pinned to each of three distinct nodes. Every initial consumer writes a per-pod payload and verifies the exact contents from all six. It then tests read/write after deleting one consumer and all consumers from one node, remounts replacements there, and stops and waits for all consumers before six new consumers mount the same PVC and verify persisted data. A test-level `catch` scrubs data on failure; a final named phase scrubs on success. Both paths reuse a running consumer or create a bounded cleanup Pod only when none is running. Cleanup failures propagate before Chainsaw deletes test resources; the PVC has no custom finalizer.
 
 Each phase verifies the same six original records plus that phase's new per-consumer writes. Earlier phase-specific records do not accumulate in the assertions.
