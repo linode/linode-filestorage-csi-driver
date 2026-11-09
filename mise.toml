@@ -29,6 +29,10 @@ run = "just vet"
 description = "Run lint checks"
 run = "just lint"
 
+[tasks.chainsaw-lint]
+description = "Validate the Chainsaw configuration and every E2E test manifest."
+run = "just chainsaw-lint"
+
 [tasks.test]
 description = "Run tests"
 run = "just test"

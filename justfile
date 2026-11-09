@@ -57,6 +57,11 @@ e2e-test:
     : "${E2E_STORAGE_CLASS:?E2E_STORAGE_CLASS must name the pre-created StorageClass}"
     chainsaw test --config .chainsaw.yaml e2e/test
 
+# Validate the Chainsaw configuration and all E2E test manifests.
+chainsaw-lint:
+    chainsaw lint configuration --file .chainsaw.yaml
+    find e2e/test -type f -name 'chainsaw-test.yaml' -print0 | xargs -0 -n 1 chainsaw lint test --file
+
 # Run the embedded CSI sanity suite
 sanity:
     go test -race -count=1 -v ./tests/sanity \
@@ -129,7 +134,7 @@ gen-mock:
     go run go.uber.org/mock/mockgen@v0.6.0 -source=pkg/filesystem/filesystem.go -destination=mocks/mock_filesystem.go -package=mocks
 
 # Run all CI steps
-ci: fmt gen-mock vet lint test build
+ci: fmt gen-mock vet lint chainsaw-lint test build
 
 # Install the Helm chart
 helm-install:
