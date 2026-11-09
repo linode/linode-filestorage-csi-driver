@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chainsaw-rwx-nodes
+  namespace: ($namespace)
+  labels:
+    e2e.linode.com/test: rwx-shared-file
+data:
+  a: ($anchors.items[?metadata.name == 'chainsaw-rwx-a1'] | [0].spec.nodeName)
+  b: ($anchors.items[?metadata.name == 'chainsaw-rwx-b1'] | [0].spec.nodeName)
+  c: ($anchors.items[?metadata.name == 'chainsaw-rwx-c1'] | [0].spec.nodeName)
