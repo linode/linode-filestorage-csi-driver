@@ -122,6 +122,7 @@ Changing `driver.name` on an existing installation orphans every PV provisioned 
 | `node.serviceAccount.enabled` | `true` | Create the ServiceAccount and set `serviceAccountName` on the DaemonSet. Leave it on; see the note under [Controller](#controller) |
 | `node.serviceAccount.name` | `csi-linode-nfs-node` | |
 | `node.rbac.enabled` | `true` | Create the node ClusterRole and binding (`get`, `list`, `watch` on nodes) |
+| `node.nodeSelector` | `{}` | Run the node DaemonSet only on nodes that match these labels |
 | `node.registrar.*` | see below | `csi-node-driver-registrar` image, pull policy, resources, plus `env` and `volumeMounts` extension points |
 | `node.livenessProbe.*` | see below | `livenessprobe` image, pull policy, resources |
 
