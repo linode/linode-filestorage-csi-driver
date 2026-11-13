@@ -25,6 +25,10 @@ spec:
       serviceAccountName: {{ .Values.node.serviceAccount.name }}
       {{- end }}
       hostNetwork: true
+      {{- with .Values.node.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: plugin
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
