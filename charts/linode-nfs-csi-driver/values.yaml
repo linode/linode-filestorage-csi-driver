@@ -158,6 +158,9 @@ node:
   rbac:
     # Create node RBAC resources.
     enabled: true
+  # Optional node selector for the node DaemonSet. Use it to run the node
+  # plugin only on nodes that carry a given label.
+  nodeSelector: {}
   registrar:
     # Node driver registrar sidecar image.
     repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
